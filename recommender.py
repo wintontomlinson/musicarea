@@ -588,7 +588,10 @@ def _recall_mood(pool: CandidatePool, mood_id: str) -> None:
 
 
 def generate_candidates(profile: dict, mood: Optional[str] = None,
-                        wide: bool = True) -> CandidatePool:
+                        wide: bool = True, include_broad: bool = True) -> CandidatePool:
+    """`include_broad` adds the trending and new release arms. Turn it off for a
+    tightly scoped pool such as a single artist's mix, where chart traffic is
+    both off-genre and a waste of upstream calls."""
     pool = CandidatePool()
     languages = profile["topLanguages"] or list(DEFAULT_LANGUAGES)
 
@@ -613,8 +616,9 @@ def generate_candidates(profile: dict, mood: Optional[str] = None,
     _recall_similar_artists(pool, profile, budget=6 if wide else 3)
     if wide:
         _recall_from_albums(pool, profile, budget=3)
-    _recall_trending(pool, profile, languages)
-    _recall_fresh(pool, languages)
+    if include_broad:
+        _recall_trending(pool, profile, languages)
+        _recall_fresh(pool, languages)
     return pool
 
 
@@ -1086,6 +1090,153 @@ def mood_set(mood_id: str, history: Optional[List[dict]] = None,
             "familiarShare": round(
                 sum(1 for i in items if i["recommendation"]["familiar"]) / max(1, len(items)), 3
             ),
+        },
+    }
+
+
+def _mix_card(mix_id: str, name: str, subtitle: str, note: str,
+              items: List[dict]) -> dict:
+    """Package a ranked list as a mix, with artwork taken from its own tracks."""
+    return {
+        "id": mix_id,
+        "name": name,
+        "subtitle": subtitle,
+        "note": note,
+        "type": "mix",
+        "songCount": len(items),
+        "image": (items[0].get("image") if items else None),
+        "covers": [s.get("image") for s in items[:4] if s.get("image")],
+        "items": items,
+    }
+
+
+def mixes(history: Optional[List[dict]] = None, per_mix: int = 24,
+          max_mixes: int = 6) -> dict:
+    """Build ready made playlists out of the listener's own profile.
+
+    Three kinds, because one kind alone is monotonous:
+
+      * an artist mix per top artist, that artist plus their neighbourhood
+      * a language mix per language actually played
+      * a discovery mix of artists with no listening history at all
+
+    All of them share a single candidate recall pass, so the whole set costs
+    roughly what one shelf costs.
+    """
+    profile = build_profile(history)
+    if profile["coldStart"]:
+        return {"mixes": [], "meta": {"coldStart": True,
+                                      "reason": "not enough listening yet"}}
+
+    pool = generate_candidates(profile, wide=True)
+    if not len(pool):
+        return {"mixes": [], "meta": {"coldStart": False, "reason": "no candidates"}}
+
+    built: List[dict] = []
+    # Mixes are kept disjoint. Without this, two artist mixes shared half their
+    # tracks, because one singer performs most of the other's compositions.
+    used: set = set()
+
+    # ---- Artist mixes ----------------------------------------------------
+    # Two, not three. Each one needs its own recall pass, and a third pushed the
+    # cold response to about 9s, which is too close to a serverless timeout.
+    for artist in profile["topArtists"][:2]:
+        if not artist.get("name") or len(built) >= max_mixes:
+            continue
+        own = catalog.artist_top_songs(artist["id"], limit=18)
+        if not own:
+            continue
+
+        # Each artist mix gets its own recall pass, seeded from that artist.
+        # Reusing the global pool dragged the listener's other genres in: a
+        # Punjabi rap track landed in a Bollywood playback mix and vice versa.
+        seed_profile = _profile_from_songs(own[:6])
+        mix_pool = generate_candidates(seed_profile, wide=False, include_broad=False)
+        mix_pool.add_many(own, "artist", 0.95, via=artist["name"], decay=0.25)
+
+        scored = score_candidates(
+            mix_pool, seed_profile, salt=f"mix-{artist['id']}", allow_heard=True,
+            weights=WEIGHT_PROFILES["radio"], heard_penalty=0.85, exclude=used,
+        )
+        picked = rerank(scored, seed_profile, limit=per_mix,
+                        max_per_artist=3, explore=False)
+        items = [_present(c, seed_profile, i + 1) for i, c in enumerate(picked)]
+        if len(items) < 10:
+            continue
+        used.update(s["id"] for s in items)
+
+        others = []
+        for item in items:
+            for credit in _song_artists(item):
+                if credit["name"] and credit["name"] != artist["name"] \
+                        and credit["name"] not in others:
+                    others.append(credit["name"])
+        built.append(_mix_card(
+            f"artist-{artist['id']}",
+            f"{artist['name']} Mix",
+            ", ".join([artist["name"]] + others[:2]) + " and more",
+            f"Built around {artist['name']} and the artists who share playlists with them.",
+            items,
+        ))
+
+    # ---- Language mixes --------------------------------------------------
+    # Scored once against the full profile, then split by language, which is
+    # cheaper than a separate scoring pass per language.
+    if len(built) < max_mixes:
+        scored_all = score_candidates(pool, profile, salt="mix-lang",
+                                      allow_heard=True, heard_penalty=0.8,
+                                      exclude=used)
+        for language in profile["topLanguages"][:2]:
+            if len(built) >= max_mixes:
+                break
+            subset = [c for c in scored_all
+                      if (c["song"].get("language") or "").lower() == language
+                      and c["song"]["id"] not in used]
+            if len(subset) < 14:
+                continue
+            picked = rerank(subset, profile, limit=per_mix, max_per_artist=2)
+            items = [_present(c, profile, i + 1) for i, c in enumerate(picked)]
+            if len(items) < 10:
+                continue
+            used.update(s["id"] for s in items)
+            built.append(_mix_card(
+                f"language-{language}",
+                f"{language.title()} Mix",
+                ", ".join(dict.fromkeys(
+                    _primary_artist_name(s) for s in items[:3] if _primary_artist_name(s)
+                )) + " and more",
+                f"Your {language.title()} listening, ordered by fit.",
+                items,
+            ))
+
+    # ---- Discovery mix ---------------------------------------------------
+    if len(built) < max_mixes:
+        scored = score_candidates(pool, profile, salt="mix-discover",
+                                  allow_heard=False, exclude=used,
+                                  weights=WEIGHT_PROFILES["discover"])
+        fresh = [c for c in scored if c["isDiscovery"]]
+        picked = rerank(fresh, profile, limit=per_mix, max_per_artist=2)
+        items = [_present(c, profile, i + 1) for i, c in enumerate(picked)]
+        if len(items) >= 10:
+            used.update(s["id"] for s in items)
+            built.append(_mix_card(
+                "discovery",
+                "Discovery Mix",
+                ", ".join(dict.fromkeys(
+                    _primary_artist_name(s) for s in items[:3] if _primary_artist_name(s)
+                )) + " and more",
+                "Artists you have never played, picked from the company your "
+                "favourites keep.",
+                items,
+            ))
+
+    return {
+        "mixes": built[:max_mixes],
+        "meta": {
+            "coldStart": False,
+            "candidates": len(pool),
+            "count": len(built[:max_mixes]),
+            "profileStrength": profile["strength"],
         },
     }
 

@@ -117,10 +117,6 @@
       </form>
 
       <div class="topbar__right">
-        <span class="badge-pro" title="Every recommendation on this app is explainable">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 9.2 8.6 2 9.3l5.4 4.8L5.8 21 12 17.3 18.2 21l-1.6-6.9L22 9.3l-7.2-.7z"/></svg>
-          Algorithmic
-        </span>
         <a class="icon-btn" href="#/settings" id="settingsBtn" title="Audio settings" aria-label="Audio settings">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8m0 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4m-1.4-8h2.8l.4 2.5 1.5.9 2.3-1 1.4 2.4-1.9 1.6q.1.5.1 1t-.1 1l1.9 1.6-1.4 2.4-2.3-1-1.5.9-.4 2.5h-2.8l-.4-2.5-1.5-.9-2.3 1L3 15.4l1.9-1.6q-.1-.5-.1-1t.1-1L3 10.2l1.4-2.4 2.3 1 1.5-.9z"/></svg>
         </a>
@@ -133,64 +129,69 @@
 
 <!-- ─── Player bar ─────────────────────────────────────────────────────── -->
 <footer class="player" id="player" data-state="idle">
-  <div class="player__progress" id="scrubber" role="slider" aria-label="Seek"
+  <div class="player__progress js-scrub" id="scrubber" role="slider" aria-label="Seek"
        aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
-    <div class="player__progress-fill" id="progressFill"></div>
-    <div class="player__progress-knob" id="progressKnob"></div>
+    <div class="player__progress-fill js-fill"></div>
+    <div class="player__progress-knob"></div>
   </div>
 
   <div class="player__body">
-    <div class="player__now">
-      <button class="player__art" id="playerArt" aria-label="Open now playing">
+    <!-- Tapping this whole region opens the full screen player on phones. -->
+    <div class="player__now" data-pa="expand">
+      <span class="player__art" id="playerArt">
         <img id="playerImg" alt="" width="56" height="56">
         <span class="player__art-expand">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 14h2v4h4v2H4zm10-10h6v6h-2V6h-4z"/></svg>
         </span>
-      </button>
+      </span>
       <div class="player__meta">
         <a class="player__title" id="playerTitle" href="#/home">Nothing playing</a>
         <span class="player__artist" id="playerArtist">Pick a track and the feed starts learning</span>
       </div>
-      <button class="icon-btn icon-btn--like" id="likeBtn" title="Like" aria-label="Like" aria-pressed="false">
+      <button class="icon-btn icon-btn--like js-like" id="likeBtn" data-pa="like"
+              title="Like" aria-label="Like" aria-pressed="false">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.7 4.6 13.6a4.9 4.9 0 0 1 7-6.9l.4.4.4-.4a4.9 4.9 0 0 1 7 6.9z"/></svg>
       </button>
     </div>
 
     <div class="player__controls">
       <div class="player__buttons">
-        <button class="icon-btn" id="shuffleBtn" title="Shuffle" aria-label="Shuffle" aria-pressed="false">
+        <button class="icon-btn js-shuffle" id="shuffleBtn" data-pa="shuffle" title="Shuffle" aria-label="Shuffle" aria-pressed="false">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 3h5v5h-2V6.4l-4.3 4.3-1.4-1.4L17.6 5H16zm-9.3 2.3 4 4-1.4 1.4-4-4zM19 15.6V14h2v5h-5v-2h1.6l-4.3-4.3 1.4-1.4zM8.7 13.3l1.4 1.4-4.4 4.4-1.4-1.4z"/></svg>
         </button>
-        <button class="icon-btn" id="prevBtn" title="Previous" aria-label="Previous">
+        <button class="icon-btn" id="prevBtn" data-pa="prev" title="Previous" aria-label="Previous">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 6h2v12H7zm3.5 6L19 6v12z"/></svg>
         </button>
-        <button class="play-btn" id="playBtn" title="Play" aria-label="Play">
+        <button class="play-btn" id="playBtn" data-pa="toggle" title="Play" aria-label="Play">
           <svg class="play-btn__play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.2 19 12 8 18.8z"/></svg>
           <svg class="play-btn__pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3.5v14H7zm6.5 0H17v14h-3.5z"/></svg>
           <span class="play-btn__spinner" aria-hidden="true"></span>
         </button>
-        <button class="icon-btn" id="nextBtn" title="Next" aria-label="Next">
+        <button class="icon-btn" id="nextBtn" data-pa="next" title="Next" aria-label="Next">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6h2v12h-2zM5 6l8.5 6L5 18z"/></svg>
         </button>
-        <button class="icon-btn" id="repeatBtn" title="Repeat" aria-label="Repeat" data-mode="off">
+        <button class="icon-btn js-repeat" id="repeatBtn" data-pa="repeat" title="Repeat" aria-label="Repeat" data-mode="off">
           <svg class="repeat-all" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h9v2.5l4-3.5-4-3.5V5H5v7h2zm10 10H8v-2.5l-4 3.5 4 3.5V19h11v-7h-2z"/></svg>
           <svg class="repeat-one" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h9v2.5l4-3.5-4-3.5V5H5v7h2zm10 10H8v-2.5l-4 3.5 4 3.5V19h11v-7h-2zm-4.6-6.2h1.4v4.4h-1.3v-3.2l-1 .3-.3-1z"/></svg>
         </button>
       </div>
       <div class="player__times">
-        <span id="timeNow">0:00</span>
+        <span class="js-now">0:00</span>
         <span class="player__times-sep">/</span>
-        <span id="timeTotal">0:00</span>
+        <span class="js-total">0:00</span>
       </div>
     </div>
 
     <div class="player__extras">
       <span class="reason-pill" id="reasonPill" hidden><span></span></span>
-      <button class="icon-btn" id="lyricsBtn" title="Lyrics" aria-label="Lyrics">
+      <button class="icon-btn" id="lyricsBtn" data-pa="lyrics" title="Lyrics" aria-label="Lyrics">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v2H4zm0 4h11v2H4zm0 4h16v2H4zm0 4h11v2H4z"/></svg>
       </button>
-      <button class="icon-btn" id="queueBtn" title="Queue" aria-label="Queue">
+      <button class="icon-btn" id="queueBtn" data-pa="queue" title="Queue" aria-label="Queue">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h11v2H4zm0 4h11v2H4zm0 4h7v2H4zm13-6 4 3-4 3z"/></svg>
+      </button>
+      <button class="icon-btn" data-pa="expand" title="Full screen player" aria-label="Full screen player">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 14h2v4h4v2H4zm10-10h6v6h-2V6h-4V4z"/></svg>
       </button>
       <div class="volume">
         <button class="icon-btn" id="muteBtn" title="Mute" aria-label="Mute">
@@ -207,21 +208,86 @@
 </footer>
 
 <!-- ─── Now playing (full screen) ──────────────────────────────────────── -->
-<section class="np" id="np" hidden aria-label="Now playing">
+<section class="np" id="np" hidden aria-label="Now playing" data-state="idle">
   <div class="np__backdrop" id="npBackdrop"></div>
-  <button class="icon-btn np__close" id="npClose" aria-label="Close now playing">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.4 6 6 7.4 10.6 12 6 16.6 7.4 18 12 13.4 16.6 18 18 16.6 13.4 12 18 7.4 16.6 6 12 10.6z"/></svg>
-  </button>
+
+  <header class="np__bar">
+    <button class="icon-btn np__close" id="npClose" aria-label="Close now playing">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.4 8.6 12 13.2l4.6-4.6L18 10l-6 6-6-6z"/></svg>
+    </button>
+    <span class="np__bar-label" id="npContext">Now playing</span>
+    <button class="icon-btn" data-pa="queue-panel" aria-label="Show queue">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h11v2H4zm0 4h11v2H4zm0 4h7v2H4zm13-6 4 3-4 3z"/></svg>
+    </button>
+  </header>
+
   <div class="np__grid">
     <div class="np__left">
       <div class="np__art"><img id="npImg" alt=""></div>
+
       <div class="np__info">
         <h1 id="npTitle">Nothing playing</h1>
         <p id="npArtist"></p>
         <span class="reason-pill reason-pill--lg" id="npReason" hidden><span></span></span>
       </div>
+
       <div class="np__viz" id="npViz" aria-hidden="true"></div>
+
+      <!-- The overlay covers the player bar, so it carries its own transport.
+           Previously opening this screen left the player uncontrollable. -->
+      <div class="np__transport">
+        <div class="np__seek">
+          <div class="player__progress js-scrub" role="slider" aria-label="Seek"
+               aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
+            <div class="player__progress-fill js-fill"></div>
+            <div class="player__progress-knob"></div>
+          </div>
+          <div class="np__times">
+            <span class="js-now">0:00</span>
+            <span class="js-total">0:00</span>
+          </div>
+        </div>
+
+        <div class="np__buttons">
+          <button class="icon-btn js-shuffle" data-pa="shuffle" title="Shuffle" aria-label="Shuffle" aria-pressed="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 3h5v5h-2V6.4l-4.3 4.3-1.4-1.4L17.6 5H16zm-9.3 2.3 4 4-1.4 1.4-4-4zM19 15.6V14h2v5h-5v-2h1.6l-4.3-4.3 1.4-1.4zM8.7 13.3l1.4 1.4-4.4 4.4-1.4-1.4z"/></svg>
+          </button>
+          <button class="icon-btn icon-btn--lg" data-pa="prev" title="Previous" aria-label="Previous">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 6h2v12H7zm3.5 6L19 6v12z"/></svg>
+          </button>
+          <button class="play-btn play-btn--xl" data-pa="toggle" title="Play" aria-label="Play">
+            <svg class="play-btn__play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.2 19 12 8 18.8z"/></svg>
+            <svg class="play-btn__pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3.5v14H7zm6.5 0H17v14h-3.5z"/></svg>
+            <span class="play-btn__spinner" aria-hidden="true"></span>
+          </button>
+          <button class="icon-btn icon-btn--lg" data-pa="next" title="Next" aria-label="Next">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6h2v12h-2zM5 6l8.5 6L5 18z"/></svg>
+          </button>
+          <button class="icon-btn js-repeat" data-pa="repeat" title="Repeat" aria-label="Repeat" data-mode="off">
+            <svg class="repeat-all" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h9v2.5l4-3.5-4-3.5V5H5v7h2zm10 10H8v-2.5l-4 3.5 4 3.5V19h11v-7h-2z"/></svg>
+            <svg class="repeat-one" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h9v2.5l4-3.5-4-3.5V5H5v7h2zm10 10H8v-2.5l-4 3.5 4 3.5V19h11v-7h-2zm-4.6-6.2h1.4v4.4h-1.3v-3.2l-1 .3-.3-1z"/></svg>
+          </button>
+        </div>
+
+        <div class="np__aux">
+          <button class="icon-btn icon-btn--like js-like" data-pa="like" aria-label="Like" aria-pressed="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.7 4.6 13.6a4.9 4.9 0 0 1 7-6.9l.4.4.4-.4a4.9 4.9 0 0 1 7 6.9z"/></svg>
+          </button>
+          <button class="icon-btn" data-pa="add-to-playlist" aria-label="Add to a playlist" title="Add to a playlist">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></svg>
+          </button>
+          <button class="icon-btn" data-pa="station" aria-label="Start a station from this" title="Start a station from this">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6m-5.7-2.5 1.4 1.4a6 6 0 0 0 0 8.2l-1.4 1.4a8 8 0 0 1 0-11M17.7 6.5a8 8 0 0 1 0 11l-1.4-1.4a6 6 0 0 0 0-8.2z"/></svg>
+          </button>
+          <div class="volume np__volume">
+            <button class="icon-btn" data-pa="mute" aria-label="Mute">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h3l4-4v14l-4-4H4zm11.5-1.3a5 5 0 0 1 0 8.6v-2A3 3 0 0 0 15.5 10z"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
+
     <div class="np__right">
       <div class="np__tabs" role="tablist">
         <button class="np__tab is-active" data-tab="queue" role="tab" aria-selected="true">Queue</button>
@@ -266,6 +332,20 @@
     <span>Library</span>
   </a>
 </nav>
+
+<!-- ─── Dialog ─────────────────────────────────────────────────────────── -->
+<div class="modal" id="modal" hidden>
+  <div class="modal__scrim" data-modal-cancel></div>
+  <div class="modal__box" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <h2 class="modal__title" id="modalTitle"></h2>
+    <p class="modal__text" id="modalText"></p>
+    <input class="modal__input" id="modalInput" type="text" autocomplete="off">
+    <div class="modal__actions">
+      <button class="btn btn--outline" id="modalCancel" data-modal-cancel>Cancel</button>
+      <button class="btn btn--primary" id="modalOk">Save</button>
+    </div>
+  </div>
+</div>
 
 <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
 <div class="ctx-menu" id="ctxMenu" hidden></div>

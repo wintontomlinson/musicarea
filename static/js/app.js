@@ -19,6 +19,9 @@
 
   const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
 
+  /** Phone layout. Kept as a media query so it matches the CSS breakpoint. */
+  const isMobile = () => window.matchMedia('(max-width: 760px)').matches;
+
   function fmtTime(seconds) {
     if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
     const total = Math.floor(seconds);
@@ -44,13 +47,18 @@
   }
 
   /** Pick an image URL at or below the requested size. */
+  /** Local placeholder, used when the catalogue has no real artwork. The
+   *  upstream default images are provider branded, so they are filtered out
+   *  server side and never reach here. */
+  const ART_PLACEHOLDER = '/static/img/placeholder.svg';
+
   function art(item, size = 500) {
     const list = item?.image;
-    if (typeof list === 'string') return list;
-    if (!Array.isArray(list) || !list.length) return '';
+    if (typeof list === 'string') return list || ART_PLACEHOLDER;
+    if (!Array.isArray(list) || !list.length) return ART_PLACEHOLDER;
     const want = `${size}x${size}`;
     const exact = list.find((i) => i.quality === want);
-    return (exact || list[list.length - 1]).url || '';
+    return (exact || list[list.length - 1]).url || ART_PLACEHOLDER;
   }
 
   /** Artist display line for a song. Skips lyricists and film cast. */
@@ -155,7 +163,9 @@
         shuffle: false,
         language: 'hindi',
         autoplay: true,
-        crossfade: 0,      // seconds, 0 disables the second deck entirely
+        // On by default: the next track rises over the tail of the current one.
+        // Adjustable from 1 to 12 seconds, or off, in Settings.
+        crossfade: 6,      // seconds, 0 disables the second deck entirely
         visualizer: true,
         sleepTimer: 0,     // minutes, 0 is off. Never persisted as active.
       },
@@ -247,6 +257,20 @@
       renderPlaylistList();
     },
 
+    renamePlaylist(id, name) {
+      const list = this.playlist(id);
+      if (!list) return;
+      list.name = name;
+      write(KEYS.playlists, this.playlists);
+      renderPlaylistList();
+    },
+
+    clearRecent() {
+      this.recent = [];
+      write(KEYS.recent, []);
+      renderSidebarCounts();
+    },
+
     clearHistory() {
       this.history = [];
       this.recent = [];
@@ -299,6 +323,7 @@
     songs(ids) { return this.get(`/api/songs?ids=${encodeURIComponent(ids.join(','))}`); },
     lyrics(id) { return this.get(`/api/songs/${encodeURIComponent(id)}/lyrics`); },
     similar(ids, limit = 16) { return this.post('/api/similar', { ids, limit }); },
+    mixes(perMix = 24) { return this.post('/api/mixes', { history: Store.history, perMix }); },
     suggest(query) { return this.get(`/api/search?query=${encodeURIComponent(query)}`); },
     searchSongs(q, limit = 30) { return this.get(`/api/search/songs?query=${encodeURIComponent(q)}&limit=${limit}`); },
     searchAlbums(q, limit = 16) { return this.get(`/api/search/albums?query=${encodeURIComponent(q)}&limit=${limit}`); },
@@ -331,11 +356,84 @@
     },
   };
 
+  /** Generated mixes. Requested separately from the feed and cached, because a
+   *  cold build needs several seconds and must not hold up the first paint. */
+  const Mixes = {
+    cache: null,
+    at: 0,
+    ttl: 10 * 60 * 1000,
+    inflight: null,
+
+    invalidate() { this.cache = null; },
+
+    async load(force = false) {
+      if (!force && this.cache && Date.now() - this.at < this.ttl) return this.cache;
+      if (this.inflight) return this.inflight;
+      this.inflight = API.mixes(24)
+        .then((data) => {
+          this.cache = data;
+          this.at = Date.now();
+          return data;
+        })
+        .finally(() => { this.inflight = null; });
+      return this.inflight;
+    },
+
+    async find(id) {
+      const data = await this.load();
+      return (data?.mixes || []).find((m) => m.id === id) || null;
+    },
+  };
+
   /* ====================================================================== */
   /* Toasts                                                                 */
   /* ====================================================================== */
 
   const ICON_CHECK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.6 16.6 5 12l1.4-1.4 3.2 3.2 8-8L19 7.2z"/></svg>';
+
+  /* ====================================================================== */
+  /* Dialog                                                                 */
+  /* ====================================================================== */
+
+  /** In-app replacement for prompt() and confirm().
+   *  The native ones block the page, cannot be styled, and look out of place. */
+  const Modal = {
+    resolve: null,
+
+    open({ title, text = '', value = null, okLabel = 'Save' }) {
+      const box = $('#modal');
+      $('#modalTitle').textContent = title;
+      $('#modalText').textContent = text;
+      $('#modalText').hidden = !text;
+      const input = $('#modalInput');
+      const wantsText = value !== null;
+      input.hidden = !wantsText;
+      input.value = wantsText ? value : '';
+      $('#modalOk').textContent = okLabel;
+      box.hidden = false;
+      document.body.classList.add('is-modal');
+      setTimeout(() => (wantsText ? input : $('#modalOk')).focus(), 30);
+      return new Promise((resolve) => { this.resolve = resolve; });
+    },
+
+    close(result) {
+      $('#modal').hidden = true;
+      document.body.classList.remove('is-modal');
+      const done = this.resolve;
+      this.resolve = null;
+      if (done) done(result);
+    },
+
+    submit() {
+      const input = $('#modalInput');
+      this.close(input.hidden ? true : (input.value.trim() || null));
+    },
+  };
+
+  const askText = (title, value, okLabel = 'Save') =>
+    Modal.open({ title, value, okLabel });
+  const askConfirm = (title, text, okLabel = 'Delete') =>
+    Modal.open({ title, text, value: null, okLabel });
 
   function toast(message, icon = ICON_CHECK) {
     const host = $('#toasts');
@@ -378,6 +476,8 @@
   const ICON_SPARK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 9.2 8.6 2 9.3l5.4 4.8L5.8 21 12 17.3 18.2 21l-1.6-6.9L22 9.3l-7.2-.7z"/></svg>';
   const ICON_RADIO = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6m-5.7-2.5 1.4 1.4a6 6 0 0 0 0 8.2l-1.4 1.4a8 8 0 0 1 0-11M17.7 6.5a8 8 0 0 1 0 11l-1.4-1.4a6 6 0 0 0 0-8.2z"/></svg>';
   const ICON_SEEK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h2v14H4zm4 7 11-7v14z"/></svg>';
+  const ICON_REMOVE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l1 2h4v2H4V5h4zm-3 6h12l-1 12H7zm3 2v8h1.5v-8zm4 0v8H15v-8z"/></svg>';
+  const ICON_EDIT = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17.2 16.4 4.8l2.8 2.8L6.8 20H4zM17.8 3.4 19.2 2 22 4.8l-1.4 1.4z"/></svg>';
   const ICON_VOLUME = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h3l4-4v14l-4-4H4zm11.5-1.3a5 5 0 0 1 0 8.6v-2A3 3 0 0 0 15.5 10z"/></svg>';
 
   function songCard(song, { badge } = {}) {
@@ -392,6 +492,25 @@
         <div class="card__title">${esc(song.name)}</div>
         <div class="card__sub">${esc(artistLine(song))}</div>
         ${reason ? `<div style="margin-top:7px"><span class="reason-pill"><span>${esc(reason)}</span></span></div>` : ''}
+      </article>`;
+  }
+
+  /** Mix tile: a four cover collage plus the mix name, so generated playlists
+   *  read as their own kind of thing rather than as another album. */
+  function mixCard(mix) {
+    const covers = (mix.covers || []).slice(0, 4);
+    const grid = covers.length >= 4
+      ? covers.map((c) => `<img loading="lazy" src="${esc(art({ image: c }, 150))}" alt="">`).join('')
+      : `<img loading="lazy" src="${esc(art(mix, 500))}" alt="" class="mix__solo">`;
+    return `
+      <article class="card mix" data-goto="#/mix/${esc(mix.id)}" style="--hue:${hueOf(mix.id)}">
+        <div class="card__art mix__art">
+          <div class="mix__grid">${grid}</div>
+          <span class="mix__label">${esc(mix.name)}</span>
+          <button class="card__play" data-play-mix="${esc(mix.id)}" aria-label="Play ${esc(mix.name)}">${ICON_PLAY}</button>
+        </div>
+        <div class="card__title">${esc(mix.name)}</div>
+        <div class="card__sub">${esc(mix.subtitle || plural(mix.songCount, 'song'))}</div>
       </article>`;
   }
 
@@ -436,12 +555,18 @@
         <div class="track__dur">${fmtTime(song.duration)}</div>
         <div class="track__actions">
           <button class="icon-btn" data-like="${esc(song.id)}" aria-pressed="${liked}" aria-label="Like">${ICON_HEART}</button>
+          ${opts.removeFrom
+            ? `<button class="icon-btn icon-btn--danger" data-remove-from-list="${esc(opts.removeFrom)}" data-song="${esc(song.id)}" aria-label="Remove from this playlist" title="Remove from this playlist">${ICON_REMOVE}</button>`
+            : ''}
+          ${opts.unlike
+            ? `<button class="icon-btn icon-btn--danger" data-unlike="${esc(song.id)}" aria-label="Remove from liked songs" title="Remove from liked songs">${ICON_REMOVE}</button>`
+            : ''}
           <button class="icon-btn" data-menu="${esc(song.id)}" aria-label="More options">${ICON_MORE}</button>
         </div>
       </div>`;
   }
 
-  function trackList(songs, { label, hideArt } = {}) {
+  function trackList(songs, { label, hideArt, removeFrom, unlike } = {}) {
     if (!songs?.length) return '';
     const key = registerList(songs, label);
     return `
@@ -449,7 +574,7 @@
         <div class="tracks__head">
           <span>#</span><span>Title</span><span>Album</span><span>Why</span><span>Time</span><span></span>
         </div>
-        ${songs.map((song, i) => trackRow(song, i, key, { hideArt })).join('')}
+        ${songs.map((song, i) => trackRow(song, i, key, { hideArt, removeFrom, unlike })).join('')}
       </div>`;
   }
 
@@ -553,10 +678,8 @@
       $('#volume').value = Math.round(Store.prefs.volume * 100);
       setVolumeFill(Store.prefs.volume * 100);
       $('#muteBtn').classList.toggle('is-muted', !!Store.prefs.muted);
-      $('#repeatBtn').dataset.mode = Store.prefs.repeat;
-      $('#shuffleBtn').classList.toggle('is-on', !!Store.prefs.shuffle);
-      $('#shuffleBtn').setAttribute('aria-pressed', String(!!Store.prefs.shuffle));
       $('#qualityTag').textContent = Store.prefs.quality.replace('kbps', '');
+      syncTransport();
 
       // Both decks are wired, but only the active one is allowed to drive the
       // UI. A deck that is fading out must not repaint state or advance tracks.
@@ -565,7 +688,8 @@
 
         deck.addEventListener('loadedmetadata', () => {
           if (!isActive()) return;
-          $('#timeTotal').textContent = fmtTime(deck.duration || this.current?.duration || 0);
+          const total = fmtTime(deck.duration || this.current?.duration || 0);
+          $$('.js-total').forEach((el) => { el.textContent = total; });
         });
         deck.addEventListener('timeupdate', () => { if (isActive()) this.onTime(); });
         deck.addEventListener('ended', () => { if (isActive()) this.onEnded(); });
@@ -606,6 +730,31 @@
       this.fadeRaf = requestAnimationFrame(step);
     },
 
+    /** Buffer the upcoming track on the idle deck ahead of time.
+     *
+     *  Without this the next track is only fetched at the instant the blend
+     *  starts, so on anything slower than a fast connection the incoming side
+     *  of the crossfade begins silent and leaves a hole in the middle of it.
+     *  It also removes the gap between tracks when crossfade is switched off.
+     */
+    preloadNext() {
+      if (this.fading) return;                 // idle deck is the retiring one
+      const nextPos = this.pos + 1;
+      if (nextPos >= this.order.length) return;
+      const song = this.queue[this.order[nextPos]];
+      if (!song) return;
+      const url = streamUrl(song, Store.prefs.quality);
+      if (!url) return;
+
+      const deck = idleDeck();
+      if (deck.dataset.readyFor === song.id && deck.readyState >= 2) return;
+      deck.dataset.readyFor = song.id;
+      deck.volume = 0;                         // never audible until we fade it in
+      deck.muted = !!Store.prefs.muted;
+      deck.src = url;
+      try { deck.load(); } catch { /* nothing to abort */ }
+    },
+
     /** Start `orderPos` on the idle deck and blend the two over `seconds`. */
     async crossfadeTo(orderPos, seconds) {
       if (orderPos < 0 || orderPos >= this.order.length) return false;
@@ -620,8 +769,12 @@
 
       outgoing.dataset.retiring = '1';
       incoming.dataset.retiring = '';
-      incoming.src = url;
-      incoming.currentTime = 0;
+      // Reuse the preloaded buffer. Reassigning src would throw it away and
+      // reintroduce the silent start this preloading exists to prevent.
+      if (incoming.dataset.readyFor !== song.id || !incoming.getAttribute('src')) {
+        incoming.src = url;
+      }
+      try { incoming.currentTime = 0; } catch { /* not seekable yet */ }
       incoming.volume = 0;
       incoming.muted = !!Store.prefs.muted;
 
@@ -651,12 +804,15 @@
       this.runFade(outgoing, incoming, seconds, () => {
         outgoing.pause();
         outgoing.removeAttribute('src');
+        outgoing.dataset.readyFor = '';
         outgoing.load();
         outgoing.dataset.retiring = '';
         outgoing.volume = gain();
         if (outgoingSong) {
           Store.logEvent(outgoingSong, outgoingRatio > 0.9 ? 'complete' : 'play');
         }
+        // The freed deck becomes the next preload target.
+        this.preloadNext();
       });
 
       this.topUpIfNeeded();
@@ -737,7 +893,10 @@
         }
       }
       updateMediaSession(song);
-      this.topUpIfNeeded();
+      await this.topUpIfNeeded();
+      // Buffer whatever comes next straight away. This is what removes the gap
+      // between tracks when crossfade is switched off.
+      this.preloadNext();
     },
 
     toggle() {
@@ -760,13 +919,24 @@
         audio.play().catch(() => {});
         return;
       }
-      // A manual skip gets a short blend rather than the full crossfade length,
-      // so the response still feels immediate.
-      const manualFade = Math.min(Store.prefs.crossfade, 1.2);
-      if (manualFade > 0 && !audio.paused && this.pos + 1 < this.order.length) {
-        return this.crossfadeTo(this.pos + 1, manualFade);
+      const nextPos = this.pos + 1;
+      if (nextPos < this.order.length) {
+        // A manual skip gets a short blend rather than the full crossfade
+        // length, so the button still feels immediate. With crossfade off it
+        // becomes a 60ms handover: inaudible, but it uses the already buffered
+        // deck, which is what makes the transition gapless instead of stalling
+        // while the next track loads.
+        const fade = Store.prefs.crossfade > 0
+          ? Math.min(Store.prefs.crossfade, 1.2)
+          : 0.06;
+        const song = this.queue[this.order[nextPos]];
+        const idle = idleDeck();
+        const buffered = song && idle.dataset.readyFor === song.id && idle.readyState >= 2;
+        if (buffered || (Store.prefs.crossfade > 0 && !audio.paused)) {
+          return this.crossfadeTo(nextPos, fade);
+        }
+        return this.load(nextPos);
       }
-      if (this.pos + 1 < this.order.length) return this.load(this.pos + 1);
       if (Store.prefs.repeat === 'all' && this.order.length) return this.load(0);
       if (Store.prefs.autoplay) return this.extendWithRadio();
       setPlayerState('paused');
@@ -832,6 +1002,8 @@
             this.order.push(this.queue.length - 1);
           });
           renderQueue();
+          // A track now exists after the current one, so it can be buffered.
+          this.preloadNext();
         }
       } catch { /* offline or upstream hiccup: silent */ } finally {
         this.autoplayPending = false;
@@ -852,12 +1024,8 @@
       if (!duration) return;
       const ratio = clamp(audio.currentTime / duration, 0, 1);
       this.playedRatio = ratio;
-      if (!this.seeking) {
-        $('#progressFill').style.width = `${ratio * 100}%`;
-        $('#progressKnob').style.left = `${ratio * 100}%`;
-        $('#scrubber').setAttribute('aria-valuenow', String(Math.round(ratio * 100)));
-      }
-      $('#timeNow').textContent = fmtTime(audio.currentTime);
+      if (!this.seeking) paintProgress(ratio);
+      $$('.js-now').forEach((el) => { el.textContent = fmtTime(audio.currentTime); });
 
       // A play only counts once we are past the intro.
       if (!this.loggedPlay && audio.currentTime > 12) {
@@ -866,10 +1034,15 @@
       }
       if (ratio > 0.82 && this.pos + 2 >= this.order.length) this.topUpIfNeeded();
 
-      // Begin the blend early enough that the outgoing track finishes silent.
       const seconds = Store.prefs.crossfade;
+      const remaining = duration - audio.currentTime;
+
+      // Get the next track buffered well before it is needed, so the blend
+      // starts from audio that is already in memory.
+      if (!this.fading && remaining <= seconds + 15) this.preloadNext();
+
+      // Begin the blend early enough that the outgoing track finishes silent.
       if (seconds > 0 && !this.fading && Store.prefs.repeat !== 'one') {
-        const remaining = duration - audio.currentTime;
         if (remaining <= seconds && remaining > 0.2 && this.pos + 1 < this.order.length) {
           this.crossfadeTo(this.pos + 1, Math.min(seconds, Math.max(0.3, remaining)));
         }
@@ -927,18 +1100,46 @@
   }
 
   function setPlayerState(state) {
+    // Both the bar and the full screen overlay read this attribute, so their
+    // play/pause icons and spinners can never disagree.
     $('#player').dataset.state = state;
+    $('#np').dataset.state = state;
     const playing = state === 'playing';
-    $('#playBtn').setAttribute('aria-label', playing ? 'Pause' : 'Play');
-    $('#playBtn').title = playing ? 'Pause' : 'Play';
+    $$('[data-pa="toggle"]').forEach((btn) => {
+      btn.setAttribute('aria-label', playing ? 'Pause' : 'Play');
+      btn.title = playing ? 'Pause' : 'Play';
+    });
     document.body.classList.toggle('is-paused', !playing);
     if ('mediaSession' in navigator) {
       navigator.mediaSession.playbackState = playing ? 'playing' : 'paused';
     }
   }
 
+  /** Reflect shuffle, repeat and like onto every copy of those controls. */
+  function syncTransport() {
+    $$('.js-shuffle').forEach((btn) => {
+      btn.classList.toggle('is-on', !!Store.prefs.shuffle);
+      btn.setAttribute('aria-pressed', String(!!Store.prefs.shuffle));
+    });
+    $$('.js-repeat').forEach((btn) => { btn.dataset.mode = Store.prefs.repeat; });
+    const liked = Player.current ? Store.isLiked(Player.current.id) : false;
+    $$('.js-like').forEach((btn) => btn.setAttribute('aria-pressed', String(liked)));
+  }
+
   function setVolumeFill(percent) {
     $('#volume').style.setProperty('--vol', `${percent}%`);
+  }
+
+  /** Paint the seek position onto every progress bar. */
+  function paintProgress(ratio) {
+    const pct = `${clamp(ratio, 0, 1) * 100}%`;
+    $$('.js-scrub').forEach((bar) => {
+      const fill = $('.js-fill', bar);
+      const knob = $('.player__progress-knob', bar);
+      if (fill) fill.style.width = pct;
+      if (knob) knob.style.left = pct;
+      bar.setAttribute('aria-valuenow', String(Math.round(clamp(ratio, 0, 1) * 100)));
+    });
   }
 
   /** Single place that owns volume, so the slider, the keys and the mute button
@@ -970,7 +1171,7 @@
     $('#playerTitle').textContent = song.name || '';
     $('#playerTitle').href = song.album?.id ? `#/album/${song.album.id}` : '#/home';
     $('#playerArtist').textContent = artistLine(song);
-    $('#likeBtn').setAttribute('aria-pressed', String(Store.isLiked(song.id)));
+    $$('.js-like').forEach((b) => b.setAttribute('aria-pressed', String(Store.isLiked(song.id))));
 
     const reason = song.recommendation?.reason;
     setPill($('#reasonPill'), reason);
@@ -1308,7 +1509,7 @@
       </nav>
       <p class="foot__note">
         Your listening history, likes and playlists are stored in this browser only.
-        Catalogue and streams are provided by JioSaavn.
+        Nothing is uploaded and no account is required.
       </p>
     </footer>`;
 
@@ -1393,7 +1594,11 @@
           </section>`;
 
       const rows = [];
-      (feedData?.rows || []).forEach((row) => rows.push(shelf(row)));
+      (feedData?.rows || []).forEach((row, index) => {
+        rows.push(shelf(row));
+        // Mixes slot in after the first shelf, filled in once they arrive.
+        if (index === 0) rows.push('<div id="mixesRow"></div>');
+      });
       if (browseData) {
         rows.push(moodStrip(browseData.moods));
         (browseData.rows || []).forEach((row) => rows.push(shelf(row)));
@@ -1401,6 +1606,7 @@
 
       setView(hero + rows.join(''));
       Home.feed = feedData;
+      if (profile && !profile.coldStart) loadMixesRow();
     },
 
     async browse() {
@@ -1595,6 +1801,53 @@
           </section>` : ''}`);
     },
 
+    async mix(id) {
+      setView(`<div class="spinner-row"><span class="spinner"></span>Building your mixes</div>`);
+      let mix = null;
+      try {
+        mix = await Mixes.find(id);
+      } catch { /* handled below */ }
+      if (!mix) {
+        setView(emptyState('That mix is not available',
+          'Mixes are rebuilt from your listening, so they change as your taste does.',
+          '<a class="btn btn--primary" href="#/home">Back to home</a>'));
+        return;
+      }
+      remember(mix.items);
+      setTitle([mix.name, 'Mix']);
+      const listKey = registerList(mix.items, mix.name);
+      document.documentElement.style.setProperty('--hue', String(hueOf(mix.id)));
+      const total = mix.items.reduce((sum, s) => sum + (s.duration || 0), 0);
+
+      setView(`
+        <header class="detail">
+          <div class="detail__art">
+            <div class="mix__grid mix__grid--lg">
+              ${(mix.covers || []).slice(0, 4).map((c) => `<img src="${esc(art({ image: c }, 500))}" alt="">`).join('')}
+            </div>
+          </div>
+          <div class="detail__body">
+            <div class="detail__kind">Generated mix</div>
+            <h1>${esc(mix.name)}</h1>
+            <div class="detail__facts">
+              <span>${esc(mix.note || '')}</span>
+            </div>
+            <div class="detail__facts" style="margin-top:8px">
+              <span>${plural(mix.items.length, 'song')}</span>
+              ${total ? `<i></i><span>${fmtTime(total)}</span>` : ''}
+              <i></i><span>Refreshes as you listen</span>
+            </div>
+            <div class="detail__actions">
+              <button class="btn btn--primary btn--lg" data-play-list="${listKey}">${ICON_PLAY} Play</button>
+              <button class="btn btn--outline" data-shuffle-list="${listKey}">Shuffle</button>
+              <button class="btn btn--outline" data-save-mix="${esc(mix.id)}">Save as playlist</button>
+              <button class="btn btn--outline" data-refresh-mixes="1">Rebuild</button>
+            </div>
+          </div>
+        </header>
+        ${trackList(mix.items, { label: mix.name })}`);
+    },
+
     async mood(id) {
       setView(`<div class="spinner-row"><span class="spinner"></span>Building the set</div>`);
       const data = await API.mood(id).catch(() => null);
@@ -1649,7 +1902,7 @@
             </div>
           </div>
         </header>
-        ${trackList(songs, { label: 'Liked songs' })}`);
+        ${trackList(songs, { label: 'Liked songs', unlike: true })}`);
     },
 
     recent() {
@@ -1665,6 +1918,7 @@
             <div><h2>Recently played</h2><p>${plural(songs.length, 'track')}</p></div>
             <div class="section__head-actions">
               <button class="btn btn--outline" data-play-list="${listKey}">${ICON_PLAY} Play</button>
+              <button class="btn btn--outline" id="clearRecent">Clear</button>
             </div>
           </div>
           ${trackList(songs, { label: 'Recently played' })}
@@ -1673,6 +1927,7 @@
 
     library() {
       const lists = Store.playlists;
+      setTimeout(loadMixesRow, 0);
       setView(`
         <section class="section">
           <div class="section__head">
@@ -1700,12 +1955,17 @@
               <article class="card" data-goto="#/list/${esc(list.id)}">
                 <div class="card__art shelf-link__art--custom" style="display:grid;place-items:center;border-radius:var(--r-sm)">
                   <svg viewBox="0 0 24 24" style="width:44px;height:44px" aria-hidden="true"><path d="M4 6h11v2H4zm0 4h11v2H4zm0 4h7v2H4zm13-6 4 3-4 3z"/></svg>
+                  <span class="card__tools">
+                    <button class="icon-btn" data-rename-list="${esc(list.id)}" aria-label="Rename ${esc(list.name)}" title="Rename">${ICON_EDIT}</button>
+                    <button class="icon-btn icon-btn--danger" data-delete-list="${esc(list.id)}" aria-label="Delete ${esc(list.name)}" title="Delete">${ICON_REMOVE}</button>
+                  </span>
                 </div>
                 <div class="card__title">${esc(list.name)}</div>
                 <div class="card__sub">${plural(list.songs.length, 'song')}</div>
               </article>`).join('')}
           </div>
         </section>
+        <div id="mixesRow"></div>
         <section class="section">
           <div class="section__head"><div><h2>Data</h2><p>Everything is local to this browser</p></div></div>
           <div class="panel">
@@ -1747,11 +2007,12 @@
             <div class="detail__actions">
               <button class="btn btn--primary btn--lg" data-play-list="${listKey}">${ICON_PLAY} Play</button>
               <button class="btn btn--outline" data-shuffle-list="${listKey}">Shuffle</button>
-              <button class="btn btn--outline" data-delete-list="${esc(list.id)}">Delete playlist</button>
+              <button class="btn btn--outline" data-rename-list="${esc(list.id)}">${ICON_EDIT} Rename</button>
+              <button class="btn btn--outline btn--danger" data-delete-list="${esc(list.id)}">${ICON_REMOVE} Delete</button>
             </div>
           </div>
         </header>
-        ${trackList(list.songs, { label: list.name })}`);
+        ${trackList(list.songs, { label: list.name, removeFrom: list.id })}`);
     },
 
     settings() {
@@ -2057,6 +2318,39 @@
       </div>`;
   }
 
+  /** Fill the home mixes shelf. Deliberately after first paint: a cold build
+   *  takes a few seconds and must not delay the rest of the page. */
+  async function loadMixesRow() {
+    const host = $('#mixesRow');
+    if (!host) return;
+    host.innerHTML = skeletonShelf('Your mixes', 5);
+    try {
+      const data = await Mixes.load();
+      const list = data?.mixes || [];
+      if (!list.length) {
+        host.innerHTML = '';
+        return;
+      }
+      host.innerHTML = `
+        <section class="section" data-section="mixes">
+          <div class="section__head">
+            <div>
+              <h2>Your mixes</h2>
+              <p>Playlists built from your listening, refreshed as it changes</p>
+            </div>
+            <div class="section__head-actions">
+              <button class="text-btn" data-refresh-mixes="1">Rebuild</button>
+            </div>
+          </div>
+          <div class="shelf" style="grid-auto-columns:186px">
+            ${list.map(mixCard).join('')}
+          </div>
+        </section>`;
+    } catch {
+      host.innerHTML = '';
+    }
+  }
+
   async function loadMoreLikeThis(ids, title) {
     const host = $('#moreLikeThis');
     if (!host || !ids.length) return;
@@ -2113,6 +2407,7 @@
         case 'list': return Views.localList(param);
         case 'taste': return await Views.taste();
         case 'settings': return Views.settings();
+        case 'mix': return await Views.mix(param);
         default:
           location.hash = '#/home';
           return undefined;
@@ -2244,8 +2539,7 @@
     if (shuffle) {
       Store.prefs.shuffle = true;
       Store.savePrefs();
-      $('#shuffleBtn').classList.add('is-on');
-      $('#shuffleBtn').setAttribute('aria-pressed', 'true');
+      syncTransport();
       Player.play(entry.songs, Math.floor(Math.random() * entry.songs.length), { label: entry.label });
       return;
     }
@@ -2279,8 +2573,12 @@
         if (act === 'artist') { const a = artistsOf(song)[0]; if (a) location.hash = `#/artist/${a.id}`; }
         if (act === 'add') { const ok = Store.addToPlaylist(menuItem.dataset.playlist, song); toast(ok ? 'Added to playlist' : 'Already in that playlist'); }
         if (act === 'newlist') {
-          const name = prompt('Playlist name', 'New playlist');
-          if (name) { const list = Store.createPlaylist(name.trim()); Store.addToPlaylist(list.id, song); toast(`Created ${list.name}`); }
+          const name = await askText('New playlist', 'My playlist', 'Create');
+          if (name) {
+            const list = Store.createPlaylist(name);
+            Store.addToPlaylist(list.id, song);
+            toast(`Created ${list.name}`);
+          }
         }
         if (act === 'dislike') { Store.logEvent(song, 'dislike'); toast('Noted. You will see less like that.'); }
         return;
@@ -2296,6 +2594,27 @@
           refreshLikeButtons(song.id);
           toast(now ? 'Added to liked songs' : 'Removed from liked songs');
         }
+        return;
+      }
+
+      const removeFromList = target.closest('[data-remove-from-list]');
+      if (removeFromList) {
+        event.stopPropagation();
+        const { removeFromList: listId, song: songId } = removeFromList.dataset;
+        const song = SONGS.get(songId);
+        Store.removeFromPlaylist(listId, songId);
+        toast(`Removed ${song?.name || 'track'}`);
+        route();
+        return;
+      }
+
+      const unlike = target.closest('[data-unlike]');
+      if (unlike) {
+        event.stopPropagation();
+        const song = Store.liked.find((s) => s.id === unlike.dataset.unlike);
+        Store.toggleLike(song || { id: unlike.dataset.unlike });
+        toast('Removed from liked songs');
+        route();
         return;
       }
 
@@ -2330,6 +2649,63 @@
       if (trackEl) {
         const entry = LISTS.get(trackEl.dataset.list);
         if (entry) Player.play(entry.songs, Number(trackEl.dataset.index), { label: entry.label });
+        return;
+      }
+
+      const playMix = target.closest('[data-play-mix]');
+      if (playMix) {
+        event.stopPropagation();
+        const mix = await Mixes.find(playMix.dataset.playMix).catch(() => null);
+        if (mix?.items?.length) Player.play(mix.items, 0, { label: mix.name });
+        else toast('Could not load that mix');
+        return;
+      }
+
+      const saveMix = target.closest('[data-save-mix]');
+      if (saveMix) {
+        const mix = await Mixes.find(saveMix.dataset.saveMix).catch(() => null);
+        if (!mix) return;
+        const list = Store.createPlaylist(mix.name);
+        mix.items.forEach((song) => Store.addToPlaylist(list.id, song));
+        toast(`Saved ${mix.items.length} tracks to ${list.name}`);
+        return;
+      }
+
+      if (target.closest('[data-refresh-mixes]')) {
+        Mixes.invalidate();
+        toast('Rebuilding your mixes');
+        if (currentRoute().path === 'mix') {
+          await Mixes.load(true);
+          route();
+        } else {
+          loadMixesRow();
+        }
+        return;
+      }
+
+      /* --- library edit and delete ------------------------------------ */
+
+      const renameList = target.closest('[data-rename-list]');
+      if (renameList) {
+        const list = Store.playlist(renameList.dataset.renameList);
+        if (!list) return;
+        event.stopPropagation();
+        const name = await askText('Rename playlist', list.name, 'Rename');
+        if (name) {
+          Store.renamePlaylist(list.id, name);
+          toast('Playlist renamed');
+          route();
+        }
+        return;
+      }
+
+      if (target.closest('#clearRecent')) {
+        if (await askConfirm('Clear recently played?',
+          'This only clears the list. Your taste profile is not affected.', 'Clear')) {
+          Store.clearRecent();
+          toast('Recently played cleared');
+          route();
+        }
         return;
       }
 
@@ -2420,9 +2796,9 @@
       }
 
       if (target.closest('#libNewPlaylist') || target.closest('#newPlaylistBtn')) {
-        const name = prompt('Playlist name', 'New playlist');
-        if (name?.trim()) {
-          const list = Store.createPlaylist(name.trim());
+        const name = await askText('New playlist', 'My playlist', 'Create');
+        if (name) {
+          const list = Store.createPlaylist(name);
           location.hash = `#/list/${list.id}`;
           toast(`Created ${list.name}`);
         }
@@ -2431,9 +2807,17 @@
 
       const deleteList = target.closest('[data-delete-list]');
       if (deleteList) {
-        if (confirm('Delete this playlist?')) {
+        event.stopPropagation();
+        const list = Store.playlist(deleteList.dataset.deleteList);
+        const ok = await askConfirm(
+          `Delete ${list?.name || 'this playlist'}?`,
+          'The playlist is removed from this browser. The songs themselves stay in the catalogue.',
+        );
+        if (ok) {
           Store.deletePlaylist(deleteList.dataset.deleteList);
-          location.hash = '#/library';
+          toast('Playlist deleted');
+          if (currentRoute().path === 'list') location.hash = '#/library';
+          else route();
         }
         return;
       }
@@ -2480,53 +2864,106 @@
       }
 
       if (target.closest('#clearData')) {
-        if (confirm('Clear all listening data? Recommendations reset to a cold start.')) {
+        if (await askConfirm('Clear your listening data?',
+          'Your history, recent plays and taste profile are erased and recommendations reset to a cold start. Playlists and likes are kept.',
+          'Clear data')) {
           Store.clearHistory();
+          Mixes.invalidate();
           toast('Listening data cleared');
           route();
         }
       }
     });
 
-    /* --- player controls --------------------------------------------- */
-    $('#playBtn').addEventListener('click', () => Player.toggle());
-    $('#nextBtn').addEventListener('click', () => Player.next(true));
-    $('#prevBtn').addEventListener('click', () => Player.prev());
+    /* --- player controls -----------------------------------------------
+       One delegated handler serves both the bar and the full screen overlay, so
+       the two sets of buttons cannot drift out of step. */
+    document.addEventListener('click', (event) => {
+      const btn = event.target.closest('[data-pa]');
+      if (!btn) return;
+      const action = btn.dataset.pa;
 
-    $('#shuffleBtn').addEventListener('click', () => {
-      Store.prefs.shuffle = !Store.prefs.shuffle;
-      Store.savePrefs();
-      $('#shuffleBtn').classList.toggle('is-on', Store.prefs.shuffle);
-      $('#shuffleBtn').setAttribute('aria-pressed', String(Store.prefs.shuffle));
-      if (Player.queue.length) {
-        const currentQueueIndex = Player.order[Player.pos];
-        Player.rebuildOrder(currentQueueIndex);
-        // Stay pointed at the track that is actually playing. Shuffling on puts
-        // it first, but shuffling off restores the original list order, where it
-        // can sit anywhere. Assuming position 0 made Next jump backwards and the
-        // queue drawer mark the wrong row as playing.
-        Player.pos = Math.max(0, Player.order.indexOf(currentQueueIndex));
-        renderQueue();
-        markCurrentRows();
+      // The bar's "now playing" region is itself an expand target, but the
+      // controls sitting inside it must win.
+      if (action === 'expand') {
+        if (event.target.closest('[data-pa]:not([data-pa="expand"])')) return;
+        // On a phone the whole bar expands. On desktop the title stays a link to
+        // the album, so only the artwork and the explicit button expand.
+        const onTitle = event.target.closest('.player__title');
+        if (onTitle && !isMobile()) return;
+        if (onTitle) event.preventDefault();
+        if (Player.current) openNp();
+        return;
       }
-      toast(Store.prefs.shuffle ? 'Shuffle on' : 'Shuffle off');
-    });
 
-    $('#repeatBtn').addEventListener('click', () => {
-      const modes = ['off', 'all', 'one'];
-      const next = modes[(modes.indexOf(Store.prefs.repeat) + 1) % modes.length];
-      Store.prefs.repeat = next;
-      Store.savePrefs();
-      $('#repeatBtn').dataset.mode = next;
-      toast(next === 'off' ? 'Repeat off' : next === 'all' ? 'Repeat queue' : 'Repeat one');
-    });
-
-    $('#likeBtn').addEventListener('click', () => {
-      if (!Player.current) return;
-      const now = Store.toggleLike(Player.current);
-      $('#likeBtn').setAttribute('aria-pressed', String(now));
-      refreshLikeButtons(Player.current.id);
-      toast(now ? 'Added to liked songs' : 'Removed from liked songs');
+      switch (action) {
+        case 'toggle': Player.toggle(); break;
+        case 'next': Player.next(true); break;
+        case 'prev': Player.prev(); break;
+        case 'mute': $('#muteBtn').click(); break;
+        case 'queue':
+        case 'queue-panel': {
+          if (action === 'queue-panel' || !$('#np').hidden) {
+            npTab = 'queue';
+            syncNpTabs();
+            renderNpPanel();
+            if ($('#np').hidden) openNp();
+            return;
+          }
+          const drawer = $('#queueDrawer');
+          drawer.hidden = !drawer.hidden;
+          if (!drawer.hidden) renderQueue();
+          break;
+        }
+        case 'lyrics':
+          npTab = 'lyrics';
+          syncNpTabs();
+          openNp();
+          break;
+        case 'station':
+          if (Player.current) startRadio(Player.current.id);
+          break;
+        case 'add-to-playlist':
+          if (Player.current) {
+            const rect = btn.getBoundingClientRect();
+            openMenu(Player.current.id, rect.left - 200, Math.max(12, rect.top - 240));
+          }
+          break;
+        case 'shuffle': {
+          Store.prefs.shuffle = !Store.prefs.shuffle;
+          Store.savePrefs();
+          if (Player.queue.length) {
+            const currentQueueIndex = Player.order[Player.pos];
+            Player.rebuildOrder(currentQueueIndex);
+            // Stay pointed at the track that is actually playing. Shuffling on
+            // puts it first, but shuffling off restores the original order where
+            // it can sit anywhere. Assuming 0 made Next jump backwards.
+            Player.pos = Math.max(0, Player.order.indexOf(currentQueueIndex));
+            renderQueue();
+            markCurrentRows();
+          }
+          syncTransport();
+          toast(Store.prefs.shuffle ? 'Shuffle on' : 'Shuffle off');
+          break;
+        }
+        case 'repeat': {
+          const modes = ['off', 'all', 'one'];
+          Store.prefs.repeat = modes[(modes.indexOf(Store.prefs.repeat) + 1) % modes.length];
+          Store.savePrefs();
+          syncTransport();
+          toast(Store.prefs.repeat === 'off' ? 'Repeat off'
+            : Store.prefs.repeat === 'all' ? 'Repeat queue' : 'Repeat one');
+          break;
+        }
+        case 'like': {
+          if (!Player.current) return;
+          const now = Store.toggleLike(Player.current);
+          refreshLikeButtons(Player.current.id);
+          toast(now ? 'Added to liked songs' : 'Removed from liked songs');
+          break;
+        }
+        default: break;
+      }
     });
 
     $('#volume').addEventListener('input', (event) => {
@@ -2563,52 +3000,51 @@
       if (label) label.textContent = `${Store.prefs.crossfade} seconds`;
     });
 
-    /* --- scrubber ----------------------------------------------------- */
-    const scrubber = $('#scrubber');
-    const ratioFromEvent = (event) => {
-      const rect = scrubber.getBoundingClientRect();
-      const x = (event.touches?.[0]?.clientX ?? event.clientX) - rect.left;
-      return clamp(x / rect.width, 0, 1);
-    };
-    const preview = (ratio) => {
-      $('#progressFill').style.width = `${ratio * 100}%`;
-      $('#progressKnob').style.left = `${ratio * 100}%`;
-    };
-    scrubber.addEventListener('pointerdown', (event) => {
-      if (!Player.current) return;
-      Player.seeking = true;
-      preview(ratioFromEvent(event));
-      scrubber.setPointerCapture(event.pointerId);
+    /* --- scrubbers (bar and overlay) ---------------------------------- */
+    $$('.js-scrub').forEach((scrubber) => {
+      const ratioFromEvent = (event) => {
+        const rect = scrubber.getBoundingClientRect();
+        const x = (event.touches?.[0]?.clientX ?? event.clientX) - rect.left;
+        return clamp(x / rect.width, 0, 1);
+      };
+      scrubber.addEventListener('pointerdown', (event) => {
+        if (!Player.current) return;
+        Player.seeking = true;
+        paintProgress(ratioFromEvent(event));
+        scrubber.setPointerCapture(event.pointerId);
+      });
+      scrubber.addEventListener('pointermove', (event) => {
+        if (Player.seeking) paintProgress(ratioFromEvent(event));
+      });
+      scrubber.addEventListener('pointerup', (event) => {
+        if (!Player.seeking) return;
+        Player.seeking = false;
+        Player.seekToRatio(ratioFromEvent(event));
+      });
+      scrubber.addEventListener('keydown', (event) => {
+        if (!Player.current) return;
+        const step = event.shiftKey ? 30 : 5;
+        if (event.key === 'ArrowRight') { Player.seekBy(step); event.preventDefault(); }
+        if (event.key === 'ArrowLeft') { Player.seekBy(-step); event.preventDefault(); }
+      });
     });
-    scrubber.addEventListener('pointermove', (event) => {
-      if (Player.seeking) preview(ratioFromEvent(event));
+
+    /* --- dialog ------------------------------------------------------- */
+    $('#modalOk').addEventListener('click', () => Modal.submit());
+    $$('[data-modal-cancel]').forEach((el) => el.addEventListener('click', () => Modal.close(null)));
+    $('#modalInput').addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') { event.preventDefault(); Modal.submit(); }
+      if (event.key === 'Escape') { event.preventDefault(); Modal.close(null); }
     });
-    scrubber.addEventListener('pointerup', (event) => {
-      if (!Player.seeking) return;
-      Player.seeking = false;
-      Player.seekToRatio(ratioFromEvent(event));
-    });
-    scrubber.addEventListener('keydown', (event) => {
-      const step = event.shiftKey ? 30 : 5;
-      if (event.key === 'ArrowRight') { audio.currentTime += step; event.preventDefault(); }
-      if (event.key === 'ArrowLeft') { audio.currentTime -= step; event.preventDefault(); }
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && !$('#modal').hidden) Modal.close(null);
     });
 
     /* --- queue drawer, now playing ------------------------------------ */
-    $('#queueBtn').addEventListener('click', () => {
-      const drawer = $('#queueDrawer');
-      drawer.hidden = !drawer.hidden;
-      if (!drawer.hidden) renderQueue();
-    });
     $('#closeQueue').addEventListener('click', () => { $('#queueDrawer').hidden = true; });
     $('#clearQueue').addEventListener('click', () => Player.clearUpcoming());
-    $('#playerArt').addEventListener('click', () => openNp());
     $('#npClose').addEventListener('click', () => closeNp());
-    $('#lyricsBtn').addEventListener('click', () => {
-      npTab = 'lyrics';
-      syncNpTabs();
-      openNp();
-    });
+    $('#npBackdrop').addEventListener('click', () => closeNp());
     $$('.np__tab').forEach((tab) => tab.addEventListener('click', () => {
       npTab = tab.dataset.tab;
       syncNpTabs();
@@ -2811,7 +3247,9 @@
   function refreshLikeButtons(songId) {
     const liked = Store.isLiked(songId);
     $$(`[data-like="${songId}"]`).forEach((btn) => btn.setAttribute('aria-pressed', String(liked)));
-    if (Player.current?.id === songId) $('#likeBtn').setAttribute('aria-pressed', String(liked));
+    if (Player.current?.id === songId) {
+      $$('.js-like').forEach((btn) => btn.setAttribute('aria-pressed', String(liked)));
+    }
   }
 
   async function startRadio(songId) {

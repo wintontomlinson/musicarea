@@ -46,11 +46,22 @@ USER_AGENTS = [
 JIOSAAVN_API = "https://www.jiosaavn.com/api.php"
 
 
+PROVIDER_TOKENS = re.compile(r"\b(jio\s*saavn|saavn)\b", re.I)
+
+
 def clean_text(value):
-    """Upstream titles arrive with HTML entities such as &quot; and &amp;."""
+    """Normalise a display string.
+
+    Upstream titles arrive with HTML entities such as &quot; and &amp;, and some
+    fields carry the upstream brand as their value (chart tiles ship a subtitle
+    of "JioSaavn"). Neither belongs in this app's interface.
+    """
     if not isinstance(value, str):
         return value
-    return html.unescape(value).strip()
+    text = html.unescape(value).strip()
+    if PROVIDER_TOKENS.fullmatch(text.strip()):
+        return ""
+    return PROVIDER_TOKENS.sub("", text).replace("  ", " ").strip(" -,|·").strip()
 
 
 def create_download_links(encrypted_media_url: str) -> list:
@@ -74,9 +85,15 @@ def create_download_links(encrypted_media_url: str) -> list:
         return []
 
 
+# Upstream serves its own branded placeholder art from /_i/ paths for entities
+# with no real cover. Those are both provider branded and ugly, so they are
+# dropped and the client draws its own placeholder instead.
+_PLACEHOLDER_ART = re.compile(r"/_i/|default-(film|music|album|artist)", re.I)
+
+
 def create_image_links(link: str) -> list:
     """Return multiple image resolution URLs."""
-    if not link:
+    if not link or _PLACEHOLDER_ART.search(link):
         return []
     link = re.sub(r"^http://", "https://", link)
     return [

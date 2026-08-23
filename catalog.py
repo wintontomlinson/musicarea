@@ -93,8 +93,14 @@ def build_card(item: dict) -> dict:
             subtitle = f"{more['song_count']} songs"
         elif more.get("music"):
             subtitle = clean_text(more["music"])
-        elif more.get("firstname"):
-            subtitle = clean_text(more["firstname"])
+        # `firstname` is the upstream curator name, which is the provider's own
+        # brand on every editorial playlist. Showing it put "JioSaavn" under
+        # every chart tile, so fall back to the track count instead.
+        elif str(more.get("song_count", "")).isdigit():
+            subtitle = f"{more['song_count']} songs"
+        else:
+            subtitle = "Editorial playlist" if kind == "playlist" else ""
+
     return {
         "id": item.get("id"),
         "name": clean_text(item.get("title")) or clean_text(item.get("name")),
@@ -104,7 +110,6 @@ def build_card(item: dict) -> dict:
         "language": item.get("language") or more.get("language"),
         "year": item.get("year") or None,
         "songCount": int(more["song_count"]) if str(more.get("song_count", "")).isdigit() else None,
-        "url": item.get("perma_url"),
     }
 
 
@@ -326,8 +331,7 @@ def search_artist_cards(query: str, limit: int = 10) -> List[dict]:
             "subtitle": clean_text(item.get("description") or item.get("role") or "Artist"),
             "type": "artist",
             "image": create_image_links(item.get("image") or ""),
-            "url": item.get("perma_url"),
-        })
+            })
     return cards[:limit]
 
 

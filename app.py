@@ -508,6 +508,15 @@ def api_feed():
     })
 
 
+@app.route("/api/mixes", methods=["POST"])
+def api_mixes():
+    """Ready made playlists generated from the listener's own taste profile."""
+    body = _payload()
+    per_mix = max(10, min(40, int(body.get("perMix") or 24)))
+    result = recommender.mixes(history=body.get("history") or [], per_mix=per_mix)
+    return ok(result)
+
+
 @app.route("/api/browse")
 def api_browse():
     """Editorial shelves. Identical for everyone, so aggressively cacheable."""
