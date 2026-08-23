@@ -152,6 +152,7 @@
     recent: 'ma.recent.v1',
     playlists: 'ma.playlists.v1',
     prefs: 'ma.prefs.v1',
+    searches: 'ma.searches.v1',
   };
 
   const MAX_HISTORY = 400;
@@ -173,6 +174,7 @@
     liked: read(KEYS.liked, []),
     recent: read(KEYS.recent, []),
     playlists: read(KEYS.playlists, []),
+    recentSearches: read(KEYS.searches, []),
     prefs: Object.assign(
       {
         volume: 0.85,
@@ -278,6 +280,19 @@
       renderPlaylistList();
     },
 
+    rememberSearch(query) {
+      const q = (query || '').trim();
+      if (!q) return;
+      this.recentSearches = [q, ...this.recentSearches.filter((s) => s.toLowerCase() !== q.toLowerCase())]
+        .slice(0, 10);
+      write(KEYS.searches, this.recentSearches);
+    },
+
+    clearSearches() {
+      this.recentSearches = [];
+      write(KEYS.searches, []);
+    },
+
     renamePlaylist(id, name) {
       const list = this.playlist(id);
       if (!list) return;
@@ -345,6 +360,7 @@
     lyrics(id) { return this.get(`/api/songs/${encodeURIComponent(id)}/lyrics`); },
     similar(ids, limit = 16) { return this.post('/api/similar', { ids, limit }); },
     mixes(perMix = 24) { return this.post('/api/mixes', { history: Store.history, perMix }); },
+    genres() { return this.get('/api/genres'); },
     suggest(query) { return this.get(`/api/search?query=${encodeURIComponent(query)}`); },
     searchSongs(q, limit = 30) { return this.get(`/api/search/songs?query=${encodeURIComponent(q)}&limit=${limit}`); },
     searchAlbums(q, limit = 16) { return this.get(`/api/search/albums?query=${encodeURIComponent(q)}&limit=${limit}`); },
@@ -480,6 +496,38 @@
     (songs || []).forEach((s) => s?.id && SONGS.set(s.id, s));
   }
 
+  /** Fill in stream URLs for stored songs.
+   *
+   *  Store.slim() deliberately omits downloadUrl: the listening history is
+   *  POSTed to the recommender on every feed request, and carrying five URLs per
+   *  entry across hundreds of entries would bloat that payload badly.
+   *
+   *  The cost was that anything replayed from storage had no stream at all, so
+   *  clicking a liked song, a recently played track or a track in a local
+   *  playlist silently failed and autoplay wandered off to something unrelated.
+   *  They are resolved here, at the point they are actually needed.
+   */
+  async function ensurePlayable(songs) {
+    const list = (songs || []).filter((s) => s?.id);
+    const missing = list.filter((s) => !s.downloadUrl?.length);
+    if (!missing.length) return list;
+
+    const ids = [...new Set(missing.map((s) => s.id))];
+    const chunks = [];
+    for (let i = 0; i < ids.length; i += 25) chunks.push(ids.slice(i, i + 25));
+
+    const byId = new Map();
+    const results = await Promise.allSettled(chunks.map((c) => API.songs(c)));
+    results.forEach((r) => {
+      if (r.status !== 'fulfilled') return;
+      (r.value || []).forEach((song) => {
+        if (song?.id) byId.set(song.id, song);
+      });
+    });
+    if (byId.size) remember([...byId.values()]);
+    return list.map((s) => (s.downloadUrl?.length ? s : (byId.get(s.id) || s)));
+  }
+
   function registerList(songs, label) {
     const key = `l${++listSeq}`;
     remember(songs);
@@ -498,6 +546,7 @@
   const ICON_RADIO = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6m-5.7-2.5 1.4 1.4a6 6 0 0 0 0 8.2l-1.4 1.4a8 8 0 0 1 0-11M17.7 6.5a8 8 0 0 1 0 11l-1.4-1.4a6 6 0 0 0 0-8.2z"/></svg>';
   const ICON_SEEK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h2v14H4zm4 7 11-7v14z"/></svg>';
   const ICON_REMOVE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l1 2h4v2H4V5h4zm-3 6h12l-1 12H7zm3 2v8h1.5v-8zm4 0v8H15v-8z"/></svg>';
+  const ICON_CLOCK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9h-2a7 7 0 1 1-7-7v4l5-4-5-4zm-.9 5h1.6v4.6l3 1.8-.8 1.3-3.8-2.3z"/></svg>';
   const ICON_EDIT = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17.2 16.4 4.8l2.8 2.8L6.8 20H4zM17.8 3.4 19.2 2 22 4.8l-1.4 1.4z"/></svg>';
   const ICON_VOLUME = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h3l4-4v14l-4-4H4zm11.5-1.3a5 5 0 0 1 0 8.6v-2A3 3 0 0 0 15.5 10z"/></svg>';
 
@@ -842,7 +891,11 @@
 
     /** Play a list of songs starting at an index. */
     async play(songs, index = 0, meta = {}) {
-      const playable = (songs || []).filter((s) => s?.id);
+      // Remember which track was actually clicked: resolving and filtering can
+      // shift positions, and starting the wrong song is worse than a delay.
+      const wanted = (songs || [])[index];
+      const resolved = await ensurePlayable(songs);
+      const playable = resolved.filter((s) => s?.id && s.downloadUrl?.length);
       if (!playable.length) {
         toast('Nothing playable in there');
         return;
@@ -850,8 +903,12 @@
       remember(playable);
       this.queue = playable;
       this.contextLabel = meta.label || '';
-      this.rebuildOrder(index);
-      await this.load(this.order.indexOf(index) >= 0 ? this.order.indexOf(index) : 0, true);
+
+      let start = wanted ? playable.findIndex((s) => s.id === wanted.id) : 0;
+      if (start < 0) start = 0;
+      this.rebuildOrder(start);
+      const pos = this.order.indexOf(start);
+      await this.load(pos >= 0 ? pos : 0, true);
       renderQueue();
     },
 
@@ -972,8 +1029,16 @@
       audio.currentTime = 0;
     },
 
-    enqueue(song, { next = false } = {}) {
+    async enqueue(song, { next = false } = {}) {
       if (!song?.id) return;
+      if (!song.downloadUrl?.length) {
+        // Same resolution path as play(): a queued library entry has no stream.
+        [song] = await ensurePlayable([song]);
+        if (!song?.downloadUrl?.length) {
+          toast('That track could not be loaded');
+          return;
+        }
+      }
       remember([song]);
       if (!this.queue.length) return this.play([song], 0);
       if (next) {
@@ -1641,27 +1706,92 @@
         setView(emptyState('Browse is unavailable', 'The catalogue service did not respond. Try again shortly.'));
         return;
       }
-      const languages = data.languages.map((lang) => `
-        <button class="chip ${lang === Store.prefs.language ? 'is-active' : ''}" data-language="${esc(lang)}">${esc(cap(lang))}</button>`).join('');
       setView(`
         <section class="section">
-          <div class="section__head"><div><h2>Browse</h2><p>Pick a language and dig in</p></div></div>
-          <div class="chip-row">${languages}</div>
+          <div class="section__head">
+            <div><h2>Browse</h2><p>Pick a language and dig in</p></div>
+          </div>
+          <div class="chip-row">
+            ${data.languages.map((lang) => `
+              <button class="chip ${lang === Store.prefs.language ? 'is-active' : ''}" data-language="${esc(lang)}">${esc(cap(lang))}</button>`).join('')}
+          </div>
         </section>
-        ${moodStrip(data.moods)}
+        <section class="section">
+          <div class="section__head">
+            <div><h2>Languages</h2><p>What is charting in each right now</p></div>
+          </div>
+          <div class="grid grid--genres" id="genreGrid">
+            ${Array.from({ length: 8 }, () => '<div class="skel" style="aspect-ratio:1.42;border-radius:var(--r-md)"></div>').join('')}
+          </div>
+        </section>
+        <div id="moodHost">${moodStrip(data.moods)}</div>
+        ${(data.rows || []).map(shelf).join('')}`);
+      loadGenreTiles();
+    },
+
+    /** One language: what is trending, charting and newly out in it. */
+    async language(id) {
+      const name = cap(id);
+      setTitle([name, 'Language']);
+      setView(`<div class="spinner-row"><span class="spinner"></span>Loading ${esc(name)}</div>`);
+      const data = await API.browse(id).catch(() => null);
+      if (!data) {
+        setView(emptyState(`${name} is unavailable`, 'The catalogue did not respond. Try again shortly.'));
+        return;
+      }
+      const songRow = (data.rows || []).find((r) => r.kind === 'songs');
+      const covers = (songRow?.items || []).slice(0, 3);
+      document.documentElement.style.setProperty('--hue',
+        String(catalogHue(id)));
+      setView(`
+        <section class="hero hero--mood" style="--hue:${catalogHue(id)}">
+          <div class="hero__body">
+            <span class="hero__eyebrow">${ICON_SPARK} Language</span>
+            <h1>${esc(name)}</h1>
+            <p>Everything charting, trending and newly released in ${esc(name)}.</p>
+            <div class="hero__actions">
+              ${songRow ? `<button class="btn btn--primary btn--lg" data-play-list="${registerList(songRow.items, `${name} trending`)}">${ICON_PLAY} Play trending</button>` : ''}
+              <button class="btn btn--outline btn--lg" data-language="${esc(id)}">Make this my default</button>
+            </div>
+          </div>
+          ${heroArt(covers)}
+        </section>
         ${(data.rows || []).map(shelf).join('')}`);
     },
 
     async search(query) {
       if (!query) {
+        const recents = Store.recentSearches;
         setView(`
+          ${recents.length ? `
           <section class="section">
-            <div class="section__head"><div><h2>Search</h2><p>Find any song, album, artist or playlist</p></div></div>
+            <div class="section__head">
+              <div><h2>Recent searches</h2></div>
+              <div class="section__head-actions">
+                <button class="text-btn" id="clearSearches">Clear</button>
+              </div>
+            </div>
+            <div class="chip-row">
+              ${recents.map((q) => `
+                <button class="chip chip--recent" data-search="${esc(q)}">
+                  ${ICON_CLOCK}<span>${esc(q)}</span>
+                </button>`).join('')}
+            </div>
+          </section>` : ''}
+          <section class="section">
+            <div class="section__head">
+              <div><h2>Browse by language</h2><p>What is charting in each right now</p></div>
+            </div>
+            <div class="grid grid--genres" id="genreGrid">
+              ${Array.from({ length: 8 }, () => '<div class="skel" style="aspect-ratio:1.42;border-radius:var(--r-md)"></div>').join('')}
+            </div>
           </section>
-          ${moodStrip(MOODS_FALLBACK)}`);
-        $('#searchInput').focus();
+          <div id="moodHost">${moodStrip(MOODS_FALLBACK)}</div>`);
+        if (!isMobile()) $('#searchInput').focus();
+        loadGenreTiles();
         return;
       }
+      Store.rememberSearch(query);
       $('#searchInput').value = query;
       setTitle([query, 'Search']);
       setView(`<div class="spinner-row"><span class="spinner"></span>Searching for ${esc(query)}</div>`);
@@ -1680,6 +1810,33 @@
       }
 
       const parts = [];
+
+      // Lead with the single best match, the way a search result page should.
+      const topArtist = artists?.results?.[0];
+      const topSong = songResults[0];
+      if (topSong || topArtist) {
+        const useArtist = topArtist && !/\d/.test(query) && topArtist.name
+          && query.toLowerCase().includes(topArtist.name.toLowerCase().split(' ')[0]);
+        parts.push(useArtist
+          ? topResultCard({
+            kind: 'Artist',
+            name: topArtist.name,
+            sub: topArtist.subtitle || 'Artist',
+            image: topArtist.image,
+            round: true,
+            goto: `#/artist/${topArtist.id}`,
+            playAttr: `data-artist-radio="${esc(topArtist.id)}"`,
+          })
+          : topResultCard({
+            kind: 'Song',
+            name: topSong.name,
+            sub: artistLine(topSong),
+            image: topSong.image,
+            goto: topSong.album?.id ? `#/album/${topSong.album.id}` : '',
+            playAttr: `data-play-song="${esc(topSong.id)}"`,
+          }));
+      }
+
       if (songResults.length) {
         remember(songResults);
         parts.push(`
@@ -1963,23 +2120,33 @@
           </div>
           <div class="grid">
             <article class="card" data-goto="#/liked">
-              <div class="card__art shelf-link__art--liked" style="display:grid;place-items:center;border-radius:var(--r-sm)">
-                <svg viewBox="0 0 24 24" style="width:46px;height:46px" aria-hidden="true"><path d="M12 20.7 4.6 13.6a4.9 4.9 0 0 1 7-6.9l.4.4.4-.4a4.9 4.9 0 0 1 7 6.9z"/></svg>
+              <div class="card__art lib-art lib-art--liked">
+                ${collage(Store.liked.map((s) => s.image)) || `
+                  <svg viewBox="0 0 24 24" class="lib-art__glyph" aria-hidden="true"><path d="M12 20.7 4.6 13.6a4.9 4.9 0 0 1 7-6.9l.4.4.4-.4a4.9 4.9 0 0 1 7 6.9z"/></svg>`}
+                <span class="lib-art__tint"></span>
+                <span class="lib-art__badge">${ICON_HEART}</span>
+                ${Store.liked.length ? `<button class="card__play" data-play-liked="1" aria-label="Play liked songs">${ICON_PLAY}</button>` : ''}
               </div>
               <div class="card__title">Liked songs</div>
               <div class="card__sub">${plural(Store.liked.length, 'song')}</div>
             </article>
             <article class="card" data-goto="#/recent">
-              <div class="card__art shelf-link__art--recent" style="display:grid;place-items:center;border-radius:var(--r-sm)">
-                <svg viewBox="0 0 24 24" style="width:46px;height:46px" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9h-2a7 7 0 1 1-7-7v4l5-4-5-4z"/></svg>
+              <div class="card__art lib-art lib-art--recent">
+                ${collage(Store.recent.map((s) => s.image)) || `
+                  <svg viewBox="0 0 24 24" class="lib-art__glyph" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9h-2a7 7 0 1 1-7-7v4l5-4-5-4z"/></svg>`}
+                <span class="lib-art__tint"></span>
+                <span class="lib-art__badge">${ICON_CLOCK}</span>
+                ${Store.recent.length ? `<button class="card__play" data-play-recent="1" aria-label="Play recently played">${ICON_PLAY}</button>` : ''}
               </div>
               <div class="card__title">Recently played</div>
               <div class="card__sub">${plural(Store.recent.length, 'song')}</div>
             </article>
             ${lists.map((list) => `
               <article class="card" data-goto="#/list/${esc(list.id)}">
-                <div class="card__art shelf-link__art--custom" style="display:grid;place-items:center;border-radius:var(--r-sm)">
-                  <svg viewBox="0 0 24 24" style="width:44px;height:44px" aria-hidden="true"><path d="M4 6h11v2H4zm0 4h11v2H4zm0 4h7v2H4zm13-6 4 3-4 3z"/></svg>
+                <div class="card__art lib-art lib-art--custom">
+                  ${collage(list.songs.map((s) => s.image)) || `
+                    <svg viewBox="0 0 24 24" class="lib-art__glyph" aria-hidden="true"><path d="M4 6h11v2H4zm0 4h11v2H4zm0 4h7v2H4zm13-6 4 3-4 3z"/></svg>`}
+                  <span class="lib-art__tint"></span>
                   <span class="card__tools">
                     <button class="icon-btn" data-rename-list="${esc(list.id)}" aria-label="Rename ${esc(list.name)}" title="Rename">${ICON_EDIT}</button>
                     <button class="icon-btn icon-btn--danger" data-delete-list="${esc(list.id)}" aria-label="Delete ${esc(list.name)}" title="Delete">${ICON_REMOVE}</button>
@@ -2326,6 +2493,16 @@
       </div>`;
   }
 
+  /** Mirrors LANGUAGE_HUES in catalog.py so a language keeps the same colour
+   *  on its tile and on its own page. */
+  const LANGUAGE_HUES = {
+    hindi: 268, english: 210, punjabi: 24, tamil: 158, telugu: 190,
+    marathi: 336, bengali: 44, kannada: 292, malayalam: 130, gujarati: 8,
+    bhojpuri: 58, urdu: 240, haryanvi: 100, rajasthani: 320,
+    assamese: 176, odia: 12,
+  };
+  const catalogHue = (language) => LANGUAGE_HUES[String(language).toLowerCase()] ?? 268;
+
   function cap(text) {
     return String(text || '').replace(/^\w/, (c) => c.toUpperCase());
   }
@@ -2360,6 +2537,60 @@
           <div class="track"><div class="skel" style="height:42px;width:42px;border-radius:7px"></div>
           <div class="skel skel-line" style="width:60%"></div><div></div><div></div><div></div></div>`).join('')}
       </div>`;
+  }
+
+  /** A four cover collage. Used by category tiles and library shelves so those
+   *  screens show the music they contain instead of a generic glyph. */
+  function collage(covers, { size = 150, cls = '' } = {}) {
+    const list = (covers || []).filter(Boolean).slice(0, 4);
+    if (!list.length) return '';
+    return `<span class="collage ${cls}">${list.map((c) => `
+      <img loading="lazy" decoding="async" src="${esc(art({ image: c }, size))}" alt="">`).join('')}</span>`;
+  }
+
+  /** Category tile, shared by languages on search and browse. */
+  function genreTile(item, href) {
+    return `
+      <a class="mood-tile" href="${esc(href)}" style="--hue:${item.hue}">
+        ${collage(item.covers, { cls: 'collage--soft' })}
+        <span class="mood-tile__tint"></span>
+        <span class="mood-tile__name">${esc(item.name)}</span>
+      </a>`;
+  }
+
+  /** The single best match, given prominence at the top of a result page. */
+  function topResultCard({ kind, name, sub, image, round, goto, playAttr }) {
+    return `
+      <section class="section">
+        <div class="section__head"><div><h2>Top result</h2></div></div>
+        <article class="top-result" ${goto ? `data-goto="${esc(goto)}"` : ''}>
+          <div class="top-result__art ${round ? 'is-round' : ''}">
+            <img decoding="async" src="${esc(art({ image }, 500))}" alt="">
+          </div>
+          <div class="top-result__body">
+            <span class="top-result__kind">${esc(kind)}</span>
+            <h3>${esc(name)}</h3>
+            <p>${esc(sub || '')}</p>
+          </div>
+          <button class="top-result__play" ${playAttr} aria-label="Play ${esc(name)}">${ICON_PLAY}</button>
+        </article>
+      </section>`;
+  }
+
+  /** Language tiles for the search screen, loaded after first paint. */
+  async function loadGenreTiles() {
+    const grid = $('#genreGrid');
+    if (!grid) return;
+    try {
+      const data = await API.genres();
+      if (!$('#genreGrid')) return;
+      grid.innerHTML = (data.languages || [])
+        .map((lang) => genreTile(lang, `#/language/${lang.id}`)).join('');
+      const moodHost = $('#moodHost');
+      if (moodHost && data.moods?.length) moodHost.innerHTML = moodStrip(data.moods);
+    } catch {
+      grid.innerHTML = '';
+    }
   }
 
   /** Fill the home mixes shelf. Deliberately after first paint: a cold build
@@ -2452,6 +2683,7 @@
         case 'taste': return await Views.taste();
         case 'settings': return Views.settings();
         case 'mix': return await Views.mix(param);
+        case 'language': return await Views.language(param);
         default:
           location.hash = '#/home';
           return undefined;
@@ -2693,6 +2925,31 @@
       if (trackEl) {
         const entry = LISTS.get(trackEl.dataset.list);
         if (entry) Player.play(entry.songs, Number(trackEl.dataset.index), { label: entry.label });
+        return;
+      }
+
+      const searchChip = target.closest('[data-search]');
+      if (searchChip) {
+        location.hash = `#/search/${encodeURIComponent(searchChip.dataset.search)}`;
+        return;
+      }
+
+      if (target.closest('#clearSearches')) {
+        Store.clearSearches();
+        toast('Recent searches cleared');
+        route();
+        return;
+      }
+
+      if (target.closest('[data-play-liked]')) {
+        event.stopPropagation();
+        if (Store.liked.length) Player.play(Store.liked, 0, { label: 'Liked songs' });
+        return;
+      }
+
+      if (target.closest('[data-play-recent]')) {
+        event.stopPropagation();
+        if (Store.recent.length) Player.play(Store.recent, 0, { label: 'Recently played' });
         return;
       }
 

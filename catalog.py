@@ -335,6 +335,39 @@ def search_artist_cards(query: str, limit: int = 10) -> List[dict]:
     return cards[:limit]
 
 
+# Hues for the language tiles, so each one is recognisable by colour rather than
+# only by its label.
+LANGUAGE_HUES = {
+    "hindi": 268, "english": 210, "punjabi": 24, "tamil": 158, "telugu": 190,
+    "marathi": 336, "bengali": 44, "kannada": 292, "malayalam": 130, "gujarati": 8,
+    "bhojpuri": 58, "urdu": 240, "haryanvi": 100, "rajasthani": 320,
+    "assamese": 176, "odia": 12,
+}
+
+
+def language_cards(limit: int = 12) -> List[dict]:
+    """Languages with artwork, drawn from what is currently trending in each.
+
+    The browse and search screens used plain text chips, which gave a listener no
+    reason to pick one over another.
+    """
+    langs = LANGUAGES[:limit]
+    results = parallel([(lambda l=l: trending(l)) for l in langs], workers=10)
+    cards = []
+    for language, songs in zip(langs, results):
+        covers = [s["image"] for s in (songs or []) if s.get("image")][:4]
+        if not covers:
+            continue
+        cards.append({
+            "id": language,
+            "name": language.title(),
+            "hue": LANGUAGE_HUES.get(language, 268),
+            "image": covers[0],
+            "covers": covers,
+        })
+    return cards
+
+
 def mood_cards() -> List[dict]:
     """The mood list with real artwork attached, for the browse tiles.
 
