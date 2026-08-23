@@ -66,6 +66,17 @@
 
   function artistsOf(song) {
     const groups = song?.artists || {};
+
+    // Songs read back from storage keep a flat, already filtered array, while
+    // API payloads use role buckets. Without this branch every stored song lost
+    // its credits and rendered as "Unknown artist", which is what the library,
+    // the recent list and the jump-back-in tiles were all showing.
+    if (Array.isArray(groups)) {
+      return groups
+        .filter((a) => a && (a.id || a.name))
+        .map((a) => ({ id: a.id, name: a.name || '' }));
+    }
+
     // An artist can hold several credits at once (singer and lyricist, say), so
     // gather all of them and only drop people whose every credit is non-musical.
     const roles = new Map();
@@ -673,8 +684,25 @@
   }
 
   function section(row, inner) {
-    const more = row.kind === 'songs' && (row.items || []).length > 4
-      ? `<button class="text-btn" data-play-shelf="${esc(row.id || '')}">Play all</button>` : '';
+    const actions = [];
+    if (row.kind === 'songs' && (row.items || []).length > 4) {
+      actions.push(`<button class="text-btn" data-play-shelf="${esc(row.id || '')}">Play all</button>`);
+    }
+    if (row.showAll) {
+      actions.push(`<a class="text-btn" href="${esc(row.showAll)}">Show all</a>`);
+    }
+    // Arrow pair for scrolling a shelf, as both Apple Music and Spotify have.
+    if ((row.items || []).length > 5) {
+      actions.push(`
+        <span class="shelf-nav">
+          <button class="icon-btn" data-shelf-nav="prev" aria-label="Scroll left">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.4 4.6 8 12l7.4 7.4 1.4-1.4L10.8 12l6-6z"/></svg>
+          </button>
+          <button class="icon-btn" data-shelf-nav="next" aria-label="Scroll right">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.6 4.6 16 12l-7.4 7.4-1.4-1.4L13.2 12l-6-6z"/></svg>
+          </button>
+        </span>`);
+    }
     return `
       <section class="section" data-section="${esc(row.id || '')}">
         <div class="section__head">
@@ -682,7 +710,7 @@
             <h2>${esc(row.title)}</h2>
             ${row.subtitle ? `<p>${esc(row.subtitle)}</p>` : ''}
           </div>
-          <div class="section__head-actions">${more}</div>
+          <div class="section__head-actions">${actions.join('')}</div>
         </div>
         ${inner}
       </section>`;
@@ -1643,25 +1671,27 @@
         || browseData?.rows?.find((r) => r.kind === 'songs')?.items
         || []).slice(0, 3);
 
+      // A returning listener does not need the pitch. They get a greeting bar and
+      // their music. The full hero is kept for a first visit, where explaining
+      // the app is the useful thing to do.
       const hero = profile && !profile.coldStart
         ? `
-          <section class="hero">
-            <div class="hero__body">
-              <span class="hero__eyebrow">${ICON_SPARK} Your mix is ready</span>
-              <h1>Music that keeps<br><em>learning what you love</em></h1>
-              <p>Built from ${plural(profile.events, 'listening signal')} across ${plural(profile.artistCount ?? profile.topArtists.length, 'artist')}. Every pick below tells you why it is there.</p>
-              <div class="hero__actions">
-                <button class="btn btn--primary btn--lg" data-play-shelf="made-for-you">${ICON_PLAY} Play my mix</button>
-                <a class="btn btn--outline btn--lg" href="#/taste">See my taste profile</a>
-              </div>
-              <div class="hero__stats">
-                <div class="hero__stat"><span>Top artist</span><strong>${esc(profile.topArtists[0]?.name || 'Learning')}</strong></div>
-                <div class="hero__stat"><span>Languages</span><strong>${esc((profile.topLanguages || []).slice(0, 2).map(cap).join(', ') || 'Mixed')}</strong></div>
-                <div class="hero__stat"><span>Your era</span><strong>${esc(profile.eraCenter || 'Mixed')}</strong></div>
-                <div class="hero__stat"><span>Signals</span><strong>${profile.events}</strong></div>
+          <section class="greet">
+            <div class="greet__row">
+              <h1>${esc(greeting())}</h1>
+              <div class="greet__actions">
+                <button class="btn btn--primary" data-play-shelf="made-for-you">${ICON_PLAY} Play my mix</button>
+                <a class="btn btn--outline" href="#/taste">Taste profile</a>
               </div>
             </div>
-            ${heroArt(covers)}
+            <div class="greet__facts">
+              <span><b>${esc(profile.topArtists[0]?.name || 'Learning')}</b> on top</span>
+              <i></i>
+              <span>${esc((profile.topLanguages || []).slice(0, 2).map(cap).join(', ') || 'Mixed')}</span>
+              ${profile.eraCenter ? `<i></i><span>${esc(profile.eraCenter)} era</span>` : ''}
+              <i></i>
+              <span>${plural(profile.events, 'signal')} learned</span>
+            </div>
           </section>`
         : `
           <section class="hero">
@@ -1689,12 +1719,21 @@
         // Mixes slot in after the first shelf, filled in once they arrive.
         if (index === 0) rows.push('<div id="mixesRow"></div>');
       });
+
+      // Home carries personal shelves plus a single "what is hot" row. It used
+      // to append every browse row too, which made eleven shelves deep, six of
+      // them identical to what Browse already shows.
       if (browseData) {
-        rows.push(moodStrip(browseData.moods));
-        (browseData.rows || []).forEach((row) => rows.push(shelf(row)));
+        const trending = (browseData.rows || []).find((r) => r.id === 'trending');
+        if (trending) {
+          rows.push(shelf(Object.assign({}, trending, { showAll: '#/browse' })));
+        }
+        // A cold visitor has no personal shelves yet, so give them the moods to
+        // dig into rather than a nearly empty page.
+        if (profile?.coldStart) rows.push(moodStrip(browseData.moods));
       }
 
-      setView(hero + rows.join(''));
+      setView(hero + quickPicks() + rows.join(''));
       Home.feed = feedData;
       if (profile && !profile.coldStart) loadMixesRow();
     },
@@ -2539,6 +2578,54 @@
       </div>`;
   }
 
+  function greeting() {
+    const hour = new Date().getHours();
+    if (hour < 5) return 'Late one';
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
+  }
+
+  /** One tap back into what you were just playing.
+   *  Every major player leads with this and it was the main thing missing. */
+  function quickPicks() {
+    const picks = [];
+    const seen = new Set();
+    const add = (song) => {
+      if (!song?.id || seen.has(song.id)) return;
+      seen.add(song.id);
+      picks.push(song);
+    };
+    Store.recent.forEach(add);
+    Store.liked.forEach(add);
+    const list = picks.slice(0, 8);
+    // Shown as soon as there is anything worth resuming. Requiring four meant a
+    // listener three tracks in still saw nothing.
+    if (list.length < 2) return '';
+
+    const key = registerList(list, 'Jump back in');
+    return `
+      <section class="section section--quick">
+        <div class="section__head">
+          <div><h2>Jump back in</h2></div>
+          <div class="section__head-actions">
+            <a class="text-btn" href="#/recent">Show all</a>
+          </div>
+        </div>
+        <div class="quick">
+          ${list.map((song, index) => `
+            <button class="quick__tile" data-quick="${esc(key)}" data-index="${index}" data-song="${esc(song.id)}">
+              <img loading="lazy" decoding="async" src="${esc(art(song, 150))}" alt="">
+              <span class="quick__text">
+                <strong>${esc(song.name)}</strong>
+                <small>${esc(artistLine(song))}</small>
+              </span>
+              <span class="quick__play">${ICON_PLAY}</span>
+            </button>`).join('')}
+        </div>
+      </section>`;
+  }
+
   /** A four cover collage. Used by category tiles and library shelves so those
    *  screens show the music they contain instead of a generic glyph. */
   function collage(covers, { size = 150, cls = '' } = {}) {
@@ -2925,6 +3012,26 @@
       if (trackEl) {
         const entry = LISTS.get(trackEl.dataset.list);
         if (entry) Player.play(entry.songs, Number(trackEl.dataset.index), { label: entry.label });
+        return;
+      }
+
+      const quickTile = target.closest('[data-quick]');
+      if (quickTile) {
+        const entry = LISTS.get(quickTile.dataset.quick);
+        if (entry) Player.play(entry.songs, Number(quickTile.dataset.index), { label: entry.label });
+        return;
+      }
+
+      const shelfNav = target.closest('[data-shelf-nav]');
+      if (shelfNav) {
+        const strip = shelfNav.closest('.section')?.querySelector('.shelf');
+        if (strip) {
+          const step = strip.clientWidth * 0.82;
+          strip.scrollBy({
+            left: shelfNav.dataset.shelfNav === 'next' ? step : -step,
+            behavior: 'smooth',
+          });
+        }
         return;
       }
 
