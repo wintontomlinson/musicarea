@@ -233,7 +233,20 @@ cutting off mid bar.
 - **Library.** Liked songs, recently played, and local playlists, all in
   `localStorage`. Clearing it resets the recommender to a cold start.
 - **Keyboard.** Space or `k` play/pause, `n`/`p` track, `l` like, `s` shuffle,
-  `r` repeat, `q` queue, `m` mute, `/` search, Shift plus arrows to seek.
+  `r` repeat, `q` queue, `m` mute, `/` search, `Esc` to close. Left and right
+  arrows seek 5 seconds on their own and 30 with Shift; up and down set volume.
+
+  Three things this gets right that are easy to get wrong:
+
+  - Letter shortcuts are matched case insensitively, so Shift and Caps Lock do
+    not break them. `event.key` reports `S` for both Shift+s and caps-on s.
+  - Arrows work without a modifier. Requiring Shift to seek is the single most
+    common complaint about a web player's keys.
+  - Ctrl, Cmd and Alt combinations are ignored entirely, so `Ctrl+R` reloads
+    without also toggling repeat and `Ctrl+L` reaches the address bar without
+    liking the track.
+  - Space and Enter are left to whichever control has focus, so buttons and
+    switches stay operable by keyboard.
 - **Responsive.** Sidebar collapses to icons at 1180px, then to a bottom tab bar
   at 760px. Track lists drop to three columns at 900px. Verified with no
   horizontal overflow from 360px through 1920px. Respects

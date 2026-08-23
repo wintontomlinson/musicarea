@@ -377,6 +377,8 @@
   const ICON_MORE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8a2 2 0 1 1 0-4 2 2 0 0 1 0 4m0 6a2 2 0 1 1 0-4 2 2 0 0 1 0 4m0 6a2 2 0 1 1 0-4 2 2 0 0 1 0 4"/></svg>';
   const ICON_SPARK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 9.2 8.6 2 9.3l5.4 4.8L5.8 21 12 17.3 18.2 21l-1.6-6.9L22 9.3l-7.2-.7z"/></svg>';
   const ICON_RADIO = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6m-5.7-2.5 1.4 1.4a6 6 0 0 0 0 8.2l-1.4 1.4a8 8 0 0 1 0-11M17.7 6.5a8 8 0 0 1 0 11l-1.4-1.4a6 6 0 0 0 0-8.2z"/></svg>';
+  const ICON_SEEK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h2v14H4zm4 7 11-7v14z"/></svg>';
+  const ICON_VOLUME = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h3l4-4v14l-4-4H4zm11.5-1.3a5 5 0 0 1 0 8.6v-2A3 3 0 0 0 15.5 10z"/></svg>';
 
   function songCard(song, { badge } = {}) {
     const reason = song.recommendation?.reason;
@@ -907,6 +909,14 @@
       if (!duration) return;
       audio.currentTime = clamp(ratio, 0, 1) * duration;
     },
+
+    /** Seek by a number of seconds, clamped inside the track. */
+    seekBy(seconds) {
+      const duration = audio.duration || this.current?.duration || 0;
+      if (!duration) return;
+      audio.currentTime = clamp(audio.currentTime + seconds, 0, Math.max(0, duration - 0.25));
+      toast(`${seconds > 0 ? 'Forward' : 'Back'} ${Math.abs(seconds)}s`, ICON_SEEK);
+    },
   };
 
   /** Reason pills keep their label in a child span so it can ellipsize. */
@@ -929,6 +939,28 @@
 
   function setVolumeFill(percent) {
     $('#volume').style.setProperty('--vol', `${percent}%`);
+  }
+
+  /** Single place that owns volume, so the slider, the keys and the mute button
+   *  can never disagree about the current level. */
+  function applyVolume(value, { announce = false } = {}) {
+    const level = clamp(value, 0, 1);
+    Store.prefs.volume = level;
+    Store.prefs.muted = level === 0;
+    Store.savePrefs();
+    DECKS.forEach((deck) => { deck.muted = Store.prefs.muted; });
+    // Mid-crossfade the ramp owns the gain, so only retarget the active deck.
+    if (!Player.fading) audio.volume = level;
+    $('#volume').value = Math.round(level * 100);
+    setVolumeFill(level * 100);
+    $('#muteBtn').classList.toggle('is-muted', Store.prefs.muted);
+    if (announce) {
+      toast(level === 0 ? 'Muted' : `Volume ${Math.round(level * 100)}%`, ICON_VOLUME);
+    }
+  }
+
+  function nudgeVolume(delta) {
+    applyVolume((Store.prefs.muted ? 0 : Store.prefs.volume) + delta, { announce: true });
   }
 
   function paintNowPlaying(song) {
@@ -1805,8 +1837,11 @@
 
         <section class="section">
           <div class="section__head"><div><h2>Keyboard</h2></div></div>
-          <div class="panel"><div class="keys">${SHORTCUTS.map(([k, d]) => `
-            <div class="keys__row"><kbd>${esc(k)}</kbd><span>${esc(d)}</span></div>`).join('')}</div></div>
+          <div class="panel">
+            <div class="keys">${SHORTCUTS.map(([k, d]) => `
+              <div class="keys__row"><kbd>${esc(k)}</kbd><span>${esc(d)}</span></div>`).join('')}</div>
+            <p class="panel__note" style="margin-top:16px">Letter shortcuts ignore Shift and Caps Lock, so they work either way. Browser shortcuts such as Ctrl or Cmd combinations are left alone.</p>
+          </div>
         </section>`);
     },
 
@@ -1878,6 +1913,7 @@
 
   const SHORTCUTS = [
     ['Space', 'Play or pause'],
+    ['K', 'Play or pause'],
     ['N', 'Next track'],
     ['P', 'Previous track'],
     ['L', 'Like the current track'],
@@ -1886,8 +1922,10 @@
     ['Q', 'Queue'],
     ['M', 'Mute'],
     ['/', 'Search'],
-    ['Shift + arrows', 'Seek 10 seconds'],
-    ['Esc', 'Close now playing'],
+    ['left / right', 'Seek 5 seconds'],
+    ['shift + left / right', 'Seek 30 seconds'],
+    ['up / down', 'Volume'],
+    ['Esc', 'Close now playing or the queue'],
   ];
 
   /** Sleep timer. Fades out rather than cutting off mid bar. */
@@ -2457,22 +2495,21 @@
     });
 
     $('#volume').addEventListener('input', (event) => {
-      const value = Number(event.target.value) / 100;
-      Store.prefs.volume = value;
-      Store.prefs.muted = value === 0;
-      Store.savePrefs();
-      DECKS.forEach((deck) => { deck.muted = false; });
-      // Mid-fade the ramp owns the volume, so only retarget the active deck.
-      audio.volume = value;
-      setVolumeFill(value * 100);
-      $('#muteBtn').classList.toggle('is-muted', value === 0);
+      applyVolume(Number(event.target.value) / 100);
     });
 
     $('#muteBtn').addEventListener('click', () => {
       Store.prefs.muted = !Store.prefs.muted;
+      // Remember the level so unmuting restores it rather than jumping to full.
+      if (Store.prefs.muted) {
+        Store.prefs.lastVolume = Store.prefs.volume || 0.85;
+      }
       Store.savePrefs();
       DECKS.forEach((deck) => { deck.muted = Store.prefs.muted; });
       $('#muteBtn').classList.toggle('is-muted', Store.prefs.muted);
+      if (!Store.prefs.muted && !Store.prefs.volume) {
+        applyVolume(Store.prefs.lastVolume || 0.85);
+      }
     });
 
     $('#quality').addEventListener('click', () => {
@@ -2606,23 +2643,78 @@
 
     /* --- keyboard shortcuts ------------------------------------------- */
     document.addEventListener('keydown', (event) => {
-      const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName);
-      if (typing) return;
-      switch (event.key) {
-        case ' ': event.preventDefault(); Player.toggle(); break;
-        case 'k': Player.toggle(); break;
-        case 'j': case 'ArrowDown': if (event.altKey) Player.next(true); break;
+      // Never hijack browser or OS shortcuts. Without this, Ctrl+R toggled
+      // repeat on its way to reloading the page and Ctrl+L liked the track on
+      // its way to the address bar.
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+
+      const el = event.target;
+      if (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable) return;
+
+      // Space and Enter belong to whatever control has focus.
+      const focusedControl = el.closest?.('button, a[href], [role="switch"], [role="slider"]');
+      if (focusedControl && (event.key === ' ' || event.key === 'Enter')) return;
+
+      // Normalise single characters so Shift and Caps Lock cannot break the
+      // letter shortcuts. event.key reports "S" for both Shift+s and caps-on s.
+      const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+      const big = event.shiftKey;
+
+      switch (key) {
+        case ' ':
+        case 'k':
+          event.preventDefault();
+          Player.toggle();
+          break;
         case 'n': Player.next(true); break;
         case 'p': Player.prev(); break;
-        case 'l': if (Player.current) { const now = Store.toggleLike(Player.current); $('#likeBtn').setAttribute('aria-pressed', String(now)); refreshLikeButtons(Player.current.id); } break;
+        case 'l':
+          if (Player.current) {
+            const now = Store.toggleLike(Player.current);
+            $('#likeBtn').setAttribute('aria-pressed', String(now));
+            refreshLikeButtons(Player.current.id);
+          }
+          break;
         case 'm': $('#muteBtn').click(); break;
         case 's': $('#shuffleBtn').click(); break;
         case 'r': $('#repeatBtn').click(); break;
         case 'q': $('#queueBtn').click(); break;
-        case '/': event.preventDefault(); $('#searchInput').focus(); break;
-        case 'Escape': if (!$('#np').hidden) closeNp(); break;
-        case 'ArrowRight': if (event.shiftKey) audio.currentTime += 10; break;
-        case 'ArrowLeft': if (event.shiftKey) audio.currentTime -= 10; break;
+        case '/':
+          event.preventDefault();
+          $('#searchInput').focus();
+          break;
+        case 'escape':
+        case 'Escape':
+          if (!$('#np').hidden) closeNp();
+          else if (!$('#queueDrawer').hidden) $('#queueDrawer').hidden = true;
+          else closeMenu();
+          break;
+
+        // Seeking works on its own. Shift makes the jump bigger, it is not
+        // required, which is what it used to be.
+        case 'ArrowRight':
+          if (!Player.current) return;
+          event.preventDefault();
+          Player.seekBy(big ? 30 : 5);
+          break;
+        case 'ArrowLeft':
+          if (!Player.current) return;
+          event.preventDefault();
+          Player.seekBy(big ? -30 : -5);
+          break;
+
+        // Volume only takes the arrows once something is loaded, so the page
+        // still scrolls by keyboard before you start playing.
+        case 'ArrowUp':
+          if (!Player.current) return;
+          event.preventDefault();
+          nudgeVolume(big ? 0.1 : 0.05);
+          break;
+        case 'ArrowDown':
+          if (!Player.current) return;
+          event.preventDefault();
+          nudgeVolume(big ? -0.1 : -0.05);
+          break;
         default: break;
       }
     });
