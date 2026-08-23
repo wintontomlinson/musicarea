@@ -2528,6 +2528,8 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
     height: 74px;
     border-radius: var(--r-md) var(--r-md) 0 0;
     border-bottom: 0;
+    background: #0d0d14;
+    box-shadow: 0 -14px 32px rgba(0, 0, 0, .38);
   }
   .player__body { grid-template-columns: minmax(0, 1fr) auto; gap: 10px; padding: 0 12px; }
   .player__controls { flex-direction: row; gap: 2px; }
