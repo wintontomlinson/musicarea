@@ -494,6 +494,11 @@ def api_feed():
             "coldStart": profile["coldStart"],
             "strength": profile["strength"],
             "events": profile["events"],
+            # topArtists is truncated for display, so the true totals are sent
+            # separately. The UI used to report the truncated length as the
+            # artist count, which understated it for anyone with a real history.
+            "artistCount": len(profile["artists"]),
+            "languageCount": len(profile["languages"]),
             "topArtists": profile["topArtists"][:8],
             "topLanguages": profile["topLanguages"],
             "eraCenter": round(profile["eraCenter"]) if profile["eraCenter"] else None,

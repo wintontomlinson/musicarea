@@ -115,6 +115,9 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 9.2 8.6 2 9.3l5.4 4.8L5.8 21 12 17.3 18.2 21l-1.6-6.9L22 9.3l-7.2-.7z"/></svg>
           Algorithmic
         </span>
+        <a class="icon-btn" href="#/settings" id="settingsBtn" title="Audio settings" aria-label="Audio settings">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8m0 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4m-1.4-8h2.8l.4 2.5 1.5.9 2.3-1 1.4 2.4-1.9 1.6q.1.5.1 1t-.1 1l1.9 1.6-1.4 2.4-2.3-1-1.5.9-.4 2.5h-2.8l-.4-2.5-1.5-.9-2.3 1L3 15.4l1.9-1.6q-.1-.5-.1-1t.1-1L3 10.2l1.4-2.4 2.3 1 1.5-.9z"/></svg>
+        </a>
       </div>
     </header>
 
@@ -260,7 +263,10 @@
 
 <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
 <div class="ctx-menu" id="ctxMenu" hidden></div>
-<audio id="audio" preload="metadata" crossorigin="anonymous"></audio>
+<!-- Two decks so one track can fade out while the next fades in. Only one is
+     ever the "active" deck; the other is idle or mid-crossfade. -->
+<audio id="audioA" preload="auto" crossorigin="anonymous"></audio>
+<audio id="audioB" preload="auto" crossorigin="anonymous"></audio>
 
 <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>
