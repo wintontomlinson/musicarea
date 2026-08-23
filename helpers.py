@@ -190,14 +190,15 @@ class TTLCache:
 CACHE = TTLCache()
 
 
-def jiosaavn_fetch_cached(endpoint: str, params: dict, ctx: str = "web6dot0", ttl: float = 600.0) -> dict:
+def jiosaavn_fetch_cached(endpoint: str, params: dict, ctx: str = "web6dot0",
+                           ttl: float = 600.0, fresh: bool = False) -> dict:
     """jiosaavn_fetch with a TTL cache and soft failure.
 
-    Returns {} instead of raising so a single flaky upstream call can never take
-    down a whole recommendation feed.
+    `fresh` deliberately bypasses a stale catalogue entry for an explicit user
+    refresh. Normal browsing remains cached and polite to the upstream API.
     """
     key = (endpoint, ctx, tuple(sorted((str(k), str(v)) for k, v in params.items())))
-    cached = CACHE.get(key)
+    cached = None if fresh else CACHE.get(key)
     if cached is not None:
         return cached
     try:

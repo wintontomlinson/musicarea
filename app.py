@@ -394,7 +394,8 @@ def search_playlists():
 # ==========================================================================
 
 def _payload():
-    return request.get_json(silent=True) or {}
+    payload = request.get_json(silent=True)
+    return payload if isinstance(payload, dict) else {}
 
 
 def _int_arg(name, default, low=1, high=100):
@@ -403,6 +404,22 @@ def _int_arg(name, default, low=1, high=100):
     except (TypeError, ValueError):
         return default
     return max(low, min(high, value))
+
+
+def _bounded_json_int(value, default, low=1, high=100):
+    """Parse an optional JSON number without turning a bad client payload into a 500."""
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(low, min(high, parsed))
+
+
+def _history(value, limit=400):
+    """Keep the local-first event log bounded and structurally safe for ranking."""
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict) and item.get("id")][-limit:]
 
 
 @app.route("/api/feed", methods=["POST"])
@@ -414,9 +431,9 @@ def api_feed():
     costs one recall pass rather than one per row.
     """
     body = _payload()
-    history = body.get("history") or []
+    history = _history(body.get("history"))
     mood = body.get("mood") or None
-    limit = max(6, min(40, int(body.get("limit") or 24)))
+    limit = _bounded_json_int(body.get("limit"), 24, 6, 40)
 
     profile = recommender.build_profile(history)
     pool = recommender.generate_candidates(profile, mood=mood, wide=True)
@@ -452,13 +469,20 @@ def api_feed():
                 "id": seed["id"], "name": seed["name"], "event": "like",
             }]
             seed_profile = recommender.build_profile(seed_history)
+            # This shelf is intentionally scoped to the selected seed. Reusing
+            # the full listener pool made the explanation look causal even
+            # when a track came from an unrelated artist or language recall.
+            seed_pool = recommender.generate_candidates(
+                seed_profile, wide=False, include_broad=False
+            )
             add_row(
                 "because-you-played",
                 f"Because you played {seed['name']}" if seed.get("name") else "More like this",
                 seed.get("artist") or "",
-                recommender.recommend(profile=seed_profile, pool=pool, limit=16,
+                recommender.recommend(profile=seed_profile, pool=seed_pool, limit=16,
                                       weight_profile="radio", salt=str(seed["id"]),
-                                      exclude=used | profile["heard"]),
+                                      exclude=used | profile["heard"],
+                                      seed_label=seed.get("name") or None),
             )
 
         add_row(
@@ -512,8 +536,8 @@ def api_feed():
 def api_mixes():
     """Ready made playlists generated from the listener's own taste profile."""
     body = _payload()
-    per_mix = max(10, min(40, int(body.get("perMix") or 24)))
-    result = recommender.mixes(history=body.get("history") or [], per_mix=per_mix)
+    per_mix = _bounded_json_int(body.get("perMix"), 24, 10, 40)
+    result = recommender.mixes(history=_history(body.get("history")), per_mix=per_mix)
     return ok(result)
 
 
@@ -601,7 +625,7 @@ def api_similar():
     seeds = catalog.songs_by_ids(ids)
     if not seeds:
         return err("None of those songs could be resolved", 404)
-    limit = max(4, min(40, int(body.get("limit") or 16)))
+    limit = _bounded_json_int(body.get("limit"), 16, 4, 40)
     return ok({"items": recommender.similar_to_songs(seeds, limit=limit)})
 
 
@@ -615,8 +639,8 @@ def api_mood(mood_id):
     if not catalog.MOOD_BY_ID.get(mood_id):
         return err("Unknown mood", 404)
     body = _payload()
-    limit = max(5, min(60, int(body.get("limit") or request.args.get("limit") or 40)))
-    result = recommender.mood_set(mood_id, history=body.get("history") or [], limit=limit)
+    limit = _bounded_json_int(body.get("limit") or request.args.get("limit"), 40, 5, 60)
+    result = recommender.mood_set(mood_id, history=_history(body.get("history")), limit=limit)
     if not result.get("items"):
         return err("Could not build that mood right now", 404)
     return ok(result)

@@ -51,14 +51,22 @@
    *  upstream default images are provider branded, so they are filtered out
    *  server side and never reach here. */
   const ART_PLACEHOLDER = '/static/img/placeholder.svg';
+  // Artwork is intentionally revalidated in bounded windows. That lets provider
+  // cover changes land without giving every render a unique URL or defeating
+  // image caching during a normal listening session.
+  const ART_REVISION = Math.floor(Date.now() / (20 * 60 * 1000));
 
   function art(item, size = 500) {
     const list = item?.image;
-    if (typeof list === 'string') return list || ART_PLACEHOLDER;
-    if (!Array.isArray(list) || !list.length) return ART_PLACEHOLDER;
-    const want = `${size}x${size}`;
-    const exact = list.find((i) => i.quality === want);
-    return (exact || list[list.length - 1]).url || ART_PLACEHOLDER;
+    const source = typeof list === 'string'
+      ? list
+      : (Array.isArray(list) && list.length
+        ? (list.find((i) => i.quality === `${size}x${size}`) || list[list.length - 1]).url
+        : '');
+    if (!source) return ART_PLACEHOLDER;
+    if (!/^https?:\/\//i.test(source)) return source;
+    const join = source.includes('?') ? '&' : '?';
+    return `${source}${join}ma_art=${ART_REVISION}`;
   }
 
   /** Artist display line for a song. Skips lyricists and film cast. */
@@ -104,6 +112,18 @@
     return out;
   }
 
+  function installArtworkFallbacks() {
+    // One capturing listener covers lazy-loaded artwork across every route,
+    // including later rendered shelves, queue rows and the full screen player.
+    document.addEventListener('error', (event) => {
+      const image = event.target;
+      if (!(image instanceof HTMLImageElement) || image.dataset.artFallback === '1') return;
+      image.dataset.artFallback = '1';
+      image.src = ART_PLACEHOLDER;
+      image.removeAttribute('srcset');
+    }, true);
+  }
+
   function artistLine(song) {
     const names = artistsOf(song).map((a) => a.name).filter(Boolean);
     if (names.length) return names.slice(0, 3).join(', ');
@@ -141,16 +161,17 @@
   }
 
   /** Badge reflects the rung in use, and flags when it had to step down. */
-  function showServedQuality(song) {
+  function showServedQuality(song, servedQuality = null) {
     const { quality } = pickStream(song, Store.prefs.quality);
+    const served = servedQuality || quality;
     const tag = $('#qualityTag');
-    if (!tag || !quality) return;
-    tag.textContent = quality.replace('kbps', '');
-    const steppedDown = quality !== Store.prefs.quality;
+    if (!tag || !served) return;
+    tag.textContent = served.replace('kbps', '');
+    const steppedDown = served !== Store.prefs.quality;
     tag.classList.toggle('is-reduced', steppedDown);
     $('#quality').title = steppedDown
-      ? `Playing at ${quality.replace('kbps', ' kbps')}. This track is not available at ${Store.prefs.quality.replace('kbps', ' kbps')}.`
-      : `Streaming at ${quality.replace('kbps', ' kbps')}, the highest this track offers`;
+      ? `Playing at ${served.replace('kbps', ' kbps')}. This track is not available at ${Store.prefs.quality.replace('kbps', ' kbps')}.`
+      : `Streaming at ${served.replace('kbps', ' kbps')}, the highest this track offers`;
   }
 
   /* ====================================================================== */
@@ -231,6 +252,8 @@
       }
       write(KEYS.history, this.history);
       Feed.invalidate();
+      Mixes.invalidate();
+      Home.scheduleRefresh();
       renderTasteCard();
     },
 
@@ -364,7 +387,10 @@
       // POSTed with history so the set is ordered against the listener's taste.
       return this.post(`/api/moods/${encodeURIComponent(id)}`, { history: Store.history, limit });
     },
-    album(id) { return this.get(`/api/albums?id=${encodeURIComponent(id)}`); },
+    album(id, { refresh = false } = {}) {
+      const suffix = refresh ? `&refresh=${Date.now()}` : '';
+      return this.get(`/api/albums?id=${encodeURIComponent(id)}${suffix}`);
+    },
     playlist(id, limit = 100) { return this.get(`/api/playlists?id=${encodeURIComponent(id)}&limit=${limit}`); },
     artist(id) { return this.get(`/api/artists/${encodeURIComponent(id)}?songCount=30&albumCount=20`); },
     songs(ids) { return this.get(`/api/songs?ids=${encodeURIComponent(ids.join(','))}`); },
@@ -764,6 +790,8 @@
     loggedPlay: false,
     autoplayPending: false,
     seeking: false,
+    playRequest: 0,
+    servedQuality: null,
 
     fadeRaf: 0,
     fading: false,
@@ -857,7 +885,8 @@
     async crossfadeTo(orderPos, seconds) {
       if (orderPos < 0 || orderPos >= this.order.length) return false;
       const song = this.queue[this.order[orderPos]];
-      const url = song && streamUrl(song, Store.prefs.quality);
+      const selectedStream = song && pickStream(song, Store.prefs.quality);
+      const url = selectedStream?.url;
       if (!url) return false;
 
       const outgoing = audio;
@@ -889,6 +918,7 @@
       audio = incoming;
       this.pos = orderPos;
       this.current = song;
+      this.servedQuality = selectedStream.quality;
       this.playedRatio = 0;
       this.loggedPlay = false;
       paintNowPlaying(song);
@@ -919,10 +949,14 @@
 
     /** Play a list of songs starting at an index. */
     async play(songs, index = 0, meta = {}) {
+      // Resolving stored tracks is asynchronous. A request counter keeps an
+      // earlier slow click from replacing the track the listener chose later.
+      const request = ++this.playRequest;
       // Remember which track was actually clicked: resolving and filtering can
       // shift positions, and starting the wrong song is worse than a delay.
       const wanted = (songs || [])[index];
       const resolved = await ensurePlayable(songs);
+      if (request !== this.playRequest) return;
       const playable = resolved.filter((s) => s?.id && s.downloadUrl?.length);
       if (!playable.length) {
         toast('Nothing playable in there');
@@ -978,7 +1012,9 @@
       this.playedRatio = 0;
       this.loggedPlay = false;
 
-      const url = streamUrl(song, Store.prefs.quality);
+      const selectedStream = pickStream(song, Store.prefs.quality);
+      const url = selectedStream.url;
+      this.servedQuality = selectedStream.quality;
       if (!url) {
         toast('That track has no playable stream');
         return this.next();
@@ -1164,13 +1200,15 @@
     },
 
     onEnded() {
-      if (this.current) {
-        Store.logEvent(this.current, this.playedRatio > 0.9 ? 'complete' : 'play');
-      }
       if (Store.prefs.repeat === 'one') {
+        // A deliberate repeat is a stronger taste signal than a normal finish.
+        if (this.current) Store.logEvent(this.current, 'repeat');
         audio.currentTime = 0;
         audio.play().catch(() => {});
         return;
+      }
+      if (this.current) {
+        Store.logEvent(this.current, this.playedRatio > 0.9 ? 'complete' : 'play');
       }
       this.next();
     },
@@ -1180,10 +1218,12 @@
       // Fall back to a lower bitrate before giving up on the track.
       const current = audio.src;
       for (const quality of QUALITY_ORDER) {
-        const url = streamUrl(this.current, quality);
-        if (url && url !== current) {
-          audio.src = url;
+        const selectedStream = pickStream(this.current, quality);
+        if (selectedStream.url && selectedStream.url !== current) {
+          this.servedQuality = selectedStream.quality;
+          audio.src = selectedStream.url;
           audio.play().catch(() => {});
+          showServedQuality(this.current, selectedStream.quality);
           return;
         }
       }
@@ -1280,10 +1320,16 @@
     applyVolume((Store.prefs.muted ? 0 : Store.prefs.volume) + delta, { announce: true });
   }
 
+  function setArtwork(image, source, alt = '') {
+    if (!image) return;
+    delete image.dataset.artFallback;
+    image.src = source || ART_PLACEHOLDER;
+    image.alt = alt;
+  }
+
   function paintNowPlaying(song) {
     const cover = art(song, 500);
-    $('#playerImg').src = cover;
-    $('#playerImg').alt = song.name || '';
+    setArtwork($('#playerImg'), cover, song.name || '');
     $('#playerTitle').textContent = song.name || '';
     $('#playerTitle').href = song.album?.id ? `#/album/${song.album.id}` : '#/home';
     $('#playerArtist').textContent = artistLine(song);
@@ -1292,14 +1338,14 @@
     const reason = song.recommendation?.reason;
     setPill($('#reasonPill'), reason);
 
-    $('#npImg').src = cover;
+    setArtwork($('#npImg'), cover, song.name || '');
     $('#npTitle').textContent = song.name || '';
     $('#npArtist').textContent = artistLine(song);
     setPill($('#npReason'), reason);
 
     document.documentElement.style.setProperty('--hue', String(hueOf(song.id)));
     document.title = `${song.name} · ${artistLine(song)} | MusicArea`;
-    showServedQuality(song);
+    showServedQuality(song, Player.servedQuality);
     if (!$('#np').hidden) renderNpPanel();
   }
 
@@ -1901,9 +1947,9 @@
       setView(parts.join(''));
     },
 
-    async album(id) {
+    async album(id, { refresh = false } = {}) {
       setView(detailSkeleton());
-      const album = await API.album(id).catch(() => null);
+      const album = await API.album(id, { refresh }).catch(() => null);
       if (!album) {
         setView(emptyState('Album not found', 'That album could not be loaded.'));
         return;
@@ -1931,6 +1977,7 @@
             <div class="detail__actions">
               <button class="btn btn--primary btn--lg" data-play-list="${listKey}">${ICON_PLAY} Play</button>
               <button class="btn btn--outline" data-shuffle-list="${listKey}">Shuffle</button>
+              <button class="btn btn--outline" data-refresh-album="${esc(album.id)}" aria-label="Refresh album details and artwork">Refresh</button>
               ${songs[0] ? `<button class="btn btn--outline" data-radio="${esc(songs[0].id)}">${ICON_RADIO} Start station</button>` : ''}
             </div>
           </div>
@@ -2426,7 +2473,17 @@
     },
   };
 
-  const Home = { feed: null };
+  const Home = {
+    feed: null,
+    refreshTimer: 0,
+
+    scheduleRefresh() {
+      clearTimeout(this.refreshTimer);
+      this.refreshTimer = window.setTimeout(() => {
+        if (currentRoute().path === 'home') Views.home();
+      }, 900);
+    },
+  };
 
   const SHORTCUTS = [
     ['Space', 'Play or pause'],
@@ -3134,6 +3191,13 @@
         return;
       }
 
+      const refreshAlbum = target.closest('[data-refresh-album]');
+      if (refreshAlbum) {
+        toast('Refreshing album details and artwork');
+        Views.album(refreshAlbum.dataset.refreshAlbum, { refresh: true });
+        return;
+      }
+
       const playList = target.closest('[data-play-list]');
       if (playList) { playListFromKey(playList.dataset.playList); return; }
 
@@ -3653,7 +3717,10 @@
     toast(`Streaming at ${quality.replace('kbps', ' kbps')}`);
 
     if (!Player.current) return;
-    const url = streamUrl(Player.current, quality);
+    const selectedStream = pickStream(Player.current, quality);
+    const url = selectedStream.url;
+    Player.servedQuality = selectedStream.quality;
+    showServedQuality(Player.current, selectedStream.quality);
     if (!url || url === audio.src) return;
 
     // Seeking has to wait for the new source to report its duration, otherwise
@@ -3705,6 +3772,7 @@
   /* Boot                                                                   */
   /* ====================================================================== */
 
+  installArtworkFallbacks();
   Player.init();
   wire();
   renderSidebarCounts();
