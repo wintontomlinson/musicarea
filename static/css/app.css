@@ -2441,18 +2441,18 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
 @media (max-width: 760px) {
   :root { --player-h: 138px; }
 
-  body { overflow: auto; }
+  body { overflow: hidden; }
   .shell {
     grid-template-columns: minmax(0, 1fr);
-    margin-bottom: calc(var(--player-h) + 30px);
+    height: calc(100dvh - var(--player-h));
+    min-height: 0;
+    margin: 0;
     padding: 0;
     gap: 0;
-    height: auto;
-    min-height: 100%;
   }
   .sidebar { display: none; }
-  .main { border: 0; border-radius: 0; }
-  .view { padding: 0 15px calc(var(--player-h) + 30px); }
+  .main { min-height: 0; border: 0; border-radius: 0; }
+  .view { padding: 0 15px 30px; }
 
   /* Brand, search and settings. Previously this was a lone search box with no
      logo and no way to reach settings, which read as unfinished. */
