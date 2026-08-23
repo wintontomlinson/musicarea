@@ -564,6 +564,16 @@ def api_mood_list():
     return ok({"moods": catalog.mood_cards()})
 
 
+@app.route("/api/genres")
+def api_genres():
+    """Everything the browse and search screens need to build category tiles."""
+    languages, moods = catalog.parallel([
+        catalog.language_cards,
+        catalog.mood_cards,
+    ])
+    return ok({"languages": languages or [], "moods": moods or []})
+
+
 @app.route("/api/radio/<song_id>")
 def api_radio(song_id):
     """An endless, algorithmically ordered station seeded from one track."""

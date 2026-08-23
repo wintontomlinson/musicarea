@@ -120,6 +120,35 @@ caps of two per artist and two per album, and reserves every fifth slot for an
 artist you have no history with. Alternate cuts of a composition are collapsed
 before ranking so the same song never appears twice.
 
+### Replaying from storage
+
+`Store.slim()` deliberately omits `downloadUrl`, because the listening history is
+POSTed to the recommender on every feed request and five URLs per entry across
+hundreds of entries would bloat that payload badly.
+
+The cost, unnoticed until it was tested, was that **nothing replayed from storage
+had a stream**. Clicking a liked song, a recently played track or a track in a
+local playlist failed silently, autoplay then took over, and an unrelated track
+started. Streams are now resolved on demand, in batches of 25, at the point they
+are needed. `play()` also remembers which track was clicked and finds it again
+after resolution, since filtering can shift positions and starting the wrong song
+is worse than a short delay.
+
+### Search, browse and library
+
+All three used to be text and glyphs. They now show the music they contain:
+
+- **Search** opens on recent searches plus twelve language tiles built from what
+  is charting in each, and results lead with a "Top result" card that promotes an
+  artist over a song when the query looks like an artist name.
+- **Browse** keeps the language selector but adds the same artwork tiles, and each
+  one opens a language page of its own.
+- **Library** tiles carry a four cover collage of their actual contents rather
+  than a generic icon, with play buttons and inline rename and delete.
+
+Language tiles reuse the mood tile treatment, including the static blur, for the
+same reason: sleeve art carries its own typography and a label sits over it.
+
 ### Mood tiles
 
 Moods are tiles with real artwork rather than flat colour blocks. Each borrows

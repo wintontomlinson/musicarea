@@ -403,6 +403,12 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
 }
 .search-field input::placeholder { color: var(--text-faint); }
 .search-field input::-webkit-search-cancel-button { display: none; }
+/* The pill already shows focus via :focus-within, so suppress the global
+   focus-visible ring here. Both together drew a box inside the pill. */
+.search-field input:focus-visible,
+.modal__input:focus-visible,
+.range:focus-visible,
+.volume__slider:focus-visible { box-shadow: none; }
 .search-field__clear {
   display: grid; place-items: center;
   width: 22px; height: 22px;
@@ -973,6 +979,135 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
   .mood-tile__name { font-size: 15px; left: 12px; bottom: 11px; right: 50px; }
   .mood-tile__play { opacity: 1; transform: none; width: 34px; height: 34px; }
 }
+
+/* ── Collage, shared by category and library tiles ──────────────────────── */
+
+.collage {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  transition: transform var(--slow);
+}
+.collage img { width: 100%; height: 100%; object-fit: cover; }
+/* Softened where a label sits over it, for the same reason as the mood tiles:
+   sleeve art carries its own typography. */
+.collage--soft { inset: -6px; filter: blur(3px) saturate(1.25); }
+.card:hover .collage, .mood-tile:hover .collage { transform: scale(1.05); }
+
+.grid--genres { grid-template-columns: repeat(auto-fill, minmax(196px, 1fr)); }
+@media (max-width: 760px) {
+  .grid--genres { grid-template-columns: 1fr 1fr; gap: 12px; }
+}
+
+/* ── Top search result ──────────────────────────────────────────────────── */
+
+.top-result {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  padding: 20px 22px;
+  border-radius: var(--r-lg);
+  background:
+    radial-gradient(90% 140% at 0% 0%, hsl(var(--hue) 70% 30% / .5), transparent 62%),
+    var(--surface);
+  border: 1px solid var(--line);
+  cursor: pointer;
+  transition: border-color var(--fast), transform var(--med), background var(--fast);
+}
+.top-result:hover { border-color: var(--line-strong); transform: translateY(-2px); }
+.top-result__art {
+  width: 116px;
+  height: 116px;
+  flex: none;
+  border-radius: var(--r-md);
+  overflow: hidden;
+  box-shadow: var(--shadow-md);
+  background: var(--surface-2);
+}
+.top-result__art.is-round { border-radius: 50%; }
+.top-result__art img { width: 100%; height: 100%; object-fit: cover; }
+.top-result__body { min-width: 0; flex: 1; }
+.top-result__kind {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.top-result__body h3 {
+  margin: 6px 0 4px;
+  font-size: clamp(22px, 2.6vw, 32px);
+  font-weight: 800;
+  letter-spacing: -.9px;
+  line-height: 1.1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.top-result__body p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.top-result__play {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--brand);
+  color: #150c22;
+  cursor: pointer;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, .45);
+  transition: transform var(--fast);
+}
+.top-result__play:hover { transform: scale(1.07); }
+.top-result__play svg { width: 24px; height: 24px; }
+@media (max-width: 760px) {
+  .top-result { gap: 14px; padding: 14px; }
+  .top-result__art { width: 84px; height: 84px; }
+  .top-result__play { width: 46px; height: 46px; }
+}
+
+.chip--recent svg { width: 14px; height: 14px; opacity: .7; }
+
+/* ── Library tiles ──────────────────────────────────────────────────────── */
+
+.lib-art { position: relative; overflow: hidden; }
+.lib-art__glyph {
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 46px; height: 46px;
+  transform: translate(-50%, -50%);
+  opacity: .9;
+}
+.lib-art__tint { position: absolute; inset: 0; }
+.lib-art--liked { background: linear-gradient(135deg, #8b5cf6, #d946a6); }
+.lib-art--liked .lib-art__tint { background: linear-gradient(150deg, rgba(139, 92, 246, .62), rgba(217, 70, 166, .68)); }
+.lib-art--recent { background: linear-gradient(135deg, #2f9e8f, #4f7fd6); }
+.lib-art--recent .lib-art__tint { background: linear-gradient(150deg, rgba(47, 158, 143, .62), rgba(79, 127, 214, .68)); }
+.lib-art--custom { background: linear-gradient(135deg, #45516b, #2a2f42); }
+.lib-art--custom .lib-art__tint { background: linear-gradient(150deg, rgba(69, 81, 107, .5), rgba(20, 18, 30, .72)); }
+.lib-art__badge {
+  position: absolute;
+  left: 10px; bottom: 10px;
+  display: grid;
+  place-items: center;
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: rgba(8, 6, 14, .62);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.lib-art__badge svg { width: 15px; height: 15px; }
 
 /* ── Generated mix tiles ────────────────────────────────────────────────── */
 
