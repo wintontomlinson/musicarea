@@ -92,13 +92,19 @@
   <!-- ─── Main ────────────────────────────────────────────────────────── -->
   <main class="main" id="main">
     <header class="topbar" id="topbar">
-      <div class="topbar__nav">
-        <button class="icon-btn" id="backBtn" title="Back" aria-label="Back">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.4 4.6 8 12l7.4 7.4 1.4-1.4L10.8 12l6-6z"/></svg>
-        </button>
-        <button class="icon-btn" id="fwdBtn" title="Forward" aria-label="Forward">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.6 4.6 16 12l-7.4 7.4-1.4-1.4L13.2 12l-6-6z"/></svg>
-        </button>
+      <div class="topbar__left">
+        <a class="topbar__brand" href="#/home" aria-label="MusicArea home">
+          <img src="{{ url_for('static', filename='img/logo.svg') }}" alt="" width="32" height="32">
+          <span>Music<em>Area</em></span>
+        </a>
+        <div class="topbar__nav">
+          <button class="icon-btn" id="backBtn" title="Back" aria-label="Back">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.4 4.6 8 12l7.4 7.4 1.4-1.4L10.8 12l6-6z"/></svg>
+          </button>
+          <button class="icon-btn" id="fwdBtn" title="Forward" aria-label="Forward">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.6 4.6 16 12l-7.4 7.4-1.4-1.4L13.2 12l-6-6z"/></svg>
+          </button>
+        </div>
       </div>
 
       <form class="search-field" id="searchForm" role="search" autocomplete="off">
