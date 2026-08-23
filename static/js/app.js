@@ -1889,7 +1889,7 @@
         ? `${plural(data.meta.pool, 'track')} pulled for this mood, then ordered by how well each one fits your listening.`
         : `${plural(data.items.length, 'track')} for this mood, in the catalogue's own order. Play a few things and this set reorders around your taste.`;
       setView(`
-        <section class="hero">
+        <section class="hero hero--mood" style="--hue:${data.mood.hue}">
           <div class="hero__body">
             <span class="hero__eyebrow">${ICON_SPARK} Mood</span>
             <h1>${esc(data.mood.name)}</h1>
@@ -2281,18 +2281,36 @@
     { id: 'indie', name: 'Indie', hue: 158 }, { id: 'focus', name: 'Focus', hue: 210 },
   ];
 
+  /** Mood tiles: real artwork under a tint in the mood's own hue, so they read
+   *  as moods rather than as albums. Falls back to the plain tint when the
+   *  catalogue gave us no image. */
   function moodStrip(moods) {
     const list = moods?.length ? moods : MOODS_FALLBACK;
     return `
-      <section class="section">
-        <div class="section__head"><div><h2>Moods</h2><p>Ready made sets, reordered around what you play</p></div></div>
-        <div class="shelf" style="grid-auto-columns:190px">
-          ${list.map((mood) => `
-            <a class="card" href="#/mood/${esc(mood.id)}" style="background:linear-gradient(135deg, hsl(${mood.hue} 70% 34%), hsl(${(mood.hue + 40) % 360} 66% 24%));border-color:transparent">
-              <div style="aspect-ratio:1.5;display:flex;align-items:flex-end;padding:6px">
-                <div class="card__title" style="font-size:17px;letter-spacing:-.4px">${esc(mood.name)}</div>
-              </div>
-            </a>`).join('')}
+      <section class="section" data-section="moods">
+        <div class="section__head">
+          <div><h2>Moods</h2><p>Ready made sets, reordered around what you play</p></div>
+        </div>
+        <div class="shelf shelf--moods">
+          ${list.map((mood) => {
+            const cover = mood.image ? art(mood, 500) : '';
+            // Four covers rather than one. Sleeve art routinely has the release
+            // title typeset across it, which at full tile size competed with the
+            // mood label; at a quarter each it reads as texture instead.
+            const tiles = (mood.covers || []).length >= 4
+              ? mood.covers.slice(0, 4).map((c) => art({ image: c }, 150))
+              : [];
+            return `
+            <a class="mood-tile" href="#/mood/${esc(mood.id)}" style="--hue:${mood.hue}">
+              ${tiles.length
+                ? `<span class="mood-tile__grid">${tiles.map((t) => `<img loading="lazy" decoding="async" src="${esc(t)}" alt="">`).join('')}</span>`
+                : (cover ? `<img class="mood-tile__img" loading="lazy" decoding="async" src="${esc(cover)}" alt="">` : '')}
+              <span class="mood-tile__tint"></span>
+              <span class="mood-tile__name">${esc(mood.name)}</span>
+              <button class="mood-tile__play" data-play-mood="${esc(mood.id)}"
+                      aria-label="Play ${esc(mood.name)}">${ICON_PLAY}</button>
+            </a>`;
+          }).join('')}
         </div>
       </section>`;
   }
@@ -2675,6 +2693,23 @@
       if (trackEl) {
         const entry = LISTS.get(trackEl.dataset.list);
         if (entry) Player.play(entry.songs, Number(trackEl.dataset.index), { label: entry.label });
+        return;
+      }
+
+      const playMood = target.closest('[data-play-mood]');
+      if (playMood) {
+        event.preventDefault();
+        event.stopPropagation();
+        const id = playMood.dataset.playMood;
+        toast('Building that set');
+        try {
+          const data = await API.mood(id, 40);
+          if (!data.items?.length) throw new Error('empty');
+          remember(data.items);
+          Player.play(data.items, 0, { label: data.mood.name });
+        } catch {
+          toast('Could not build that mood right now');
+        }
         return;
       }
 

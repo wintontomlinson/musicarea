@@ -120,6 +120,24 @@ caps of two per artist and two per album, and reserves every fifth slot for an
 artist you have no history with. Alternate cuts of a composition are collapsed
 before ranking so the same song never appears twice.
 
+### Mood tiles
+
+Moods are tiles with real artwork rather than flat colour blocks. Each borrows
+four covers from the tracks that mood actually returns, laid out as a collage
+under a wash in the mood's own hue.
+
+Getting there took two corrections, both obvious once rendered:
+
+- Editorial playlist covers have the playlist's **name typeset into the artwork**,
+  so the tile showed "Romance" sitting on top of a faint "Most Streamed Love
+  Songs". Album art is used in preference for that reason.
+- Album art carries release titles too, so a single full-size cover always
+  competed with the label. Four quarter-size covers plus a small static blur turn
+  the artwork into colour and texture while the mood name stays crisp.
+
+The blur is static. That matters: it was *animating* a blur that cost 44 FPS, and
+measured before and after, these tiles cost nothing.
+
 ### Stream URL padding
 
 Stream URLs are 3DES encrypted upstream and the plaintext carries PKCS#5 padding.

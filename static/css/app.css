@@ -636,6 +636,14 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
    they get a shorter panel rather than the full landing treatment. */
 .hero--compact { grid-template-columns: minmax(0, 1fr); padding: 32px 34px; }
 .hero--compact h1 { font-size: clamp(26px, 3.2vw, 38px); margin-bottom: 8px; }
+
+/* A mood page is tinted by that mood rather than by the playing track. */
+.hero--mood {
+  background:
+    radial-gradient(100% 130% at 0% 0%, hsl(var(--hue) 74% 34% / .86), transparent 62%),
+    radial-gradient(80% 120% at 100% 100%, hsl(calc(var(--hue) + 40) 70% 28% / .66), transparent 62%),
+    linear-gradient(125deg, rgba(26, 21, 42, .94), rgba(10, 9, 17, .96));
+}
 .hero__eyebrow {
   display: inline-flex;
   align-items: center;
@@ -873,6 +881,97 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
   background: rgba(8, 6, 14, .74);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
+}
+
+/* ── Mood tiles ─────────────────────────────────────────────────────────── */
+
+.shelf--moods { grid-auto-columns: 208px; }
+
+.mood-tile {
+  position: relative;
+  display: block;
+  aspect-ratio: 1.42;
+  border-radius: var(--r-md);
+  overflow: hidden;
+  background: hsl(var(--hue) 62% 22%);
+  transition: transform var(--med), box-shadow var(--med);
+}
+.mood-tile:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); }
+.mood-tile__img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Biased upward: sleeve artwork tends to carry its credits along the bottom,
+     which is exactly where the mood label sits. */
+  object-position: center 32%;
+  transition: transform var(--slow);
+}
+.mood-tile:hover .mood-tile__img { transform: scale(1.07); }
+
+/* Softened on purpose. Compilation sleeves in this catalogue are text heavy, and
+   four of them at full sharpness turned the tile into competing headlines. A
+   small static blur makes them read as colour and texture while the mood name
+   stays crisp. Static, so unlike the old ambient blobs nothing re-rasterises it. */
+.mood-tile__grid {
+  position: absolute;
+  inset: -6px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  filter: blur(3px) saturate(1.25);
+  transition: transform var(--slow);
+}
+.mood-tile__grid img { width: 100%; height: 100%; object-fit: cover; }
+.mood-tile:hover .mood-tile__grid { transform: scale(1.06); }
+/* Colour wash so a mood never reads as just another album cover. */
+.mood-tile__tint {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(150deg, hsl(var(--hue) 80% 44% / .8), hsl(calc(var(--hue) + 38) 72% 18% / .88)),
+    /* Heavier at the foot of the tile so any lettering in the artwork cannot
+       compete with the label. */
+    linear-gradient(180deg, transparent 30%, rgba(6, 5, 11, .6) 66%, rgba(5, 4, 9, .9));
+}
+.mood-tile__name {
+  position: absolute;
+  left: 15px;
+  bottom: 13px;
+  right: 58px;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -.5px;
+  line-height: 1.15;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, .5);
+}
+.mood-tile__play {
+  position: absolute;
+  right: 12px;
+  bottom: 11px;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .95);
+  color: #150c22;
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(8px) scale(.86);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, .45);
+  transition: opacity var(--med), transform var(--med);
+}
+.mood-tile:hover .mood-tile__play,
+.mood-tile:focus-within .mood-tile__play { opacity: 1; transform: none; }
+.mood-tile__play:hover { transform: scale(1.08); }
+
+@media (max-width: 760px) {
+  .shelf--moods { grid-auto-columns: 168px; }
+  .mood-tile__name { font-size: 15px; left: 12px; bottom: 11px; right: 50px; }
+  .mood-tile__play { opacity: 1; transform: none; width: 34px; height: 34px; }
 }
 
 /* ── Generated mix tiles ────────────────────────────────────────────────── */
