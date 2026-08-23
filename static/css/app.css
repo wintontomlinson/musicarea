@@ -337,7 +337,7 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
   gap: 10px;
   min-width: 0;
 }
-.mobile-nav-toggle, .mobile-menu { display: none; }
+.mobile-nav-toggle, .mobile-menu, .mobile-bottom-nav { display: none; }
 
 /* The sidebar owns navigation on larger screens. Phone navigation stays in a
    compact menu instead of consuming a permanent bar at the bottom. */
@@ -363,6 +363,10 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
   color: var(--text-dim);
 }
 .mobile-menu a:hover { background: var(--surface-2); color: var(--text); }
+
+.mobile-bottom-nav {
+  display: none;
+}
 
 /* The sidebar already carries the wordmark on wide screens, so the header
    shows it once the sidebar is gone. */
@@ -2528,12 +2532,15 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
 }
 
 @media (max-width: 760px) {
-  :root { --player-h: calc(74px + env(safe-area-inset-bottom)); }
+  :root {
+    --player-h: calc(74px + env(safe-area-inset-bottom));
+    --mobile-nav-h: 64px;
+  }
 
   body { overflow: hidden; }
   .shell {
     grid-template-columns: minmax(0, 1fr);
-    height: calc(100dvh - var(--player-h));
+    height: calc(100dvh - var(--player-h) - var(--mobile-nav-h));
     min-height: 0;
     margin: 0;
     padding: 0;
@@ -2558,8 +2565,44 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
   .topbar__brand img { display: block; }
   .topbar__brand span { display: none; }
   .topbar__right { gap: 6px; }
-  .mobile-nav-toggle { display: grid; }
-  .mobile-menu { display: block; }
+  .mobile-nav-toggle, .mobile-menu { display: none; }
+  .mobile-bottom-nav {
+    position: fixed;
+    z-index: 59;
+    left: 0;
+    right: 0;
+    bottom: var(--player-h);
+    height: var(--mobile-nav-h);
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    align-items: stretch;
+    padding: 5px 8px;
+    border-top: 1px solid var(--line-strong);
+    background: rgba(13, 13, 20, .98);
+    box-shadow: 0 -10px 26px rgba(0, 0, 0, .22);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+  .mobile-bottom-nav__item {
+    display: grid;
+    place-items: center;
+    align-content: center;
+    gap: 3px;
+    min-width: 44px;
+    min-height: 44px;
+    border-radius: 10px;
+    color: var(--text-faint);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .01em;
+    transition: color var(--fast), background var(--fast), transform var(--fast);
+  }
+  .mobile-bottom-nav__item svg { width: 20px; height: 20px; }
+  .mobile-bottom-nav__item.is-active {
+    color: var(--text);
+    background: hsl(var(--hue) 82% 56% / .16);
+  }
+  .mobile-bottom-nav__item:active { transform: scale(.96); }
   .badge-pro { display: none; }
   .search-field { height: 40px; padding: 0 11px; }
   .search-field input { font-size: 14px; }
@@ -2674,7 +2717,7 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
   .np__tabs { padding: 8px 8px 0; }
   .np__tab { flex: 1; padding: 10px 6px; font-size: 12.5px; }
 
-  .toasts { bottom: calc(var(--player-h) + 12px); }
+  .toasts { bottom: calc(var(--player-h) + var(--mobile-nav-h) + 12px); }
 }
 
 @media (prefers-reduced-motion: reduce) {
