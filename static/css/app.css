@@ -2571,7 +2571,7 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
     z-index: 59;
     left: 0;
     right: 0;
-    bottom: var(--player-h);
+    bottom: 0;
     height: var(--mobile-nav-h);
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -2667,7 +2667,7 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
 
   .player {
     left: 0; right: 0;
-    bottom: 0;
+    bottom: var(--mobile-nav-h);
     height: var(--player-h);
     border-radius: var(--r-md) var(--r-md) 0 0;
     border-bottom: 0;
