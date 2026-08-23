@@ -1347,32 +1347,49 @@
       }
 
       const profile = feedData?.profile;
+      // Real covers from the feed, so the hero panel is content and not filler.
+      const covers = (feedData?.rows?.[0]?.items
+        || browseData?.rows?.find((r) => r.kind === 'songs')?.items
+        || []).slice(0, 3);
+
       const hero = profile && !profile.coldStart
         ? `
           <section class="hero">
-            <span class="hero__eyebrow">${ICON_SPARK} Your mix is ready</span>
-            <h1>Music that keeps<br>learning what you love</h1>
-            <p>Built from ${plural(profile.events, 'listening signal')} across ${plural(profile.artistCount ?? profile.topArtists.length, 'artist')}. Every pick below tells you why it is there.</p>
-            <div class="hero__actions">
-              <button class="btn btn--primary btn--lg" data-play-shelf="made-for-you">${ICON_PLAY} Play my mix</button>
-              <a class="btn btn--outline btn--lg" href="#/taste">See my taste profile</a>
+            <div class="hero__body">
+              <span class="hero__eyebrow">${ICON_SPARK} Your mix is ready</span>
+              <h1>Music that keeps<br><em>learning what you love</em></h1>
+              <p>Built from ${plural(profile.events, 'listening signal')} across ${plural(profile.artistCount ?? profile.topArtists.length, 'artist')}. Every pick below tells you why it is there.</p>
+              <div class="hero__actions">
+                <button class="btn btn--primary btn--lg" data-play-shelf="made-for-you">${ICON_PLAY} Play my mix</button>
+                <a class="btn btn--outline btn--lg" href="#/taste">See my taste profile</a>
+              </div>
+              <div class="hero__stats">
+                <div class="hero__stat"><span>Top artist</span><strong>${esc(profile.topArtists[0]?.name || 'Learning')}</strong></div>
+                <div class="hero__stat"><span>Languages</span><strong>${esc((profile.topLanguages || []).slice(0, 2).map(cap).join(', ') || 'Mixed')}</strong></div>
+                <div class="hero__stat"><span>Your era</span><strong>${esc(profile.eraCenter || 'Mixed')}</strong></div>
+                <div class="hero__stat"><span>Signals</span><strong>${profile.events}</strong></div>
+              </div>
             </div>
-            <div class="hero__stats">
-              <div class="hero__stat"><span>Top artist</span><strong>${esc(profile.topArtists[0]?.name || 'Learning')}</strong></div>
-              <div class="hero__stat"><span>Languages</span><strong>${esc((profile.topLanguages || []).slice(0, 2).map(cap).join(', ') || 'Mixed')}</strong></div>
-              <div class="hero__stat"><span>Your era</span><strong>${esc(profile.eraCenter || 'Mixed')}</strong></div>
-              <div class="hero__stat"><span>Signals</span><strong>${profile.events}</strong></div>
-            </div>
+            ${heroArt(covers)}
           </section>`
         : `
           <section class="hero">
-            <span class="hero__eyebrow">${ICON_SPARK} Welcome to MusicArea</span>
-            <h1>Press play once.<br>The feed does the rest.</h1>
-            <p>MusicArea studies what you actually finish, skip and repeat, then builds a feed from it. No sign up, nothing leaves your device: your taste profile lives in this browser.</p>
-            <div class="hero__actions">
-              <button class="btn btn--primary btn--lg" data-play-shelf="${esc(feedData?.rows?.[0]?.id || 'trending')}">${ICON_PLAY} Start listening</button>
-              <a class="btn btn--outline btn--lg" href="#/browse">Browse the catalogue</a>
+            <div class="hero__body">
+              <span class="hero__eyebrow">${ICON_SPARK} Welcome to MusicArea</span>
+              <h1>Press play once.<br><em>The feed does the rest.</em></h1>
+              <p>MusicArea studies what you actually finish, skip and repeat, then builds a feed from it. No sign up, and nothing leaves your device: your taste profile lives in this browser.</p>
+              <div class="hero__actions">
+                <button class="btn btn--primary btn--lg" data-play-shelf="${esc(feedData?.rows?.[0]?.id || 'trending')}">${ICON_PLAY} Start listening</button>
+                <a class="btn btn--outline btn--lg" href="#/browse">Browse the catalogue</a>
+              </div>
+              <div class="hero__stats">
+                <div class="hero__stat"><span>Catalogue</span><strong>Millions of tracks</strong></div>
+                <div class="hero__stat"><span>Quality</span><strong>Up to 320 kbps</strong></div>
+                <div class="hero__stat"><span>Account</span><strong>Not needed</strong></div>
+                <div class="hero__stat"><span>Your data</span><strong>Stays local</strong></div>
+              </div>
             </div>
+            ${heroArt(covers)}
           </section>`;
 
       const rows = [];
@@ -1595,13 +1612,16 @@
         : `${plural(data.items.length, 'track')} for this mood, in the catalogue's own order. Play a few things and this set reorders around your taste.`;
       setView(`
         <section class="hero">
-          <span class="hero__eyebrow">${ICON_SPARK} Mood</span>
-          <h1>${esc(data.mood.name)}</h1>
-          <p>${esc(blurb)}</p>
-          <div class="hero__actions">
-            <button class="btn btn--primary btn--lg" data-play-list="${listKey}">${ICON_PLAY} Play</button>
-            <button class="btn btn--outline btn--lg" data-shuffle-list="${listKey}">Shuffle</button>
+          <div class="hero__body">
+            <span class="hero__eyebrow">${ICON_SPARK} Mood</span>
+            <h1>${esc(data.mood.name)}</h1>
+            <p>${esc(blurb)}</p>
+            <div class="hero__actions">
+              <button class="btn btn--primary btn--lg" data-play-list="${listKey}">${ICON_PLAY} Play</button>
+              <button class="btn btn--outline btn--lg" data-shuffle-list="${listKey}">Shuffle</button>
+            </div>
           </div>
+          ${heroArt(data.items)}
         </section>
         ${trackList(data.items, { label: data.mood.name })}`);
     },
@@ -1744,10 +1764,12 @@
       const timers = [0, 15, 30, 45, 60];
 
       setView(`
-        <section class="hero">
-          <span class="hero__eyebrow">${ICON_SPARK} Settings</span>
-          <h1>Playback</h1>
-          <p>Everything here is stored in this browser and applies the moment you change it.</p>
+        <section class="hero hero--compact">
+          <div class="hero__body">
+            <span class="hero__eyebrow">${ICON_SPARK} Settings</span>
+            <h1>Playback</h1>
+            <p>Everything here is stored in this browser and applies the moment you change it.</p>
+          </div>
         </section>
 
         <section class="section">
@@ -1856,10 +1878,12 @@
       }
       const peak = profile.topArtists[0]?.weight || 1;
       setView(`
-        <section class="hero">
-          <span class="hero__eyebrow">${ICON_SPARK} Taste profile</span>
-          <h1>What the algorithm thinks of you</h1>
-          <p>Derived from ${plural(profile.events, 'signal')} in this browser. Recent listening counts for more: the weighting halves every three weeks.</p>
+        <section class="hero hero--compact">
+          <div class="hero__body">
+            <span class="hero__eyebrow">${ICON_SPARK} Taste profile</span>
+            <h1>What the algorithm thinks of you</h1>
+            <p>Derived from ${plural(profile.events, 'signal')} in this browser. Recent listening counts for more: the weighting halves every three weeks.</p>
+          </div>
         </section>
         <div class="panels">
           <div class="panel">
@@ -1984,6 +2008,17 @@
             </a>`).join('')}
         </div>
       </section>`;
+  }
+
+  /** Fanned cover art for the hero. Renders nothing rather than a broken frame
+   *  when the feed has not produced enough artwork. */
+  function heroArt(items) {
+    const covers = (items || []).map((i) => art(i, 500)).filter(Boolean).slice(0, 3);
+    if (covers.length < 3) return '';
+    return `
+      <div class="hero__art" aria-hidden="true">
+        ${covers.map((url) => `<figure><img loading="lazy" src="${esc(url)}" alt=""></figure>`).join('')}
+      </div>`;
   }
 
   function cap(text) {

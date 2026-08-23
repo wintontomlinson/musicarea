@@ -247,10 +247,41 @@ cutting off mid bar.
     liking the track.
   - Space and Enter are left to whichever control has focus, so buttons and
     switches stay operable by keyboard.
-- **Responsive.** Sidebar collapses to icons at 1180px, then to a bottom tab bar
-  at 760px. Track lists drop to three columns at 900px. Verified with no
-  horizontal overflow from 360px through 1920px. Respects
-  `prefers-reduced-motion`.
+- **Responsive.** Verified with no horizontal overflow at sixteen widths from
+  320px through 1920px, and the first shelf stays above the fold on every phone
+  size. Respects `prefers-reduced-motion`.
+
+  | width | layout |
+  | --- | --- |
+  | above 1400 | full sidebar, hero art at full size, four stats across |
+  | 1080 to 1400 | hero art scaled down, stats shrink to fit one row |
+  | 1180 and below | sidebar collapses to icons, header picks up the wordmark |
+  | 1080 and below | hero goes single column, art dropped rather than shrunk |
+  | 900 and below | track lists drop to three columns |
+  | 760 and below | sidebar becomes a bottom tab bar, header carries the mark |
+  | 420 and below | tighter hero type and spacing |
+
+  Exactly one logo mark is visible at any width. The sidebar owns it on wide
+  screens and hands it to the header when it collapses, so the two never appear
+  together.
+
+### Navbar
+
+Three grid tracks rather than a flex row, so the search field stays optically
+centred however wide the flanking clusters get. Left holds the back and forward
+history buttons, or the brand once the sidebar collapses. Right holds the
+explainability badge and settings, both of which drop out on phones to leave
+room for search.
+
+### Hero
+
+Two columns on wide screens: copy on the left, three covers fanned on the right,
+pulled from the feed itself so the panel is real content rather than decoration
+and the dead space on a 1920 screen is filled. The offsets deliberately stop
+short of the container edge, since a rotated square pokes outside its own box and
+the hero clips overflow. The art renders only when the feed supplied three
+covers, and is dropped entirely below 1080px instead of being shrunk into
+illegibility.
 - **Details.** Per route page titles, which give way to `Song · Artist |
   MusicArea` once something is playing, a footer, and an offline banner.
 

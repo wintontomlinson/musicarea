@@ -323,13 +323,16 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
   border: 1px solid var(--line);
 }
 
+/* Three tracks so the search field sits optically centred regardless of how
+   wide the flanking clusters get. */
 .topbar {
   position: sticky;
   top: 0;
   z-index: 30;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(max-content, 1fr) minmax(0, 540px) minmax(max-content, 1fr);
   align-items: center;
-  gap: 14px;
+  gap: 16px;
   height: var(--topbar-h);
   padding: 0 22px;
   background: rgba(9, 9, 14, 0);
@@ -339,13 +342,39 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
   border-bottom: 1px solid transparent;
 }
 .topbar.is-stuck {
-  background: rgba(9, 9, 14, .74);
-  backdrop-filter: blur(22px) saturate(150%);
-  -webkit-backdrop-filter: blur(22px) saturate(150%);
+  background: rgba(10, 9, 15, .78);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
   border-bottom-color: var(--line);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, .28);
 }
+.topbar__left { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .topbar__nav { display: flex; gap: 6px; }
-.topbar__right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.topbar__right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* The sidebar already carries the wordmark on wide screens, so the header only
+   shows it once the sidebar is gone. */
+.topbar__brand { display: none; align-items: center; gap: 9px; min-width: 0; }
+.topbar__brand img { width: 32px; height: 32px; border-radius: 10px; flex: none; }
+.topbar__brand span {
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -.4px;
+  white-space: nowrap;
+}
+.topbar__brand em {
+  font-style: normal;
+  background: var(--brand);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
 
 .badge-pro {
   display: inline-flex;
@@ -368,18 +397,19 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
   display: flex;
   align-items: center;
   gap: 9px;
-  width: min(460px, 46vw);
-  padding: 0 12px;
-  height: 42px;
+  width: 100%;
+  padding: 0 13px;
+  height: 44px;
   border-radius: 99px;
   background: var(--surface);
   border: 1px solid var(--line);
-  transition: border-color var(--fast), background var(--fast), width var(--med);
+  transition: border-color var(--fast), background var(--fast), box-shadow var(--fast);
 }
+.search-field:hover { background: var(--surface-2); }
 .search-field:focus-within {
-  border-color: rgba(179, 136, 255, .5);
+  border-color: rgba(179, 136, 255, .55);
   background: var(--surface-2);
-  width: min(560px, 52vw);
+  box-shadow: 0 0 0 4px rgba(139, 92, 246, .13);
 }
 .search-field > svg { width: 18px; height: 18px; color: var(--text-faint); }
 .search-field input {
@@ -591,61 +621,143 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
 
 .hero {
   position: relative;
+  isolation: isolate;
   overflow: hidden;
-  margin: 14px 0 26px;
-  padding: 30px 32px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 40px;
+  margin: 16px 0 34px;
+  padding: 42px 44px;
   border-radius: var(--r-xl);
   background:
-    radial-gradient(120% 140% at 8% 0%, hsl(var(--hue) 72% 30% / .78), transparent 62%),
-    linear-gradient(120deg, rgba(24, 20, 38, .92), rgba(11, 10, 18, .92));
+    radial-gradient(105% 130% at 2% 0%, hsl(var(--hue) 76% 32% / .82), transparent 60%),
+    radial-gradient(85% 120% at 100% 100%, hsl(calc(var(--hue) + 48) 70% 28% / .6), transparent 62%),
+    linear-gradient(125deg, rgba(26, 21, 42, .94), rgba(10, 9, 17, .96));
   border: 1px solid var(--line);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .07), var(--shadow-md);
 }
+/* Fine grain so the large gradient areas do not look flat or banded. */
+.hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  opacity: .5;
+  background-image: radial-gradient(rgba(255, 255, 255, .11) 1px, transparent 1px);
+  background-size: 4px 4px;
+  mask-image: radial-gradient(120% 100% at 0% 0%, #000 20%, transparent 72%);
+  -webkit-mask-image: radial-gradient(120% 100% at 0% 0%, #000 20%, transparent 72%);
+  pointer-events: none;
+}
+.hero__body { min-width: 0; }
+
+/* Section headers such as Settings and Taste carry no art and less copy, so
+   they get a shorter panel rather than the full landing treatment. */
+.hero--compact { grid-template-columns: minmax(0, 1fr); padding: 32px 34px; }
+.hero--compact h1 { font-size: clamp(26px, 3.2vw, 38px); margin-bottom: 8px; }
 .hero__eyebrow {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  font-size: 11px;
+  gap: 8px;
+  padding: 6px 13px 6px 10px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, .07);
+  border: 1px solid rgba(179, 136, 255, .26);
+  font-size: 10.5px;
   font-weight: 800;
-  letter-spacing: .12em;
+  letter-spacing: .13em;
   text-transform: uppercase;
-  color: #dcc8ff;
+  color: #e6d6ff;
 }
 .hero__eyebrow svg { width: 13px; height: 13px; }
 .hero h1 {
-  margin: 12px 0 8px;
-  font-size: clamp(28px, 4.4vw, 46px);
+  margin: 18px 0 12px;
+  font-size: clamp(30px, 4.6vw, 54px);
   font-weight: 800;
-  line-height: 1.06;
-  letter-spacing: -1.4px;
+  line-height: 1.03;
+  letter-spacing: -1.8px;
+  text-wrap: balance;
+}
+.hero h1 em {
+  font-style: normal;
+  background: linear-gradient(100deg, #fff 10%, #d9bcff 55%, #ffb08a);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 .hero p {
   margin: 0;
-  max-width: 62ch;
+  max-width: 54ch;
   color: var(--text-dim);
-  font-size: 14.5px;
+  font-size: 15px;
+  line-height: 1.6;
 }
-.hero__actions { display: flex; flex-wrap: wrap; gap: 11px; margin-top: 22px; }
+.hero__actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 26px; }
 .hero__stats {
   display: flex;
   flex-wrap: wrap;
-  gap: 26px;
-  margin-top: 26px;
-  padding-top: 20px;
+  gap: 10px;
+  margin-top: 30px;
+  padding-top: 24px;
   border-top: 1px solid var(--line);
+}
+.hero__stat {
+  flex: 1 1 128px;
+  min-width: 0;
+  padding: 11px 14px;
+  border-radius: var(--r-sm);
+  background: rgba(255, 255, 255, .045);
+  border: 1px solid var(--line);
 }
 .hero__stat span {
   display: block;
-  font-size: 10.5px;
+  margin-bottom: 3px;
+  font-size: 10px;
   font-weight: 700;
-  letter-spacing: .1em;
+  letter-spacing: .11em;
   text-transform: uppercase;
   color: var(--text-faint);
 }
 .hero__stat strong {
+  display: block;
   font-size: 17px;
   font-weight: 700;
   letter-spacing: -.3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+
+/* Fanned covers pulled from the feed itself, so the panel is real content
+   rather than decoration, and it fills what was dead space on wide screens. */
+.hero__art {
+  position: relative;
+  width: 320px;
+  height: 232px;
+  flex: none;
+}
+.hero__art figure {
+  position: absolute;
+  top: 50%;
+  margin: 0;
+  width: 158px;
+  height: 158px;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, .14);
+  box-shadow: 0 22px 48px rgba(0, 0, 0, .58);
+  transition: transform var(--slow);
+}
+.hero__art img { width: 100%; height: 100%; object-fit: cover; }
+/* Offsets stop short of the container width on purpose: a rotated square pokes
+   past its own box, and the hero clips overflow. */
+.hero__art figure:nth-child(1) { left: 4px;   transform: translateY(-50%) rotate(-9deg) scale(.9); z-index: 1; }
+.hero__art figure:nth-child(2) { left: 76px;  transform: translateY(-54%) rotate(-1deg); z-index: 3; }
+.hero__art figure:nth-child(3) { left: 148px; transform: translateY(-46%) rotate(8deg) scale(.9); z-index: 2; }
+.hero:hover .hero__art figure:nth-child(1) { transform: translateY(-50%) rotate(-13deg) scale(.93); }
+.hero:hover .hero__art figure:nth-child(2) { transform: translateY(-56%) rotate(-1deg) scale(1.03); }
+.hero:hover .hero__art figure:nth-child(3) { transform: translateY(-46%) rotate(12deg) scale(.93); }
 
 /* ── Section + shelf ────────────────────────────────────────────────────── */
 
@@ -1708,8 +1820,58 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
 
 /* ── Responsive ─────────────────────────────────────────────────────────── */
 
+@media (max-width: 1320px) {
+  .topbar { grid-template-columns: minmax(max-content, 1fr) minmax(0, 460px) minmax(max-content, 1fr); }
+}
+
+/* Middle band: the art stays but shrinks, and the stats go two by two. Left at
+   four across, the narrower body column wrapped them onto a second row and the
+   hero grew to 637px tall. */
+@media (max-width: 1400px) {
+  .hero { gap: 30px; padding: 38px 36px; }
+  /* Four shrinkable columns rather than flex-wrap. Wrapping pushed the hero to
+     628px tall on a 820px viewport; the values ellipsize instead. */
+  .hero__stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; }
+  .hero__stat { flex: none; padding: 10px 12px; }
+  .hero__art { width: 258px; height: 196px; }
+  .hero__art figure { width: 128px; height: 128px; border-radius: 14px; }
+  .hero__art figure:nth-child(1) { left: 4px; }
+  .hero__art figure:nth-child(2) { left: 62px; }
+  .hero__art figure:nth-child(3) { left: 120px; }
+}
+
+/* Below this the fanned covers would crowd the copy, so the hero goes single
+   column and the art is dropped rather than shrunk into illegibility. */
+@media (max-width: 1080px) {
+  .hero { grid-template-columns: minmax(0, 1fr); gap: 0; padding: 34px 32px; }
+  .hero__art { display: none; }
+  .hero__stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+@media (max-width: 880px) {
+  .hero__stats { grid-template-columns: 1fr 1fr; }
+}
+
+/* Small phones: the hero was taking 81% of a 320x700 screen, which buries the
+   shelves below the fold entirely. */
+@media (max-width: 420px) {
+  .hero { padding: 20px 16px; }
+  .hero h1 { font-size: 25px; letter-spacing: -.8px; margin: 12px 0 8px; }
+  .hero p { font-size: 13.5px; -webkit-line-clamp: 2; }
+  .hero__eyebrow { padding: 5px 11px 5px 9px; font-size: 10px; }
+  .hero__actions { gap: 9px; margin-top: 18px; }
+  .hero__actions .btn--lg { height: 46px; padding: 0 20px; font-size: 14px; }
+  .hero__stats { margin-top: 18px; padding-top: 15px; gap: 7px; }
+  .hero__stat { padding: 8px 11px; }
+  .hero__stat strong { font-size: 14px; }
+}
+
 @media (max-width: 1180px) {
   :root { --sidebar-w: 84px; }
+  /* The sidebar keeps its mark but loses the wordmark here, so the header picks
+     up the wordmark only. Showing the mark again would put two logos in a row. */
+  .topbar__brand { display: flex; }
+  .topbar__brand img { display: none; }
   .brand__text, .nav__item span, .sidebar__block, .sidebar__foot { display: none; }
   .sidebar { align-items: center; padding: 18px 10px; }
   .brand { padding: 2px 0 14px; }
@@ -1744,16 +1906,53 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
   .main { border: 0; border-radius: 0; }
   .view { padding: 0 15px 30px; }
 
+  /* Brand, search and settings. Previously this was a lone search box with no
+     logo and no way to reach settings, which read as unfinished. */
   .topbar {
-    gap: 9px;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 10px;
     padding: 0 14px;
-    height: 60px;
+    height: 62px;
   }
-  .topbar__nav, .topbar__right { display: none; }
-  .search-field, .search-field:focus-within { width: 100%; }
+  .topbar__nav { display: none; }
+  /* Sidebar is gone entirely now, so the mark comes back and the wordmark goes,
+     which keeps room for the search field. */
+  .topbar__brand { display: flex; }
+  .topbar__brand img { display: block; }
+  .topbar__brand span { display: none; }
+  .topbar__right { gap: 6px; }
+  .badge-pro { display: none; }
+  .search-field { height: 40px; padding: 0 11px; }
+  .search-field input { font-size: 14px; }
 
-  .hero { margin: 12px 0 22px; padding: 22px 20px; border-radius: var(--r-lg); }
-  .hero__stats { gap: 18px; }
+  /* Collapse the brand to just the mark when space is genuinely tight. */
+  @media (max-width: 400px) {
+    .topbar { gap: 8px; padding: 0 11px; }
+  }
+
+  .hero { margin: 12px 0 24px; padding: 24px 19px; border-radius: var(--r-lg); }
+  .hero h1 { margin: 13px 0 9px; letter-spacing: -1.1px; }
+  /* Keep the intro from pushing the shelves off a short phone screen. */
+  .hero p {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .hero p { font-size: 14px; }
+  .hero__actions { margin-top: 20px; }
+  .hero__actions .btn { flex: 1 1 auto; }
+  /* Two even columns beats flex-wrap here: four stats used to leave the last
+     one stranded alone on its own row. */
+  .hero__stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 22px;
+    padding-top: 18px;
+  }
+  .hero__stat { flex: none; padding: 9px 12px; }
+  .hero__stat strong { font-size: 15px; }
 
   .detail {
     flex-direction: column;
