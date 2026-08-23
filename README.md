@@ -198,17 +198,32 @@ rather than failing. Switching mid-track keeps your position by waiting for the
 new source to report its duration before seeking, since assigning `currentTime`
 to an element still in `HAVE_NOTHING` is silently dropped.
 
-**Crossfade.** Off by default, 1 to 12 seconds when enabled. Implemented with two
-`<audio>` decks: the next track starts on the idle deck while the current one is
-still playing, and the two are blended. The ramp uses an equal power curve
-(`sin`/`cos`) rather than a linear one, so perceived loudness stays flat instead
-of dipping through the middle of the blend. At the crossover both decks sit at
-0.707 of target gain, which is the point of the curve.
+**Crossfade.** On by default at 6 seconds, adjustable from 1 to 12 or off.
+Implemented with two `<audio>` decks: as the current track nears its end the next
+one starts on the idle deck and rises over its tail, the way Apple Music does.
+The ramp uses an equal power curve (`sin`/`cos`) rather than a linear one, so
+perceived loudness stays flat instead of dipping through the middle of the blend.
+At the crossover both decks sit at 0.707 of target gain, which is the point of
+the curve.
+
+**The next track is buffered before the blend starts.** This is the part that
+decides whether a crossfade sounds right. Fetching the incoming track at the
+moment the fade begins works on a fast connection and falls apart on anything
+slower: the incoming side starts silent and leaves a hole in the middle of the
+blend. The idle deck is loaded around fifteen seconds ahead, and the fade reuses
+that buffer rather than reassigning `src`, which would throw it away.
+
+Preloading also makes the crossfade-off path **gapless**. With crossfade
+disabled the handover becomes a 60ms blend into the already buffered deck:
+inaudible, but it means playback never stalls waiting for the next track. Loading
+onto the current deck instead, which is what it used to do, always left a gap.
 
 Details that matter in practice:
 
 - Only the active deck drives the UI. A deck that is fading out is marked
   retiring, so it cannot repaint state or trigger the next track.
+- The overlay and the player bar are two sets of controls driven by one delegated
+  handler and one state sync, so they cannot disagree.
 - A manual skip uses a shorter blend, capped at 1.2s, so the button still feels
   immediate.
 - Crossfade is bypassed when Repeat one is on.
@@ -221,6 +236,50 @@ Details that matter in practice:
 cutting off mid bar.
 
 **Autoplay and visualizer** can both be switched off.
+
+## Generated mixes
+
+`POST /api/mixes` builds ready made playlists from the profile. Three kinds,
+because one kind alone is monotonous:
+
+- an **artist mix** per top artist, that artist plus the neighbourhood the CF
+  stage derives
+- a **language mix** per language actually played
+- a **discovery mix** of artists with no listening history at all
+
+Two things the first attempt got wrong, both caught by inspecting the output:
+
+- Reusing one shared candidate pool for every artist mix dragged the listener's
+  other genres in, so a Punjabi rap track landed in a Bollywood playback mix.
+  Each artist mix now gets its own recall pass seeded from that artist, with the
+  broad trending and new release arms switched off.
+- Two artist mixes shared half their tracks, because one singer performs most of
+  the other's compositions. Mixes are now built against a growing exclusion set,
+  so they come out disjoint.
+
+Mixes can be played directly, saved as an editable playlist, or rebuilt. They are
+requested separately from the feed and cached for ten minutes, because a cold
+build takes several seconds and must not hold up first paint.
+
+## Editing your library
+
+- Playlists can be renamed and deleted, and tracks removed from them.
+- Liked songs can be removed from the liked view itself.
+- Recently played can be cleared without touching the taste profile.
+- Everything destructive asks first, through an in-app dialog rather than
+  `confirm()`. The native dialogs block the page, cannot be styled and read as
+  a browser artefact rather than part of the app.
+
+## Third party naming
+
+The catalogue provider's brand does not appear anywhere in the interface. That
+needed more than deleting one footer line: the provider ships its own name as the
+curator on every editorial playlist, so chart tiles were captioned with it, and it
+serves branded placeholder artwork for entities with no cover. `clean_text` strips
+the brand from any display string, provider permalinks are dropped from every
+payload, and placeholder art is filtered server side so the app draws its own.
+Attribution stays here in the README, where crediting the data source is honest
+rather than decorative.
 
 ## The app
 
