@@ -74,6 +74,17 @@
 
   function artistsOf(song) {
     const groups = song?.artists || {};
+
+    // Songs read back from storage keep a flat, already filtered array, while
+    // API payloads use role buckets. Without this branch every stored song lost
+    // its credits and rendered as "Unknown artist", which is what the library,
+    // the recent list and the jump-back-in tiles were all showing.
+    if (Array.isArray(groups)) {
+      return groups
+        .filter((a) => a && (a.id || a.name))
+        .map((a) => ({ id: a.id, name: a.name || '' }));
+    }
+
     // An artist can hold several credits at once (singer and lyricist, say), so
     // gather all of them and only drop people whose every credit is non-musical.
     const roles = new Map();
@@ -178,6 +189,7 @@
 
   const MAX_HISTORY = 400;
   const MAX_RECENT = 60;
+  const PLAYBACK_KEY = 'ma.playback.v1';
 
   function read(key, fallback) {
     try {
@@ -188,6 +200,17 @@
 
   function write(key, value) {
     try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* quota */ }
+  }
+
+  function readSession(key, fallback) {
+    try {
+      const raw = sessionStorage.getItem(key);
+      return raw ? JSON.parse(raw) : fallback;
+    } catch { return fallback; }
+  }
+
+  function writeSession(key, value) {
+    try { sessionStorage.setItem(key, JSON.stringify(value)); } catch { /* unavailable */ }
   }
 
   const Store = {
@@ -696,8 +719,25 @@
   }
 
   function section(row, inner) {
-    const more = row.kind === 'songs' && (row.items || []).length > 4
-      ? `<button class="text-btn" data-play-shelf="${esc(row.id || '')}">Play all</button>` : '';
+    const actions = [];
+    if (row.kind === 'songs' && (row.items || []).length > 4) {
+      actions.push(`<button class="text-btn" data-play-shelf="${esc(row.id || '')}">Play all</button>`);
+    }
+    if (row.showAll) {
+      actions.push(`<a class="text-btn" href="${esc(row.showAll)}">Show all</a>`);
+    }
+    // Arrow pair for scrolling a shelf, as both Apple Music and Spotify have.
+    if ((row.items || []).length > 5) {
+      actions.push(`
+        <span class="shelf-nav">
+          <button class="icon-btn" data-shelf-nav="prev" aria-label="Scroll left">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.4 4.6 8 12l7.4 7.4 1.4-1.4L10.8 12l6-6z"/></svg>
+          </button>
+          <button class="icon-btn" data-shelf-nav="next" aria-label="Scroll right">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.6 4.6 16 12l-7.4 7.4-1.4-1.4L13.2 12l-6-6z"/></svg>
+          </button>
+        </span>`);
+    }
     return `
       <section class="section" data-section="${esc(row.id || '')}">
         <div class="section__head">
@@ -705,7 +745,7 @@
             <h2>${esc(row.title)}</h2>
             ${row.subtitle ? `<p>${esc(row.subtitle)}</p>` : ''}
           </div>
-          <div class="section__head-actions">${more}</div>
+          <div class="section__head-actions">${actions.join('')}</div>
         </div>
         ${inner}
       </section>`;
@@ -766,6 +806,9 @@
     handoffTimer: 0,
     streamRecovery: null,
     streamRecoveryGeneration: 0,
+    backgrounded: document.hidden,
+    checkpointAt: 0,
+    contextLabel: '',
 
     fadeRaf: 0,
     fading: false,
@@ -803,6 +846,115 @@
       });
     },
 
+    /** Save the current track and its next 99 queue positions for this session. */
+    checkpoint() {
+      if (!this.current || this.pos < 0 || !this.queue.length || !this.order.length) return;
+      const windowStart = Math.max(0, this.pos - 20);
+      const windowOrder = this.order.slice(windowStart, windowStart + 100);
+      const queueIndexMap = new Map();
+      const queue = [];
+      windowOrder.forEach((queueIndex) => {
+        if (!Number.isInteger(queueIndex) || queueIndex < 0 || queueIndex >= this.queue.length) return;
+        if (!queueIndexMap.has(queueIndex)) {
+          queueIndexMap.set(queueIndex, queue.length);
+          queue.push(Store.slim(this.queue[queueIndex]));
+        }
+      });
+      const order = windowOrder.map((queueIndex) => queueIndexMap.get(queueIndex)).filter(Number.isInteger);
+      const pos = this.pos - windowStart;
+      if (!queue.length || !order.length || pos < 0 || pos >= order.length) return;
+      writeSession(PLAYBACK_KEY, {
+        queue,
+        order,
+        pos,
+        currentId: this.current.id,
+        currentTime: Number.isFinite(audio.currentTime) ? Math.max(0, audio.currentTime) : 0,
+        wasPlaying: !audio.paused && !audio.ended,
+        contextLabel: this.contextLabel || '',
+      });
+      this.checkpointAt = Date.now();
+    },
+
+    /** Restore a reload-safe queue. Browser policy may still require a tap to resume audio. */
+    async restoreCheckpoint() {
+      const saved = readSession(PLAYBACK_KEY, null);
+      if (!saved || !Array.isArray(saved.queue) || !Array.isArray(saved.order)) return;
+      const savedPos = Number(saved.pos);
+      const savedQueueIndex = Number.isInteger(savedPos) ? saved.order[savedPos] : null;
+      const currentId = typeof saved.currentId === 'string'
+        ? saved.currentId
+        : saved.queue[savedQueueIndex]?.id;
+      if (!currentId) return;
+      const request = ++this.playRequest;
+      const resolved = await ensurePlayable(saved.queue.slice(0, 100));
+      if (request !== this.playRequest) return;
+      const playable = resolved.filter((song) => song?.id && song.downloadUrl?.length);
+      const indexById = new Map(playable.map((song, index) => [song.id, index]));
+      if (!indexById.has(currentId)) return;
+      const originalIds = saved.queue.map((song) => song?.id);
+      const order = [];
+      let pos = -1;
+      saved.order.forEach((index, savedOrderPos) => {
+        const playableIndex = indexById.get(originalIds[index]);
+        if (!Number.isInteger(playableIndex)) return;
+        if (savedOrderPos === savedPos) pos = order.length;
+        order.push(playableIndex);
+      });
+      if (pos < 0 || !order.length || playable[order[pos]]?.id !== currentId) return;
+      this.queue = playable;
+      this.order = order;
+      this.contextLabel = typeof saved.contextLabel === 'string' ? saved.contextLabel.slice(0, 120) : '';
+      await this.load(pos, false);
+      const restorePosition = () => {
+        audio.removeEventListener('loadedmetadata', restorePosition);
+        try { audio.currentTime = clamp(Number(saved.currentTime) || 0, 0, Math.max(0, (audio.duration || Infinity) - 0.25)); } catch { /* stream is not seekable */ }
+        updateMediaSessionPosition();
+        if (saved.wasPlaying) this.resume();
+      };
+      audio.addEventListener('loadedmetadata', restorePosition, { once: true });
+      if (audio.readyState >= 1) restorePosition();
+      renderQueue();
+    },
+
+    /** Stop rAF-dependent transitions while preserving the active audio element. */
+    settleForBackground() {
+      this.cancelHandoff();
+      this.cancelStreamRecovery();
+      cancelAnimationFrame(this.fadeRaf);
+      this.fadeRaf = 0;
+      this.fading = false;
+      const idle = idleDeck();
+      idle.pause();
+      idle.removeAttribute('src');
+      idle.dataset.readyFor = '';
+      idle.dataset.readyUrl = '';
+      idle.dataset.retiring = '';
+      try { idle.load(); } catch { /* nothing to abort */ }
+      audio.dataset.retiring = '';
+      audio.volume = gain();
+    },
+
+    setBackgrounded(hidden) {
+      this.backgrounded = hidden;
+      if (hidden) {
+        this.settleForBackground();
+        this.checkpoint();
+      } else {
+        updateMediaSessionPosition();
+      }
+    },
+
+    resume() {
+      if (!this.current) return this.toggle();
+      return audio.play().catch(() => setPlayerState('paused'));
+    },
+
+    pause() {
+      if (!this.current) return;
+      audio.pause();
+      this.checkpoint();
+    },
+
     /* ---- Crossfade ------------------------------------------------------ */
 
     /** Equal power fade. sin/cos keeps perceived loudness flat across the blend,
@@ -838,7 +990,7 @@
      *  It also removes the gap between tracks when crossfade is switched off.
      */
     preloadNext() {
-      if (this.fading) return;                 // idle deck is the retiring one
+      if (this.fading || this.backgrounded) return;
       const nextPos = this.pos + 1;
       if (nextPos >= this.order.length) return;
       const song = this.queue[this.order[nextPos]];
@@ -876,6 +1028,7 @@
 
     /** Start `orderPos` on the idle deck and blend the two over `seconds`. */
     async crossfadeTo(orderPos, seconds) {
+      if (this.backgrounded) return this.load(orderPos);
       if (this.fading || this.crossfadeStarting) return false;
       if (orderPos < 0 || orderPos >= this.order.length) return false;
       const song = this.queue[this.order[orderPos]];
@@ -1100,6 +1253,7 @@
       // Buffer whatever comes next straight away. This is what removes the gap
       // between tracks when crossfade is switched off.
       this.preloadNext();
+      this.checkpoint();
     },
 
     toggle() {
@@ -1109,8 +1263,8 @@
         if (first?.songs?.length) this.play(first.songs, 0, { label: first.label });
         return;
       }
-      if (audio.paused) audio.play().catch(() => setPlayerState('paused'));
-      else audio.pause();
+      if (audio.paused) this.resume();
+      else this.pause();
     },
 
     next(userInitiated = false) {
@@ -1124,6 +1278,9 @@
       }
       const nextPos = this.pos + 1;
       if (nextPos < this.order.length) {
+        // Background tabs can throttle animation frames. A direct handoff keeps
+        // playback progressing when an ended event fires while hidden.
+        if (this.backgrounded) return this.load(nextPos);
         // An explicit skip always wins over an in-flight automatic handoff.
         // load() invalidates the transition token, silences the other deck,
         // and prevents a late incoming play promise from reclaiming the UI.
@@ -1243,6 +1400,8 @@
       this.playedRatio = ratio;
       if (!this.seeking) paintProgress(ratio);
       $$('.js-now').forEach((el) => { el.textContent = fmtTime(audio.currentTime); });
+      updateMediaSessionPosition();
+      if (Date.now() - this.checkpointAt >= 5000) this.checkpoint();
 
       // A play only counts once we are past the intro.
       if (!this.loggedPlay && audio.currentTime > 12) {
@@ -1256,7 +1415,7 @@
 
       // Get the next track buffered well before it is needed, so the blend
       // starts from audio that is already in memory.
-      if (!this.fading && remaining <= seconds + 15) this.preloadNext();
+      if (!this.backgrounded && !this.fading && remaining <= seconds + 15) this.preloadNext();
 
       // Start a fraction early. `audio.play()` can wait for the incoming deck's
       // final buffer frame, and starting at the exact boundary made short or
@@ -1267,7 +1426,7 @@
       const nextUrl = nextSong ? pickStream(nextSong, Store.prefs.quality).url : '';
       const incomingReady = nextSong && idleDeck().dataset.readyFor === nextSong.id
         && idleDeck().dataset.readyUrl === nextUrl && idleDeck().readyState >= 2;
-      if (seconds > 0 && !this.fading && !this.crossfadeStarting && incomingReady
+      if (seconds > 0 && !this.backgrounded && !this.fading && !this.crossfadeStarting && incomingReady
           && Store.prefs.repeat !== 'one' && this.pos + 1 < this.order.length) {
         if (remaining <= seconds + earlyStart && remaining > 0.2) {
           const fade = Math.min(seconds, Math.max(0.35, remaining - 0.15));
@@ -1435,6 +1594,19 @@
     if (!$('#np').hidden) renderNpPanel();
   }
 
+  function updateMediaSessionPosition() {
+    if (!('mediaSession' in navigator) || !Player.current) return;
+    const duration = audio.duration || Player.current.duration || 0;
+    if (!Number.isFinite(duration) || duration <= 0) return;
+    try {
+      navigator.mediaSession.setPositionState({
+        duration,
+        playbackRate: audio.playbackRate || 1,
+        position: clamp(audio.currentTime || 0, 0, duration),
+      });
+    } catch { /* unsupported browser or non-seekable stream */ }
+  }
+
   function updateMediaSession(song) {
     if (!('mediaSession' in navigator)) return;
     try {
@@ -1448,11 +1620,20 @@
           type: 'image/jpeg',
         })),
       });
-      navigator.mediaSession.setActionHandler('play', () => Player.toggle());
-      navigator.mediaSession.setActionHandler('pause', () => Player.toggle());
+      navigator.mediaSession.setActionHandler('play', () => Player.resume());
+      navigator.mediaSession.setActionHandler('pause', () => Player.pause());
       navigator.mediaSession.setActionHandler('previoustrack', () => Player.prev());
       navigator.mediaSession.setActionHandler('nexttrack', () => Player.next(true));
-    } catch { /* unsupported */ }
+      navigator.mediaSession.setActionHandler('seekbackward', (details) => Player.seekBy(-(details.seekOffset || 10)));
+      navigator.mediaSession.setActionHandler('seekforward', (details) => Player.seekBy(details.seekOffset || 10));
+      navigator.mediaSession.setActionHandler('seekto', (details) => {
+        const duration = audio.duration || Player.current?.duration || 0;
+        if (!duration || !Number.isFinite(details.seekTime)) return;
+        audio.currentTime = clamp(details.seekTime, 0, duration);
+        updateMediaSessionPosition();
+      });
+      updateMediaSessionPosition();
+    } catch { /* unsupported action */ }
   }
 
   function markCurrentRows() {
@@ -1622,6 +1803,7 @@
     },
 
     start() {
+      if (document.hidden) return;
       this.ensure();
       if (!this.analyser) return;
       if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
@@ -1749,25 +1931,27 @@
         || browseData?.rows?.find((r) => r.kind === 'songs')?.items
         || []).slice(0, 3);
 
+      // A returning listener does not need the pitch. They get a greeting bar and
+      // their music. The full hero is kept for a first visit, where explaining
+      // the app is the useful thing to do.
       const hero = profile && !profile.coldStart
         ? `
-          <section class="hero">
-            <div class="hero__body">
-              <span class="hero__eyebrow">${ICON_SPARK} Your mix is ready</span>
-              <h1>Music that keeps<br><em>learning what you love</em></h1>
-              <p>Built from ${plural(profile.events, 'listening signal')} across ${plural(profile.artistCount ?? profile.topArtists.length, 'artist')}. Your home feed keeps adapting to the music you enjoy.</p>
-              <div class="hero__actions">
-                <button class="btn btn--primary btn--lg" data-play-shelf="made-for-you">${ICON_PLAY} Play my mix</button>
-                <a class="btn btn--outline btn--lg" href="#/taste">See my taste profile</a>
-              </div>
-              <div class="hero__stats">
-                <div class="hero__stat"><span>Top artist</span><strong>${esc(profile.topArtists[0]?.name || 'Learning')}</strong></div>
-                <div class="hero__stat"><span>Languages</span><strong>${esc((profile.topLanguages || []).slice(0, 2).map(cap).join(', ') || 'Mixed')}</strong></div>
-                <div class="hero__stat"><span>Your era</span><strong>${esc(profile.eraCenter || 'Mixed')}</strong></div>
-                <div class="hero__stat"><span>Signals</span><strong>${profile.events}</strong></div>
+          <section class="greet">
+            <div class="greet__row">
+              <h1>${esc(greeting())}</h1>
+              <div class="greet__actions">
+                <button class="btn btn--primary" data-play-shelf="made-for-you">${ICON_PLAY} Play my mix</button>
+                <a class="btn btn--outline" href="#/taste">Taste profile</a>
               </div>
             </div>
-            ${heroArt(covers)}
+            <div class="greet__facts">
+              <span><b>${esc(profile.topArtists[0]?.name || 'Learning')}</b> on top</span>
+              <i></i>
+              <span>${esc((profile.topLanguages || []).slice(0, 2).map(cap).join(', ') || 'Mixed')}</span>
+              ${profile.eraCenter ? `<i></i><span>${esc(profile.eraCenter)} era</span>` : ''}
+              <i></i>
+              <span>${plural(profile.events, 'signal')} learned</span>
+            </div>
           </section>`
         : '';
 
@@ -1777,12 +1961,21 @@
         // Mixes slot in after the first shelf, filled in once they arrive.
         if (index === 0) rows.push('<div id="mixesRow"></div>');
       });
+
+      // Home carries personal shelves plus a single "what is hot" row. It used
+      // to append every browse row too, which made eleven shelves deep, six of
+      // them identical to what Browse already shows.
       if (browseData) {
-        rows.push(moodStrip(browseData.moods));
-        (browseData.rows || []).forEach((row) => rows.push(shelf(row)));
+        const trending = (browseData.rows || []).find((r) => r.id === 'trending');
+        if (trending) {
+          rows.push(shelf(Object.assign({}, trending, { showAll: '#/browse' })));
+        }
+        // A cold visitor has no personal shelves yet, so give them the moods to
+        // dig into rather than a nearly empty page.
+        if (profile?.coldStart) rows.push(moodStrip(browseData.moods));
       }
 
-      setView(hero + rows.join(''));
+      setView(hero + quickPicks() + rows.join(''));
       Home.feed = feedData;
       if (profile && !profile.coldStart) loadMixesRow();
     },
@@ -2624,6 +2817,54 @@
       </div>`;
   }
 
+  function greeting() {
+    const hour = new Date().getHours();
+    if (hour < 5) return 'Late one';
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
+  }
+
+  /** One tap back into what you were just playing.
+   *  Every major player leads with this and it was the main thing missing. */
+  function quickPicks() {
+    const picks = [];
+    const seen = new Set();
+    const add = (song) => {
+      if (!song?.id || seen.has(song.id)) return;
+      seen.add(song.id);
+      picks.push(song);
+    };
+    Store.recent.forEach(add);
+    Store.liked.forEach(add);
+    const list = picks.slice(0, 8);
+    // Shown as soon as there is anything worth resuming. Requiring four meant a
+    // listener three tracks in still saw nothing.
+    if (list.length < 2) return '';
+
+    const key = registerList(list, 'Jump back in');
+    return `
+      <section class="section section--quick">
+        <div class="section__head">
+          <div><h2>Jump back in</h2></div>
+          <div class="section__head-actions">
+            <a class="text-btn" href="#/recent">Show all</a>
+          </div>
+        </div>
+        <div class="quick">
+          ${list.map((song, index) => `
+            <button class="quick__tile" data-quick="${esc(key)}" data-index="${index}" data-song="${esc(song.id)}">
+              <img loading="lazy" decoding="async" src="${esc(art(song, 150))}" alt="">
+              <span class="quick__text">
+                <strong>${esc(song.name)}</strong>
+                <small>${esc(artistLine(song))}</small>
+              </span>
+              <span class="quick__play">${ICON_PLAY}</span>
+            </button>`).join('')}
+        </div>
+      </section>`;
+  }
+
   /** A four cover collage. Used by category tiles and library shelves so those
    *  screens show the music they contain instead of a generic glyph. */
   function collage(covers, { size = 150, cls = '' } = {}) {
@@ -3014,6 +3255,26 @@
       if (trackEl) {
         const entry = LISTS.get(trackEl.dataset.list);
         if (entry) Player.play(entry.songs, Number(trackEl.dataset.index), { label: entry.label });
+        return;
+      }
+
+      const quickTile = target.closest('[data-quick]');
+      if (quickTile) {
+        const entry = LISTS.get(quickTile.dataset.quick);
+        if (entry) Player.play(entry.songs, Number(quickTile.dataset.index), { label: entry.label });
+        return;
+      }
+
+      const shelfNav = target.closest('[data-shelf-nav]');
+      if (shelfNav) {
+        const strip = shelfNav.closest('.section')?.querySelector('.shelf');
+        if (strip) {
+          const step = strip.clientWidth * 0.82;
+          strip.scrollBy({
+            left: shelfNav.dataset.shelfNav === 'next' ? step : -step,
+            behavior: 'smooth',
+          });
+        }
         return;
       }
 
@@ -3612,6 +3873,22 @@
 
     window.addEventListener('hashchange', route);
 
+    /* --- page lifecycle ------------------------------------------------ */
+    document.addEventListener('visibilitychange', () => {
+      const hidden = document.hidden;
+      Player.setBackgrounded(hidden);
+      if (hidden) {
+        Viz.stop();
+      } else if (!$('#np').hidden && Store.prefs.visualizer) {
+        Viz.start();
+      }
+    });
+    window.addEventListener('pagehide', () => Player.checkpoint());
+    window.addEventListener('pageshow', () => {
+      Player.setBackgrounded(document.hidden);
+      if (!document.hidden && !$('#np').hidden && Store.prefs.visualizer) Viz.start();
+    });
+
     /* --- connectivity ------------------------------------------------- */
     const showOffline = () => {
       if ($('#offlineBanner')) return;
@@ -3722,6 +3999,7 @@
 
   installArtworkFallbacks();
   Player.init();
+  Player.restoreCheckpoint();
   wire();
   renderSidebarCounts();
   renderPlaylistList();
