@@ -613,15 +613,40 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 40px;
-  margin: 16px 0 34px;
-  padding: 42px 44px;
+  margin: 16px 0 38px;
+  padding: 48px 48px;
   border-radius: var(--r-xl);
   background:
-    radial-gradient(105% 130% at 2% 0%, hsl(var(--hue) 76% 32% / .82), transparent 60%),
-    radial-gradient(85% 120% at 100% 100%, hsl(calc(var(--hue) + 48) 70% 28% / .6), transparent 62%),
-    linear-gradient(125deg, rgba(26, 21, 42, .94), rgba(10, 9, 17, .96));
+    radial-gradient(105% 130% at 2% 0%, hsl(var(--hue) 82% 34% / .85), transparent 60%),
+    radial-gradient(85% 120% at 100% 100%, hsl(calc(var(--hue) + 48) 74% 30% / .62), transparent 62%),
+    linear-gradient(125deg, rgba(28, 22, 46, .96), rgba(9, 8, 15, .97));
   border: 1px solid var(--line);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .07), var(--shadow-md);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .09),
+    inset 0 0 0 1px rgba(255, 255, 255, .015),
+    0 40px 90px -30px hsl(var(--hue) 70% 20% / .55),
+    var(--shadow-lg);
+}
+/* A slow-drifting sheen sweeps the panel so the hero reads as a lit surface
+   rather than a flat gradient. Composited transform only, so it stays cheap. */
+.hero::before {
+  content: '';
+  position: absolute;
+  inset: -40% -10%;
+  z-index: -1;
+  background:
+    radial-gradient(38% 60% at 30% 20%, rgba(255, 255, 255, .10), transparent 70%),
+    conic-gradient(from 200deg at 78% 30%,
+      hsl(var(--hue) 90% 60% / .22),
+      hsl(calc(var(--hue) + 60) 90% 60% / .16) 40%,
+      transparent 68%);
+  filter: blur(2px);
+  animation: hero-drift 22s var(--ease) infinite alternate;
+  pointer-events: none;
+}
+@keyframes hero-drift {
+  from { transform: translate3d(-3%, -2%, 0) rotate(-2deg); }
+  to { transform: translate3d(4%, 3%, 0) rotate(3deg); }
 }
 /* Fine grain so the large gradient areas do not look flat or banded. */
 .hero::after {
@@ -654,17 +679,18 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 13px 6px 10px;
+  padding: 7px 14px 7px 11px;
   border-radius: 99px;
-  background: rgba(255, 255, 255, .07);
-  border: 1px solid rgba(179, 136, 255, .26);
+  background: linear-gradient(120deg, rgba(179, 136, 255, .18), rgba(255, 255, 255, .05));
+  border: 1px solid rgba(179, 136, 255, .32);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .1), 0 6px 18px -8px hsl(var(--hue) 80% 40% / .6);
   font-size: 10.5px;
   font-weight: 800;
   letter-spacing: .13em;
   text-transform: uppercase;
-  color: #e6d6ff;
+  color: #efe3ff;
 }
-.hero__eyebrow svg { width: 13px; height: 13px; }
+.hero__eyebrow svg { width: 13px; height: 13px; color: var(--accent); }
 .hero h1 {
   margin: 18px 0 12px;
   font-size: clamp(30px, 4.6vw, 54px);
@@ -675,10 +701,16 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
 }
 .hero h1 em {
   font-style: normal;
-  background: linear-gradient(100deg, #fff 10%, #d9bcff 55%, #ffb08a);
+  background: linear-gradient(100deg, #fff 6%, #e4ccff 46%, #ffb894 92%);
+  background-size: 200% 100%;
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+  animation: hero-sheen 9s var(--ease) infinite alternate;
+}
+@keyframes hero-sheen {
+  from { background-position: 0% 0; }
+  to { background-position: 100% 0; }
 }
 .hero p {
   margin: 0;
@@ -699,10 +731,17 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
 .hero__stat {
   flex: 1 1 128px;
   min-width: 0;
-  padding: 11px 14px;
-  border-radius: var(--r-sm);
-  background: rgba(255, 255, 255, .045);
+  padding: 12px 15px;
+  border-radius: var(--r-md);
+  background: linear-gradient(155deg, rgba(255, 255, 255, .08), rgba(255, 255, 255, .025));
   border: 1px solid var(--line);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06);
+  transition: transform var(--fast), border-color var(--fast), background var(--fast);
+}
+.hero__stat:hover {
+  transform: translateY(-2px);
+  border-color: var(--line-strong);
+  background: linear-gradient(155deg, rgba(255, 255, 255, .12), rgba(255, 255, 255, .04));
 }
 .hero__stat span {
   display: block;
@@ -731,16 +770,28 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
   height: 232px;
   flex: none;
 }
+/* Soft coloured halo so the fanned covers sit on light rather than float. */
+.hero__art::before {
+  content: '';
+  position: absolute;
+  inset: -14% -8%;
+  z-index: 0;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, hsl(var(--hue) 90% 60% / .38), transparent 72%);
+  filter: blur(6px);
+}
 .hero__art figure {
   position: absolute;
   top: 50%;
   margin: 0;
   width: 158px;
   height: 158px;
-  border-radius: 16px;
+  border-radius: 18px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, .14);
-  box-shadow: 0 22px 48px rgba(0, 0, 0, .58);
+  border: 1px solid rgba(255, 255, 255, .18);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .16),
+    0 26px 54px rgba(0, 0, 0, .62);
   transition: transform var(--slow);
 }
 .hero__art img { width: 100%; height: 100%; object-fit: cover; }
@@ -770,13 +821,27 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
   margin-bottom: 14px;
 }
 .section__head h2 {
+  position: relative;
   margin: 0;
+  padding-left: 13px;
   font-size: 21px;
   font-weight: 800;
   letter-spacing: -.6px;
 }
+/* A short gradient tab keys each shelf to the brand and gives the feed a more
+   designed, editorial rhythm. */
+.section__head h2::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 50%;
+  width: 4px; height: 19px;
+  border-radius: 99px;
+  background: var(--brand);
+  transform: translateY(-50%);
+}
 .section__head p {
   margin: 3px 0 0;
+  padding-left: 13px;
   font-size: 12.5px;
   color: var(--text-faint);
 }
@@ -817,10 +882,10 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
   transition: background var(--fast), transform var(--med), border-color var(--fast), box-shadow var(--med);
 }
 .card:hover {
-  background: var(--surface-2);
-  border-color: var(--line);
-  transform: translateY(-4px);
-  box-shadow: var(--shadow-md);
+  background: linear-gradient(180deg, rgba(255, 255, 255, .1), rgba(255, 255, 255, .04));
+  border-color: var(--line-strong);
+  transform: translateY(-5px);
+  box-shadow: 0 24px 50px -18px hsl(var(--hue) 60% 20% / .5), var(--shadow-md);
 }
 .card__art {
   position: relative;
@@ -829,7 +894,21 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
   overflow: hidden;
   aspect-ratio: 1;
   background: var(--surface-2);
+  box-shadow: 0 8px 22px -12px rgba(0, 0, 0, .7);
 }
+/* Diagonal gloss that lights up on hover, the way a physical sleeve catches
+   light. Purely decorative and does not intercept the play button. */
+.card__art::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(135deg, rgba(255, 255, 255, .18), transparent 42%);
+  opacity: 0;
+  transition: opacity var(--med);
+  pointer-events: none;
+}
+.card:hover .card__art::after { opacity: 1; }
 .card__art img {
   width: 100%; height: 100%;
   object-fit: cover;
@@ -856,10 +935,11 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
 }
 .card__play {
   position: absolute;
+  z-index: 2;
   right: 9px; bottom: 9px;
   display: grid;
   place-items: center;
-  width: 42px; height: 42px;
+  width: 44px; height: 44px;
   border: 0;
   border-radius: 50%;
   background: var(--brand);
@@ -867,7 +947,7 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
   cursor: pointer;
   opacity: 0;
   transform: translateY(10px) scale(.85);
-  box-shadow: 0 10px 26px rgba(0, 0, 0, .5);
+  box-shadow: 0 12px 30px -6px hsl(var(--hue) 80% 45% / .7), 0 8px 20px rgba(0, 0, 0, .5);
   transition: opacity var(--med), transform var(--med);
 }
 .card:hover .card__play, .card:focus-within .card__play {
@@ -2260,9 +2340,32 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
 /* Below this the fanned covers would crowd the copy, so the hero goes single
    column and the art is dropped rather than shrunk into illegibility. */
 @media (max-width: 1080px) {
-  .hero { grid-template-columns: minmax(0, 1fr); gap: 0; padding: 34px 32px; }
+  .hero { grid-template-columns: minmax(0, 1fr); gap: 0; padding: 38px 34px; }
   .hero__art { display: none; }
   .hero__stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  /* With the fanned art gone the panel would read flat, so a corner glow keeps
+     the premium, lit feel on tablets and phones. */
+  .hero::after {
+    content: '';
+    position: absolute;
+    right: -12%;
+    top: -30%;
+    z-index: -1;
+    width: 60%;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    background: radial-gradient(closest-side, hsl(calc(var(--hue) + 30) 90% 58% / .32), transparent 70%);
+    filter: blur(8px);
+    pointer-events: none;
+    /* Override the desktop grain layer which set inset/mask; here it is a glow. */
+    inset: auto;
+    right: -12%;
+    top: -30%;
+    opacity: 1;
+    background-size: auto;
+    mask-image: none;
+    -webkit-mask-image: none;
+  }
 }
 
 @media (max-width: 880px) {
