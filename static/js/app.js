@@ -2944,7 +2944,10 @@
     const routeGeneration = ++activeRouteGeneration;
     const { path, param } = currentRoute();
     $$('[data-route]').forEach((link) => {
-      link.classList.toggle('is-active', link.dataset.route === path);
+      const active = link.dataset.route === path;
+      link.classList.toggle('is-active', active);
+      if (active) link.setAttribute('aria-current', 'page');
+      else link.removeAttribute('aria-current');
     });
     if (path !== 'search') {
       $('#searchInput').value = '';
