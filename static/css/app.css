@@ -337,8 +337,34 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
   gap: 10px;
   min-width: 0;
 }
+.mobile-nav-toggle, .mobile-menu { display: none; }
 
-/* The sidebar already carries the wordmark on wide screens, so the header only
+/* The sidebar owns navigation on larger screens. Phone navigation stays in a
+   compact menu instead of consuming a permanent bar at the bottom. */
+.mobile-menu {
+  position: absolute;
+  top: calc(100% - 5px);
+  right: 12px;
+  min-width: 156px;
+  padding: 7px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: rgba(18, 17, 26, .98);
+  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+}
+.mobile-menu a {
+  display: block;
+  padding: 10px 12px;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-dim);
+}
+.mobile-menu a:hover { background: var(--surface-2); color: var(--text); }
+
+/* The sidebar already carries the wordmark on wide screens, so the header
    shows it once the sidebar is gone. */
 .topbar__brand { display: none; align-items: center; gap: 9px; min-width: 0; }
 .topbar__brand img { width: 32px; height: 32px; border-radius: 10px; flex: none; }
@@ -1159,6 +1185,48 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
 
 .chip--recent svg { width: 14px; height: 14px; opacity: .7; }
 
+/* ── Library ────────────────────────────────────────────────────────────── */
+
+.library-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: end;
+  gap: 22px;
+  margin: 6px 0 30px;
+  padding: 28px 30px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background:
+    radial-gradient(90% 180% at 0% 0%, hsl(var(--hue) 78% 34% / .35), transparent 66%),
+    linear-gradient(145deg, rgba(255, 255, 255, .08), rgba(255, 255, 255, .025));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08), var(--shadow-sm);
+}
+.library-hero__eyebrow {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+}
+.library-hero h1 { margin: 0; font-size: clamp(26px, 4vw, 38px); letter-spacing: -1px; }
+.library-hero p { max-width: 480px; margin: 7px 0 0; color: var(--text-dim); font-size: 13px; }
+.library-hero__meta { display: flex; gap: 8px; flex-wrap: wrap; }
+.library-hero__meta span {
+  display: flex;
+  flex-direction: column;
+  min-width: 62px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--text-faint);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+.library-hero__meta strong { color: var(--text); font-size: 16px; letter-spacing: -.3px; }
+
 /* ── Library tiles ──────────────────────────────────────────────────────── */
 
 .lib-art { position: relative; overflow: hidden; }
@@ -1252,49 +1320,14 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
 .btn--danger { color: #ffbecb; }
 .btn--danger:hover { background: rgba(255, 90, 120, .18); }
 
-/* ── Reason pill: the signature of this app ─────────────────────────────── */
-
-.reason-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  max-width: 100%;
-  padding: 3px 9px;
-  border-radius: 99px;
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: .01em;
-  color: #e3d2ff;
-  background: rgba(139, 92, 246, .16);
-  border: 1px solid rgba(139, 92, 246, .3);
-  overflow: hidden;
-}
-.reason-pill::before {
-  content: '';
-  width: 5px; height: 5px;
-  border-radius: 50%;
-  background: var(--brand);
-  flex: none;
-}
-/* The label needs its own block box: text-overflow does not apply to the
-   anonymous flex item that a bare text node would produce. */
-.reason-pill > span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.reason-pill--lg { padding: 6px 14px; font-size: 12px; }
-
 /* ── Track list ─────────────────────────────────────────────────────────── */
 
 .tracks { display: flex; flex-direction: column; }
 
-/* Six columns for six cells: index, title, album, why, time, actions. Miss one
-   and the actions cell wraps to an implicit second row, doubling row height. */
+/* Five columns: index, title, album, time and actions. */
 .tracks__head, .track {
   grid-template-columns:
-    34px minmax(0, 2.9fr) minmax(0, 1.8fr) minmax(0, 2fr) 56px 76px;
+    34px minmax(0, 3fr) minmax(0, 1.9fr) 56px 76px;
 }
 
 .tracks__head {
@@ -1310,7 +1343,7 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
   text-transform: uppercase;
   color: var(--text-faint);
 }
-.tracks__head span:nth-child(5) { text-align: right; }
+.tracks__head span:nth-child(4) { text-align: right; }
 
 .track {
   display: grid;
@@ -1366,7 +1399,6 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
   color: var(--text-dim);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.track__reason { min-width: 0; }
 .track__dur {
   text-align: right;
   font-size: 12.5px;
@@ -1663,7 +1695,6 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
   gap: 7px;
   min-width: 0;
 }
-.player__extras .reason-pill { max-width: 190px; }
 
 /* Class based, so the overlay's repeat button behaves too. Keyed off the id, it
    rendered both the repeat-all and repeat-one glyphs on top of each other. */
@@ -1873,28 +1904,6 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
 .lyrics { white-space: pre-wrap; font-size: 15px; line-height: 1.85; color: var(--text-dim); }
 .lyrics__copy { margin-top: 20px; font-size: 11px; color: var(--text-faint); }
 
-.why { display: flex; flex-direction: column; gap: 14px; }
-.why__reason { font-size: 15px; font-weight: 700; letter-spacing: -.2px; }
-.why__note { font-size: 12.5px; color: var(--text-faint); }
-.why__bars { display: flex; flex-direction: column; gap: 10px; }
-.why__bar { display: grid; grid-template-columns: 92px 1fr 40px; gap: 10px; align-items: center; }
-.why__bar span { font-size: 11.5px; color: var(--text-dim); text-transform: capitalize; }
-.why__bar b { font-size: 11px; color: var(--text-faint); text-align: right; font-variant-numeric: tabular-nums; }
-.why__track {
-  height: 6px;
-  border-radius: 99px;
-  background: rgba(255, 255, 255, .1);
-  overflow: hidden;
-}
-.why__track i {
-  display: block;
-  height: 100%;
-  border-radius: 99px;
-  background: var(--brand);
-  transition: width var(--slow);
-}
-.why__sources { display: flex; flex-wrap: wrap; gap: 7px; }
-
 /* ── Queue drawer ───────────────────────────────────────────────────────── */
 
 .drawer {
@@ -2091,10 +2100,6 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
 @keyframes toast-out {
   to { opacity: 0; transform: translateY(10px) scale(.97); }
 }
-
-/* ── Mobile tab bar ─────────────────────────────────────────────────────── */
-
-.tabbar { display: none; }
 
 /* ── Taste profile view ─────────────────────────────────────────────────── */
 
@@ -2414,13 +2419,12 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
 }
 
 @media (max-width: 900px) {
-  /* Drop album and why, but keep a visible actions cell. Hiding it entirely
+  /* Drop album, but keep a visible actions cell. Hiding it entirely
      made the per track menu unreachable on a touch screen, where there is no
      hover to reveal it, so liking and removing a track became impossible. */
   .tracks__head, .track { grid-template-columns: 28px minmax(0, 1fr) 50px 34px; }
   .tracks__head span:nth-child(3),
-  .tracks__head span:nth-child(4),
-  .track__album, .track__reason { display: none; }
+  .track__album { display: none; }
   .track { gap: 10px; padding: 8px 8px; }
   .track__actions { opacity: 1; gap: 0; }
   /* The menu holds like, remove and add to playlist, so the standalone
@@ -2439,7 +2443,7 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
 }
 
 @media (max-width: 760px) {
-  :root { --player-h: 138px; }
+  :root { --player-h: calc(74px + env(safe-area-inset-bottom)); }
 
   body { overflow: hidden; }
   .shell {
@@ -2469,6 +2473,8 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
   .topbar__brand img { display: block; }
   .topbar__brand span { display: none; }
   .topbar__right { gap: 6px; }
+  .mobile-nav-toggle { display: grid; }
+  .mobile-menu { display: block; }
   .badge-pro { display: none; }
   .search-field { height: 40px; padding: 0 11px; }
   .search-field input { font-size: 14px; }
@@ -2502,6 +2508,16 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
   .hero__stat { flex: none; padding: 9px 12px; }
   .hero__stat strong { font-size: 15px; }
 
+  .library-hero {
+    grid-template-columns: 1fr auto;
+    gap: 16px;
+    margin: 12px 0 24px;
+    padding: 22px 18px;
+  }
+  .library-hero p { font-size: 12.5px; }
+  .library-hero__meta { grid-column: 1 / -1; }
+  .library-hero .btn { grid-column: 2; grid-row: 1; }
+
   .detail {
     flex-direction: column;
     align-items: flex-start;
@@ -2524,14 +2540,14 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
 
   .player {
     left: 0; right: 0;
-    bottom: 62px;
-    height: 74px;
+    bottom: 0;
+    height: var(--player-h);
     border-radius: var(--r-md) var(--r-md) 0 0;
     border-bottom: 0;
     background: #0d0d14;
     box-shadow: 0 -14px 32px rgba(0, 0, 0, .38);
   }
-  .player__body { grid-template-columns: minmax(0, 1fr) auto; gap: 10px; padding: 0 12px; }
+  .player__body { grid-template-columns: minmax(0, 1fr) auto; gap: 10px; padding: 0 12px env(safe-area-inset-bottom); }
   .player__controls { flex-direction: row; gap: 2px; }
   .player__times, .player__extras, #shuffleBtn, #repeatBtn { display: none; }
   .player__art { width: 46px; height: 46px; }
@@ -2562,7 +2578,6 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
   .np__info { text-align: center; }
   .np__info h1 { font-size: 22px; letter-spacing: -.6px; }
   .np__info p { font-size: 14px; }
-  .np__info .reason-pill { margin: 0 auto; }
   .np__transport { max-width: none; gap: 14px; }
   .np__buttons { max-width: none; justify-content: space-between; }
   .np__aux { justify-content: center; }
@@ -2575,32 +2590,6 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
   .np__tabs { padding: 8px 8px 0; }
   .np__tab { flex: 1; padding: 10px 6px; font-size: 12.5px; }
 
-  .tabbar {
-    position: fixed;
-    z-index: 65;
-    left: 0; right: 0; bottom: 0;
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    height: 62px;
-    padding-bottom: env(safe-area-inset-bottom);
-    background: rgba(10, 9, 15, .94);
-    border-top: 1px solid var(--line);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
-  }
-  .tabbar a {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 3px;
-    font-size: 10.5px;
-    font-weight: 600;
-    color: var(--text-faint);
-    transition: color var(--fast);
-  }
-  .tabbar a svg { width: 21px; height: 21px; }
-  .tabbar a.is-active { color: var(--text); }
   .toasts { bottom: calc(var(--player-h) + 12px); }
 }
 
