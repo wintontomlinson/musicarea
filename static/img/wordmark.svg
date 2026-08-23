@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 232 48" width="232" height="48" role="img" aria-label="MusicArea">
+  <defs>
+    <linearGradient id="wm-shell" x1="4" y1="4" x2="44" y2="44" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#8B5CF6"/>
+      <stop offset="0.52" stop-color="#D946A6"/>
+      <stop offset="1" stop-color="#FF7A45"/>
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(2 2) scale(0.6875)">
+    <path fill="url(#wm-shell)"
+          d="M32 2c11.4 0 17.6 0 22.2 4.1C58.7 10.2 62 16.4 62 32s-3.3 21.8-7.8 25.9C49.6 62 43.4 62 32 62s-17.6 0-22.2-4.1C5.3 53.8 2 47.6 2 32S5.3 10.2 9.8 6.1C14.4 2 20.6 2 32 2Z"/>
+    <g fill="#0B0710" fill-opacity="0.92">
+      <rect x="14"   y="18" width="5.6" height="28" rx="2.8"/>
+      <rect x="22.8" y="26" width="5.6" height="20" rx="2.8"/>
+      <rect x="31.6" y="32" width="5.6" height="14" rx="2.8"/>
+      <rect x="40.4" y="26" width="5.6" height="20" rx="2.8"/>
+      <rect x="49.2" y="18" width="5.6" height="28" rx="2.8"/>
+    </g>
+  </g>
+
+  <text x="56" y="31.5" font-family="'Plus Jakarta Sans','Segoe UI',system-ui,sans-serif"
+        font-size="21" font-weight="700" letter-spacing="-0.4" fill="#F4F2FA">Music<tspan fill="#C7A6FF">Area</tspan></text>
+</svg>

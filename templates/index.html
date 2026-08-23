@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MusicArea · Music that learns what you love</title>
+<meta name="description" content="MusicArea is a premium music player with an algorithmic feed that explains every recommendation it makes.">
+<meta name="theme-color" content="#07070b">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://c.saavncdn.com" crossorigin>
+<link rel="preconnect" href="https://aac.saavncdn.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body>
+
+<!-- Ambient colour wash, re-tinted from whatever is playing -->
+<div class="ambient" id="ambient" aria-hidden="true">
+  <span class="ambient__blob ambient__blob--a"></span>
+  <span class="ambient__blob ambient__blob--b"></span>
+  <span class="ambient__blob ambient__blob--c"></span>
+</div>
+
+<div class="shell">
+
+  <!-- ─── Sidebar ─────────────────────────────────────────────────────── -->
+  <aside class="sidebar" id="sidebar">
+    <a class="brand" href="#/home" aria-label="MusicArea home">
+      <img class="brand__mark" src="{{ url_for('static', filename='img/logo.svg') }}" alt="" width="38" height="38">
+      <span class="brand__text">Music<em>Area</em></span>
+    </a>
+
+    <nav class="nav" aria-label="Primary">
+      <a class="nav__item" href="#/home" data-route="home">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-4.5v-6h-5v6H5a1 1 0 0 1-1-1z"/></svg>
+        <span>Home</span>
+      </a>
+      <a class="nav__item" href="#/search" data-route="search">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 3a7.5 7.5 0 1 0 4.55 13.46l4.24 4.25 1.42-1.42-4.25-4.24A7.5 7.5 0 0 0 10.5 3m0 2a5.5 5.5 0 1 1 0 11 5.5 5.5 0 0 1 0-11"/></svg>
+        <span>Search</span>
+      </a>
+      <a class="nav__item" href="#/browse" data-route="browse">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18m0 2a7 7 0 1 1 0 14 7 7 0 0 1 0-14m3.4 3.6-2.2 5.2-5.2 2.2 2.2-5.2z"/></svg>
+        <span>Browse</span>
+      </a>
+      <a class="nav__item" href="#/library" data-route="library">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h3v16H4zm5 0h3v16H9zm6.2.6 2.9-.8 4 15.4-2.9.8z"/></svg>
+        <span>Library</span>
+      </a>
+    </nav>
+
+    <div class="sidebar__block">
+      <div class="sidebar__heading">
+        <span>Your music</span>
+        <button class="icon-btn icon-btn--tiny" id="newPlaylistBtn" title="New playlist" aria-label="New playlist">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></svg>
+        </button>
+      </div>
+      <a class="shelf-link" href="#/liked">
+        <span class="shelf-link__art shelf-link__art--liked">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.7 4.6 13.6a4.9 4.9 0 0 1 7-6.9l.4.4.4-.4a4.9 4.9 0 0 1 7 6.9z"/></svg>
+        </span>
+        <span class="shelf-link__meta">
+          <strong>Liked songs</strong>
+          <small id="likedCount">0 songs</small>
+        </span>
+      </a>
+      <a class="shelf-link" href="#/recent">
+        <span class="shelf-link__art shelf-link__art--recent">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9h-2a7 7 0 1 1-7-7v4l5-4-5-4z"/></svg>
+        </span>
+        <span class="shelf-link__meta">
+          <strong>Recently played</strong>
+          <small id="recentCount">0 songs</small>
+        </span>
+      </a>
+      <div id="playlistList" class="playlist-list"></div>
+    </div>
+
+    <div class="sidebar__foot">
+      <a class="taste-card" href="#/taste" id="tasteCard">
+        <span class="taste-card__title">Your taste profile</span>
+        <span class="taste-card__bar"><i id="tasteBar" style="width:0%"></i></span>
+        <span class="taste-card__hint" id="tasteHint">Listening to learn</span>
+      </a>
+    </div>
+  </aside>
+
+  <!-- ─── Main ────────────────────────────────────────────────────────── -->
+  <main class="main" id="main">
+    <header class="topbar" id="topbar">
+      <div class="topbar__nav">
+        <button class="icon-btn" id="backBtn" title="Back" aria-label="Back">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.4 4.6 8 12l7.4 7.4 1.4-1.4L10.8 12l6-6z"/></svg>
+        </button>
+        <button class="icon-btn" id="fwdBtn" title="Forward" aria-label="Forward">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.6 4.6 16 12l-7.4 7.4-1.4-1.4L13.2 12l-6-6z"/></svg>
+        </button>
+      </div>
+
+      <form class="search-field" id="searchForm" role="search" autocomplete="off">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 3a7.5 7.5 0 1 0 4.55 13.46l4.24 4.25 1.42-1.42-4.25-4.24A7.5 7.5 0 0 0 10.5 3m0 2a5.5 5.5 0 1 1 0 11 5.5 5.5 0 0 1 0-11"/></svg>
+        <input id="searchInput" type="search" placeholder="Songs, artists, albums, playlists" aria-label="Search">
+        <button type="button" class="search-field__clear" id="searchClear" aria-label="Clear search" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.3 5.7 12 12l6.3 6.3-1.4 1.4L10.6 13.4 5.7 18.3 4.3 16.9 10.6 10.6 4.3 4.3 5.7 2.9 12 9.2l4.9-4.9z"/></svg>
+        </button>
+        <div class="suggest" id="suggest" hidden></div>
+      </form>
+
+      <div class="topbar__right">
+        <span class="badge-pro" title="Every recommendation on this app is explainable">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 9.2 8.6 2 9.3l5.4 4.8L5.8 21 12 17.3 18.2 21l-1.6-6.9L22 9.3l-7.2-.7z"/></svg>
+          Algorithmic
+        </span>
+      </div>
+    </header>
+
+    <div class="view" id="view" tabindex="-1"></div>
+  </main>
+</div>
+
+<!-- ─── Player bar ─────────────────────────────────────────────────────── -->
+<footer class="player" id="player" data-state="idle">
+  <div class="player__progress" id="scrubber" role="slider" aria-label="Seek"
+       aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
+    <div class="player__progress-fill" id="progressFill"></div>
+    <div class="player__progress-knob" id="progressKnob"></div>
+  </div>
+
+  <div class="player__body">
+    <div class="player__now">
+      <button class="player__art" id="playerArt" aria-label="Open now playing">
+        <img id="playerImg" alt="" width="56" height="56">
+        <span class="player__art-expand">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 14h2v4h4v2H4zm10-10h6v6h-2V6h-4z"/></svg>
+        </span>
+      </button>
+      <div class="player__meta">
+        <a class="player__title" id="playerTitle" href="#/home">Nothing playing</a>
+        <span class="player__artist" id="playerArtist">Pick a track and the feed starts learning</span>
+      </div>
+      <button class="icon-btn icon-btn--like" id="likeBtn" title="Like" aria-label="Like" aria-pressed="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.7 4.6 13.6a4.9 4.9 0 0 1 7-6.9l.4.4.4-.4a4.9 4.9 0 0 1 7 6.9z"/></svg>
+      </button>
+    </div>
+
+    <div class="player__controls">
+      <div class="player__buttons">
+        <button class="icon-btn" id="shuffleBtn" title="Shuffle" aria-label="Shuffle" aria-pressed="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 3h5v5h-2V6.4l-4.3 4.3-1.4-1.4L17.6 5H16zm-9.3 2.3 4 4-1.4 1.4-4-4zM19 15.6V14h2v5h-5v-2h1.6l-4.3-4.3 1.4-1.4zM8.7 13.3l1.4 1.4-4.4 4.4-1.4-1.4z"/></svg>
+        </button>
+        <button class="icon-btn" id="prevBtn" title="Previous" aria-label="Previous">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 6h2v12H7zm3.5 6L19 6v12z"/></svg>
+        </button>
+        <button class="play-btn" id="playBtn" title="Play" aria-label="Play">
+          <svg class="play-btn__play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.2 19 12 8 18.8z"/></svg>
+          <svg class="play-btn__pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3.5v14H7zm6.5 0H17v14h-3.5z"/></svg>
+          <span class="play-btn__spinner" aria-hidden="true"></span>
+        </button>
+        <button class="icon-btn" id="nextBtn" title="Next" aria-label="Next">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6h2v12h-2zM5 6l8.5 6L5 18z"/></svg>
+        </button>
+        <button class="icon-btn" id="repeatBtn" title="Repeat" aria-label="Repeat" data-mode="off">
+          <svg class="repeat-all" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h9v2.5l4-3.5-4-3.5V5H5v7h2zm10 10H8v-2.5l-4 3.5 4 3.5V19h11v-7h-2z"/></svg>
+          <svg class="repeat-one" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h9v2.5l4-3.5-4-3.5V5H5v7h2zm10 10H8v-2.5l-4 3.5 4 3.5V19h11v-7h-2zm-4.6-6.2h1.4v4.4h-1.3v-3.2l-1 .3-.3-1z"/></svg>
+        </button>
+      </div>
+      <div class="player__times">
+        <span id="timeNow">0:00</span>
+        <span class="player__times-sep">/</span>
+        <span id="timeTotal">0:00</span>
+      </div>
+    </div>
+
+    <div class="player__extras">
+      <span class="reason-pill" id="reasonPill" hidden><span></span></span>
+      <button class="icon-btn" id="lyricsBtn" title="Lyrics" aria-label="Lyrics">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v2H4zm0 4h11v2H4zm0 4h16v2H4zm0 4h11v2H4z"/></svg>
+      </button>
+      <button class="icon-btn" id="queueBtn" title="Queue" aria-label="Queue">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h11v2H4zm0 4h11v2H4zm0 4h7v2H4zm13-6 4 3-4 3z"/></svg>
+      </button>
+      <div class="volume">
+        <button class="icon-btn" id="muteBtn" title="Mute" aria-label="Mute">
+          <svg class="vol-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h3l4-4v14l-4-4H4zm11.5-1.3a5 5 0 0 1 0 8.6v-2A3 3 0 0 0 15.5 10zM17 4.4a8.5 8.5 0 0 1 0 15.2v-2a6.5 6.5 0 0 0 0-11.2z"/></svg>
+          <svg class="vol-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h3l4-4v14l-4-4H4zm11 1.4 1.4-1.4L18.8 11l1.8-1.9 1.4 1.4-1.8 1.9 1.8 1.8-1.4 1.4-1.8-1.8-1.8 1.8-1.4-1.4 1.8-1.8z"/></svg>
+        </button>
+        <input id="volume" class="volume__slider" type="range" min="0" max="100" value="85" aria-label="Volume">
+      </div>
+      <button class="icon-btn" id="quality" title="Streaming quality" aria-label="Streaming quality">
+        <span class="quality-tag" id="qualityTag">320</span>
+      </button>
+    </div>
+  </div>
+</footer>
+
+<!-- ─── Now playing (full screen) ──────────────────────────────────────── -->
+<section class="np" id="np" hidden aria-label="Now playing">
+  <div class="np__backdrop" id="npBackdrop"></div>
+  <button class="icon-btn np__close" id="npClose" aria-label="Close now playing">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.4 6 6 7.4 10.6 12 6 16.6 7.4 18 12 13.4 16.6 18 18 16.6 13.4 12 18 7.4 16.6 6 12 10.6z"/></svg>
+  </button>
+  <div class="np__grid">
+    <div class="np__left">
+      <div class="np__art"><img id="npImg" alt=""></div>
+      <div class="np__info">
+        <h1 id="npTitle">Nothing playing</h1>
+        <p id="npArtist"></p>
+        <span class="reason-pill reason-pill--lg" id="npReason" hidden><span></span></span>
+      </div>
+      <div class="np__viz" id="npViz" aria-hidden="true"></div>
+    </div>
+    <div class="np__right">
+      <div class="np__tabs" role="tablist">
+        <button class="np__tab is-active" data-tab="queue" role="tab" aria-selected="true">Queue</button>
+        <button class="np__tab" data-tab="lyrics" role="tab" aria-selected="false">Lyrics</button>
+        <button class="np__tab" data-tab="why" role="tab" aria-selected="false">Why this</button>
+      </div>
+      <div class="np__panel" id="npPanel"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── Queue drawer ───────────────────────────────────────────────────── -->
+<aside class="drawer" id="queueDrawer" hidden aria-label="Play queue">
+  <header class="drawer__head">
+    <h2>Queue</h2>
+    <div class="drawer__head-actions">
+      <button class="text-btn" id="clearQueue">Clear</button>
+      <button class="icon-btn" id="closeQueue" aria-label="Close queue">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.4 6 6 7.4 10.6 12 6 16.6 7.4 18 12 13.4 16.6 18 18 16.6 13.4 12 18 7.4 16.6 6 12 10.6z"/></svg>
+      </button>
+    </div>
+  </header>
+  <div class="drawer__body" id="queueBody"></div>
+</aside>
+
+<!-- ─── Mobile tab bar ─────────────────────────────────────────────────── -->
+<nav class="tabbar" aria-label="Primary mobile">
+  <a href="#/home" data-route="home">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-4.5v-6h-5v6H5a1 1 0 0 1-1-1z"/></svg>
+    <span>Home</span>
+  </a>
+  <a href="#/search" data-route="search">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 3a7.5 7.5 0 1 0 4.55 13.46l4.24 4.25 1.42-1.42-4.25-4.24A7.5 7.5 0 0 0 10.5 3m0 2a5.5 5.5 0 1 1 0 11 5.5 5.5 0 0 1 0-11"/></svg>
+    <span>Search</span>
+  </a>
+  <a href="#/browse" data-route="browse">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18m0 2a7 7 0 1 1 0 14 7 7 0 0 1 0-14m3.4 3.6-2.2 5.2-5.2 2.2 2.2-5.2z"/></svg>
+    <span>Browse</span>
+  </a>
+  <a href="#/library" data-route="library">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h3v16H4zm5 0h3v16H9zm6.2.6 2.9-.8 4 15.4-2.9.8z"/></svg>
+    <span>Library</span>
+  </a>
+</nav>
+
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<div class="ctx-menu" id="ctxMenu" hidden></div>
+<audio id="audio" preload="metadata" crossorigin="anonymous"></audio>
+
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
