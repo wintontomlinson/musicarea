@@ -189,6 +189,7 @@
 
   const MAX_HISTORY = 400;
   const MAX_RECENT = 60;
+  const PLAYBACK_KEY = 'ma.playback.v1';
 
   function read(key, fallback) {
     try {
@@ -199,6 +200,17 @@
 
   function write(key, value) {
     try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* quota */ }
+  }
+
+  function readSession(key, fallback) {
+    try {
+      const raw = sessionStorage.getItem(key);
+      return raw ? JSON.parse(raw) : fallback;
+    } catch { return fallback; }
+  }
+
+  function writeSession(key, value) {
+    try { sessionStorage.setItem(key, JSON.stringify(value)); } catch { /* unavailable */ }
   }
 
   const Store = {
@@ -794,6 +806,9 @@
     handoffTimer: 0,
     streamRecovery: null,
     streamRecoveryGeneration: 0,
+    backgrounded: document.hidden,
+    checkpointAt: 0,
+    contextLabel: '',
 
     fadeRaf: 0,
     fading: false,
@@ -831,6 +846,115 @@
       });
     },
 
+    /** Save the current track and its next 99 queue positions for this session. */
+    checkpoint() {
+      if (!this.current || this.pos < 0 || !this.queue.length || !this.order.length) return;
+      const windowStart = Math.max(0, this.pos - 20);
+      const windowOrder = this.order.slice(windowStart, windowStart + 100);
+      const queueIndexMap = new Map();
+      const queue = [];
+      windowOrder.forEach((queueIndex) => {
+        if (!Number.isInteger(queueIndex) || queueIndex < 0 || queueIndex >= this.queue.length) return;
+        if (!queueIndexMap.has(queueIndex)) {
+          queueIndexMap.set(queueIndex, queue.length);
+          queue.push(Store.slim(this.queue[queueIndex]));
+        }
+      });
+      const order = windowOrder.map((queueIndex) => queueIndexMap.get(queueIndex)).filter(Number.isInteger);
+      const pos = this.pos - windowStart;
+      if (!queue.length || !order.length || pos < 0 || pos >= order.length) return;
+      writeSession(PLAYBACK_KEY, {
+        queue,
+        order,
+        pos,
+        currentId: this.current.id,
+        currentTime: Number.isFinite(audio.currentTime) ? Math.max(0, audio.currentTime) : 0,
+        wasPlaying: !audio.paused && !audio.ended,
+        contextLabel: this.contextLabel || '',
+      });
+      this.checkpointAt = Date.now();
+    },
+
+    /** Restore a reload-safe queue. Browser policy may still require a tap to resume audio. */
+    async restoreCheckpoint() {
+      const saved = readSession(PLAYBACK_KEY, null);
+      if (!saved || !Array.isArray(saved.queue) || !Array.isArray(saved.order)) return;
+      const savedPos = Number(saved.pos);
+      const savedQueueIndex = Number.isInteger(savedPos) ? saved.order[savedPos] : null;
+      const currentId = typeof saved.currentId === 'string'
+        ? saved.currentId
+        : saved.queue[savedQueueIndex]?.id;
+      if (!currentId) return;
+      const request = ++this.playRequest;
+      const resolved = await ensurePlayable(saved.queue.slice(0, 100));
+      if (request !== this.playRequest) return;
+      const playable = resolved.filter((song) => song?.id && song.downloadUrl?.length);
+      const indexById = new Map(playable.map((song, index) => [song.id, index]));
+      if (!indexById.has(currentId)) return;
+      const originalIds = saved.queue.map((song) => song?.id);
+      const order = [];
+      let pos = -1;
+      saved.order.forEach((index, savedOrderPos) => {
+        const playableIndex = indexById.get(originalIds[index]);
+        if (!Number.isInteger(playableIndex)) return;
+        if (savedOrderPos === savedPos) pos = order.length;
+        order.push(playableIndex);
+      });
+      if (pos < 0 || !order.length || playable[order[pos]]?.id !== currentId) return;
+      this.queue = playable;
+      this.order = order;
+      this.contextLabel = typeof saved.contextLabel === 'string' ? saved.contextLabel.slice(0, 120) : '';
+      await this.load(pos, false);
+      const restorePosition = () => {
+        audio.removeEventListener('loadedmetadata', restorePosition);
+        try { audio.currentTime = clamp(Number(saved.currentTime) || 0, 0, Math.max(0, (audio.duration || Infinity) - 0.25)); } catch { /* stream is not seekable */ }
+        updateMediaSessionPosition();
+        if (saved.wasPlaying) this.resume();
+      };
+      audio.addEventListener('loadedmetadata', restorePosition, { once: true });
+      if (audio.readyState >= 1) restorePosition();
+      renderQueue();
+    },
+
+    /** Stop rAF-dependent transitions while preserving the active audio element. */
+    settleForBackground() {
+      this.cancelHandoff();
+      this.cancelStreamRecovery();
+      cancelAnimationFrame(this.fadeRaf);
+      this.fadeRaf = 0;
+      this.fading = false;
+      const idle = idleDeck();
+      idle.pause();
+      idle.removeAttribute('src');
+      idle.dataset.readyFor = '';
+      idle.dataset.readyUrl = '';
+      idle.dataset.retiring = '';
+      try { idle.load(); } catch { /* nothing to abort */ }
+      audio.dataset.retiring = '';
+      audio.volume = gain();
+    },
+
+    setBackgrounded(hidden) {
+      this.backgrounded = hidden;
+      if (hidden) {
+        this.settleForBackground();
+        this.checkpoint();
+      } else {
+        updateMediaSessionPosition();
+      }
+    },
+
+    resume() {
+      if (!this.current) return this.toggle();
+      return audio.play().catch(() => setPlayerState('paused'));
+    },
+
+    pause() {
+      if (!this.current) return;
+      audio.pause();
+      this.checkpoint();
+    },
+
     /* ---- Crossfade ------------------------------------------------------ */
 
     /** Equal power fade. sin/cos keeps perceived loudness flat across the blend,
@@ -866,7 +990,7 @@
      *  It also removes the gap between tracks when crossfade is switched off.
      */
     preloadNext() {
-      if (this.fading) return;                 // idle deck is the retiring one
+      if (this.fading || this.backgrounded) return;
       const nextPos = this.pos + 1;
       if (nextPos >= this.order.length) return;
       const song = this.queue[this.order[nextPos]];
@@ -904,6 +1028,7 @@
 
     /** Start `orderPos` on the idle deck and blend the two over `seconds`. */
     async crossfadeTo(orderPos, seconds) {
+      if (this.backgrounded) return this.load(orderPos);
       if (this.fading || this.crossfadeStarting) return false;
       if (orderPos < 0 || orderPos >= this.order.length) return false;
       const song = this.queue[this.order[orderPos]];
@@ -1128,6 +1253,7 @@
       // Buffer whatever comes next straight away. This is what removes the gap
       // between tracks when crossfade is switched off.
       this.preloadNext();
+      this.checkpoint();
     },
 
     toggle() {
@@ -1137,8 +1263,8 @@
         if (first?.songs?.length) this.play(first.songs, 0, { label: first.label });
         return;
       }
-      if (audio.paused) audio.play().catch(() => setPlayerState('paused'));
-      else audio.pause();
+      if (audio.paused) this.resume();
+      else this.pause();
     },
 
     next(userInitiated = false) {
@@ -1152,6 +1278,9 @@
       }
       const nextPos = this.pos + 1;
       if (nextPos < this.order.length) {
+        // Background tabs can throttle animation frames. A direct handoff keeps
+        // playback progressing when an ended event fires while hidden.
+        if (this.backgrounded) return this.load(nextPos);
         // An explicit skip always wins over an in-flight automatic handoff.
         // load() invalidates the transition token, silences the other deck,
         // and prevents a late incoming play promise from reclaiming the UI.
@@ -1271,6 +1400,8 @@
       this.playedRatio = ratio;
       if (!this.seeking) paintProgress(ratio);
       $$('.js-now').forEach((el) => { el.textContent = fmtTime(audio.currentTime); });
+      updateMediaSessionPosition();
+      if (Date.now() - this.checkpointAt >= 5000) this.checkpoint();
 
       // A play only counts once we are past the intro.
       if (!this.loggedPlay && audio.currentTime > 12) {
@@ -1284,7 +1415,7 @@
 
       // Get the next track buffered well before it is needed, so the blend
       // starts from audio that is already in memory.
-      if (!this.fading && remaining <= seconds + 15) this.preloadNext();
+      if (!this.backgrounded && !this.fading && remaining <= seconds + 15) this.preloadNext();
 
       // Start a fraction early. `audio.play()` can wait for the incoming deck's
       // final buffer frame, and starting at the exact boundary made short or
@@ -1295,7 +1426,7 @@
       const nextUrl = nextSong ? pickStream(nextSong, Store.prefs.quality).url : '';
       const incomingReady = nextSong && idleDeck().dataset.readyFor === nextSong.id
         && idleDeck().dataset.readyUrl === nextUrl && idleDeck().readyState >= 2;
-      if (seconds > 0 && !this.fading && !this.crossfadeStarting && incomingReady
+      if (seconds > 0 && !this.backgrounded && !this.fading && !this.crossfadeStarting && incomingReady
           && Store.prefs.repeat !== 'one' && this.pos + 1 < this.order.length) {
         if (remaining <= seconds + earlyStart && remaining > 0.2) {
           const fade = Math.min(seconds, Math.max(0.35, remaining - 0.15));
@@ -1463,6 +1594,19 @@
     if (!$('#np').hidden) renderNpPanel();
   }
 
+  function updateMediaSessionPosition() {
+    if (!('mediaSession' in navigator) || !Player.current) return;
+    const duration = audio.duration || Player.current.duration || 0;
+    if (!Number.isFinite(duration) || duration <= 0) return;
+    try {
+      navigator.mediaSession.setPositionState({
+        duration,
+        playbackRate: audio.playbackRate || 1,
+        position: clamp(audio.currentTime || 0, 0, duration),
+      });
+    } catch { /* unsupported browser or non-seekable stream */ }
+  }
+
   function updateMediaSession(song) {
     if (!('mediaSession' in navigator)) return;
     try {
@@ -1476,11 +1620,20 @@
           type: 'image/jpeg',
         })),
       });
-      navigator.mediaSession.setActionHandler('play', () => Player.toggle());
-      navigator.mediaSession.setActionHandler('pause', () => Player.toggle());
+      navigator.mediaSession.setActionHandler('play', () => Player.resume());
+      navigator.mediaSession.setActionHandler('pause', () => Player.pause());
       navigator.mediaSession.setActionHandler('previoustrack', () => Player.prev());
       navigator.mediaSession.setActionHandler('nexttrack', () => Player.next(true));
-    } catch { /* unsupported */ }
+      navigator.mediaSession.setActionHandler('seekbackward', (details) => Player.seekBy(-(details.seekOffset || 10)));
+      navigator.mediaSession.setActionHandler('seekforward', (details) => Player.seekBy(details.seekOffset || 10));
+      navigator.mediaSession.setActionHandler('seekto', (details) => {
+        const duration = audio.duration || Player.current?.duration || 0;
+        if (!duration || !Number.isFinite(details.seekTime)) return;
+        audio.currentTime = clamp(details.seekTime, 0, duration);
+        updateMediaSessionPosition();
+      });
+      updateMediaSessionPosition();
+    } catch { /* unsupported action */ }
   }
 
   function markCurrentRows() {
@@ -1650,6 +1803,7 @@
     },
 
     start() {
+      if (document.hidden) return;
       this.ensure();
       if (!this.analyser) return;
       if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
@@ -3719,6 +3873,22 @@
 
     window.addEventListener('hashchange', route);
 
+    /* --- page lifecycle ------------------------------------------------ */
+    document.addEventListener('visibilitychange', () => {
+      const hidden = document.hidden;
+      Player.setBackgrounded(hidden);
+      if (hidden) {
+        Viz.stop();
+      } else if (!$('#np').hidden && Store.prefs.visualizer) {
+        Viz.start();
+      }
+    });
+    window.addEventListener('pagehide', () => Player.checkpoint());
+    window.addEventListener('pageshow', () => {
+      Player.setBackgrounded(document.hidden);
+      if (!document.hidden && !$('#np').hidden && Store.prefs.visualizer) Viz.start();
+    });
+
     /* --- connectivity ------------------------------------------------- */
     const showOffline = () => {
       if ($('#offlineBanner')) return;
@@ -3829,6 +3999,7 @@
 
   installArtworkFallbacks();
   Player.init();
+  Player.restoreCheckpoint();
   wire();
   renderSidebarCounts();
   renderPlaylistList();
