@@ -2444,6 +2444,7 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
   body { overflow: auto; }
   .shell {
     grid-template-columns: minmax(0, 1fr);
+    margin-bottom: calc(var(--player-h) + 30px);
     padding: 0;
     gap: 0;
     height: auto;
