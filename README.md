@@ -120,6 +120,38 @@ caps of two per artist and two per album, and reserves every fifth slot for an
 artist you have no history with. Alternate cuts of a composition are collapsed
 before ranking so the same song never appears twice.
 
+## Home
+
+Home carries personal shelves and one row of what is popular. It previously
+appended every browse row as well, which came to eleven shelves and 5.2 screens
+of scrolling, with **six of the eleven identical to what Browse already showed**.
+
+| | before | after |
+| --- | --- | --- |
+| shelves | 11 | 8 |
+| screens of scrolling | 5.2 | 3.1 |
+| images | 214 | 125 |
+| rows duplicated from Browse | 6 | 1 (Trending, with a Show all link) |
+
+A returning listener gets a greeting bar and a **Jump back in** grid, which is
+what every major player leads with and the main thing missing here. The full
+explainer hero is kept for a first visit, where describing the app is the useful
+thing to do, along with the moods so there is something to dig into.
+
+Shelves longer than five items get scroll arrows on pointer devices.
+
+### Stored songs lost their artists
+
+`artistsOf()` only understood the API's role-bucketed shape, but `Store.slim()`
+saves a flat array. Every song read back from storage therefore resolved to no
+credits and rendered as "Unknown artist": the whole library, the recent list and
+the jump-back-in tiles.
+
+It also quietly corrupted the taste profile. `logEvent` re-slims whatever is
+playing, so replaying a stored track wrote a history entry with **no artists at
+all**, and the profile had nothing to rank by. That is why the greeting read
+"Learning on top" while the player bar showed the artists correctly.
+
 ### Replaying from storage
 
 `Store.slim()` deliberately omits `downloadUrl`, because the listening history is
