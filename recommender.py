@@ -80,6 +80,12 @@ WEIGHT_PROFILES = {
         "artist": 0.22, "collab": 0.12, "language": 0.16,
         "era": 0.02, "popularity": 0.08, "freshness": 0.34, "recall": 0.06,
     },
+    # For a mood set, belonging to the mood is already a given for every
+    # candidate, so the ranking is decided by taste fit instead.
+    "mood": {
+        "artist": 0.34, "collab": 0.06, "language": 0.18,
+        "era": 0.12, "popularity": 0.16, "freshness": 0.04, "recall": 0.10,
+    },
 }
 
 # Prior confidence per recall source, used by the "recall" signal.
@@ -95,6 +101,10 @@ SOURCE_PRIOR = {
 }
 
 # Diversity: multiplicative penalty per already selected item sharing a facet.
+# Signals measured from the listener's own history, as opposed to signals that
+# describe the catalog. Only these can justify a personalised explanation.
+PERSONAL_SIGNALS = {"artist", "collab", "language", "era"}
+
 ARTIST_PENALTY = 0.42
 ALBUM_PENALTY = 0.55
 # Language variety is nice, but a listener who only plays one language should
@@ -621,7 +631,10 @@ def _jitter(song_id: str, salt: str) -> float:
 def score_candidates(pool: CandidatePool, profile: dict, salt: str = "",
                      allow_heard: bool = False,
                      exclude: Optional[set] = None,
-                     weights: Optional[Dict[str, float]] = None) -> List[dict]:
+                     weights: Optional[Dict[str, float]] = None,
+                     heard_penalty: float = 0.3) -> List[dict]:
+    """`heard_penalty` scales tracks the listener already knows. Discovery
+    surfaces want them buried; a mood set wants your favourites included."""
     weights = weights or WEIGHTS
     exclude = exclude or set()
     max_artist = profile["maxArtistWeight"] or 1.0
@@ -714,7 +727,7 @@ def score_candidates(pool: CandidatePool, profile: dict, salt: str = "",
         if skip_penalty:
             score *= _clamp(1.0 - 0.3 * skip_penalty, 0.25, 1.0)
         if heard:
-            score *= 0.3  # already known: keep it, bury it
+            score *= heard_penalty
         if _is_alternate_version(song):
             score *= 0.6  # lofi flips and remixes sit behind the original
         if song.get("explicitContent"):
@@ -747,7 +760,14 @@ def score_candidates(pool: CandidatePool, profile: dict, salt: str = "",
 # Stage 4: diversity aware re-ranking
 # ---------------------------------------------------------------------------
 
-def _reason(candidate: dict, profile: dict, seed_label: Optional[str] = None) -> str:
+def _reason(candidate: dict, profile: dict, seed_label: Optional[str] = None,
+            mood_first: bool = True, require_personal: bool = False) -> str:
+    """A short explanation of why this track surfaced.
+
+    With `require_personal`, returns an empty string when nothing about the
+    listener explains the pick. A shelf where every row reads "Big with everyone
+    right now" carries no information, so the UI shows play counts there instead.
+    """
     signals = candidate["signals"]
     sources = candidate["sources"]
     song = candidate["song"]
@@ -757,8 +777,10 @@ def _reason(candidate: dict, profile: dict, seed_label: Optional[str] = None) ->
     ranked = sorted(contributions.items(), key=lambda kv: -kv[1])
     top = ranked[0][0]
 
-    # A mood shelf should explain itself as a mood, whatever the maths says.
-    if "mood" in sources and sources["mood"].get("via"):
+    # A mood pick inside a mixed shelf should explain itself as a mood. On a
+    # dedicated mood page every row would say the same thing, so there the
+    # mood label is demoted to a last resort instead.
+    if mood_first and "mood" in sources and sources["mood"].get("via"):
         return f"{sources['mood']['via']} pick for you"
     if seed_label and top in ("artist", "collab"):
         return f"Because you played {seed_label}"
@@ -776,6 +798,11 @@ def _reason(candidate: dict, profile: dict, seed_label: Optional[str] = None) ->
         return f"Because you listen to {candidate['artistVia']}"
     if top == "collab" and sources.get("collab", {}).get("via"):
         return f"Plays well with {sources['collab']['via']}"
+
+    # Popularity, freshness and chart position say nothing about this listener.
+    # Language and era do, since both are measured from their own history.
+    if require_personal and top not in PERSONAL_SIGNALS:
+        return ""
     if top == "freshness" or "fresh" in sources:
         return f"New release in {(song.get('language') or 'music').title()}"
     if "album" in sources and sources["album"].get("via"):
@@ -788,6 +815,10 @@ def _reason(candidate: dict, profile: dict, seed_label: Optional[str] = None) ->
         return f"More {(song.get('language') or 'music').title()} for you"
     if top == "era" and _to_year(song.get("year")):
         return f"From your {_to_year(song.get('year'))} era"
+    if top == "popularity" and song.get("playCount"):
+        return "Big with everyone right now"
+    if "mood" in sources and sources["mood"].get("via"):
+        return f"{sources['mood']['via']} pick for you"
     if candidate["isDiscovery"]:
         return "Fresh discovery"
     return "Picked for you"
@@ -862,12 +893,15 @@ def rerank(scored: List[dict], profile: dict, limit: int = 30,
 
 
 def _present(candidate: dict, profile: dict, rank: int,
-             seed_label: Optional[str] = None) -> dict:
+             seed_label: Optional[str] = None, mood_first: bool = True,
+             require_personal: bool = False) -> dict:
     song = dict(candidate["song"])
     song["recommendation"] = {
         "rank": rank,
         "score": candidate["score"],
-        "reason": _reason(candidate, profile, seed_label=seed_label),
+        "reason": _reason(candidate, profile, seed_label=seed_label,
+                          mood_first=mood_first,
+                          require_personal=require_personal),
         "signals": candidate["signals"],
         "sources": sorted(candidate["sources"].keys()),
         "discovery": candidate["isDiscovery"],
@@ -987,6 +1021,72 @@ def artist_radio(artist_id: str, limit: int = 40) -> dict:
     return {
         "items": [_present(c, profile, i + 1) for i, c in enumerate(picked)],
         "meta": {"candidates": len(pool), "artist": _primary_artist_name(top[0])},
+    }
+
+
+def mood_set(mood_id: str, history: Optional[List[dict]] = None,
+             limit: int = 40) -> dict:
+    """A mood set ordered by how well each track fits the listener.
+
+    Membership in the mood comes from the catalog. This only decides the order,
+    and reports whether it had a profile to order by, so the UI never has to
+    claim personalisation that did not happen.
+    """
+    mood = catalog.MOOD_BY_ID.get(mood_id)
+    if not mood:
+        return {"mood": None, "items": [], "meta": {"error": "unknown mood"}}
+
+    profile = build_profile(history)
+    songs = catalog.mood_pool(
+        mood_id, limit=160,
+        languages=None if profile["coldStart"] else profile["topLanguages"],
+    )
+    if not songs:
+        return {"mood": mood, "items": [], "meta": {"personalised": False, "pool": 0}}
+
+    pool = CandidatePool()
+    pool.add_many(songs, "mood", 0.9, via=mood["name"], decay=0.15)
+
+    if profile["coldStart"]:
+        # Nothing to personalise with. Keep the catalog's own order, which is
+        # roughly popularity, rather than inventing a ranking.
+        items = []
+        for index, song in enumerate(songs[:limit]):  # mood_pool already deduped
+            entry = dict(song)
+            entry["recommendation"] = {
+                "rank": index + 1,
+                "reason": "",  # nothing personal to claim yet
+                "personalised": False,
+            }
+            items.append(entry)
+        return {"mood": mood, "items": items,
+                "meta": {"personalised": False, "pool": len(songs),
+                         "returned": len(items)}}
+
+    scored = score_candidates(
+        pool, profile, salt=mood_id, allow_heard=True,
+        weights=WEIGHT_PROFILES["mood"],
+        # Familiar tracks belong in a mood set, so barely demote them.
+        heard_penalty=0.9,
+    )
+    picked = rerank(scored, profile, limit=limit, max_per_artist=2, explore=False)
+    items = [_present(c, profile, i + 1, mood_first=False, require_personal=True)
+             for i, c in enumerate(picked)]
+    for item in items:
+        item["recommendation"]["personalised"] = True
+
+    return {
+        "mood": mood,
+        "items": items,
+        "meta": {
+            "personalised": True,
+            "pool": len(songs),
+            "returned": len(items),
+            "topArtists": profile["topArtists"][:5],
+            "familiarShare": round(
+                sum(1 for i in items if i["recommendation"]["familiar"]) / max(1, len(items)), 3
+            ),
+        },
     }
 
 

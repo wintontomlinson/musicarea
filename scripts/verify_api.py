@@ -158,11 +158,53 @@ similar, _ = data_of(res)
 check("POST /api/similar", res.status_code == 200 and len(similar["items"]) >= 6,
       f"{len(similar['items'])} items")
 
-print("\n== browse detail ==")
+print("\n== moods ==")
 res, _ = get("/api/moods/party?limit=15")
-mood, _ = data_of(res)
-check("GET /api/moods/party", res.status_code == 200 and len(mood["items"]) >= 10)
+cold_mood, _ = data_of(res)
+check("GET /api/moods/party", res.status_code == 200 and len(cold_mood["items"]) >= 10)
 check("unknown mood is a 404", get("/api/moods/nope")[0].status_code == 404)
+check("a plain GET does not claim personalisation",
+      cold_mood["meta"]["personalised"] is False)
+check("cold mood items carry no personal reason",
+      all(not i["recommendation"]["reason"] for i in cold_mood["items"]))
+
+# The UI states that mood sets are ordered by fit, so prove they actually are.
+res, took = post("/api/moods/party", {"history": history, "limit": 12})
+warm_mood, _ = data_of(res)
+check("POST /api/moods/party personalises", res.status_code == 200
+      and warm_mood["meta"]["personalised"] is True, f"{took:.1f}s")
+check("personalised pool is wider than a single search",
+      warm_mood["meta"]["pool"] > 60, f"pool {warm_mood['meta']['pool']}")
+cold_order = [i["id"] for i in cold_mood["items"]][:10]
+warm_order = [i["id"] for i in warm_mood["items"]][:10]
+check("personalised order differs from the catalogue order", cold_order != warm_order)
+check("mood items are playable", all(i.get("downloadUrl") for i in warm_mood["items"]))
+check("mood reasons are not all one repeated label",
+      len({i["recommendation"]["reason"] for i in warm_mood["items"]}) > 1)
+
+# A second, unrelated profile must produce a materially different set.
+other_seeds = []
+for query in ["kesariya", "tum hi ho", "channa mereya"]:
+    found, _ = data_of(get(f"/api/search/songs?query={query}&limit=1")[0])
+    if found["results"]:
+        other_seeds.append(found["results"][0])
+other_history = [{
+    "id": s["id"], "name": s["name"], "event": "like", "at": now,
+    "language": s["language"], "year": s["year"], "playCount": s["playCount"],
+    "artists": [{"id": a["id"], "name": a["name"]} for a in recommender._song_artists(s)],
+    "album": {"id": s["album"]["id"], "name": s["album"]["name"]},
+} for s in other_seeds]
+other_mood, _ = data_of(post("/api/moods/party", {"history": other_history, "limit": 12})[0])
+other_order = [i["id"] for i in other_mood["items"]][:10]
+overlap = len(set(warm_order) & set(other_order))
+check("two different tastes get materially different mood sets", overlap <= 5,
+      f"{overlap}/10 shared")
+warm_langs = {i["language"] for i in warm_mood["items"]}
+other_langs = {i["language"] for i in other_mood["items"]}
+check("mood pool follows each listener's languages", warm_langs != other_langs,
+      f"{sorted(warm_langs)} vs {sorted(other_langs)}")
+
+print("\n== browse detail ==")
 res, _ = get("/api/trending?language=punjabi")
 check("GET /api/trending", res.status_code == 200 and len(data_of(res)[0]["items"]) > 0)
 res, _ = get("/api/charts")
