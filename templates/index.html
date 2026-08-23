@@ -135,7 +135,7 @@
     <!-- Tapping this whole region opens the full screen player on phones. -->
     <div class="player__now" data-pa="expand">
       <span class="player__art" id="playerArt">
-        <img id="playerImg" alt="" width="56" height="56">
+        <img id="playerImg" src="{{ url_for('static', filename='img/placeholder.svg') }}" alt="" width="56" height="56">
         <span class="player__art-expand">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 14h2v4h4v2H4zm10-10h6v6h-2V6h-4z"/></svg>
         </span>
@@ -219,7 +219,7 @@
 
   <div class="np__grid">
     <div class="np__left">
-      <div class="np__art"><img id="npImg" alt=""></div>
+      <div class="np__art"><img id="npImg" src="{{ url_for('static', filename='img/placeholder.svg') }}" alt=""></div>
 
       <div class="np__info">
         <h1 id="npTitle">Nothing playing</h1>

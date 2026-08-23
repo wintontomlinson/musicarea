@@ -923,7 +923,8 @@ def recommend(history: Optional[List[dict]] = None, limit: int = 30,
               allow_heard: bool = False, salt: Optional[str] = None,
               wide: bool = True, weight_profile: str = "default",
               profile: Optional[dict] = None,
-              pool: Optional[CandidatePool] = None) -> dict:
+              pool: Optional[CandidatePool] = None,
+              seed_label: Optional[str] = None) -> dict:
     """Main entry point. `profile` and `pool` can be passed in to let several
     shelves share one expensive candidate generation pass."""
     weights = WEIGHT_PROFILES.get(weight_profile, WEIGHTS)
@@ -941,7 +942,8 @@ def recommend(history: Optional[List[dict]] = None, limit: int = 30,
         scored = score_candidates(pool, profile, salt=salt, allow_heard=True,
                                   exclude=set(exclude or ()), weights=weights)
     picked = rerank(scored, profile, limit=limit)
-    items = [_present(c, profile, i + 1) for i, c in enumerate(picked)]
+    items = [_present(c, profile, i + 1, seed_label=seed_label)
+             for i, c in enumerate(picked)]
 
     return {
         "items": items,

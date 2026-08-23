@@ -150,8 +150,10 @@ def song_by_id(song_id: str) -> Optional[dict]:
     return found[0] if found else None
 
 
-def album(album_id: str) -> Optional[dict]:
-    data = jiosaavn_fetch_cached("content.getAlbumDetails", {"albumid": album_id}, ttl=TTL_STATIC)
+def album(album_id: str, fresh: bool = False) -> Optional[dict]:
+    data = jiosaavn_fetch_cached(
+        "content.getAlbumDetails", {"albumid": album_id}, ttl=TTL_STATIC, fresh=fresh
+    )
     if not data or not data.get("id"):
         return None
     built = build_album(data)
