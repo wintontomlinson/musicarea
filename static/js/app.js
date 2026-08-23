@@ -276,7 +276,10 @@
     browse(language) { return this.get(`/api/browse?language=${encodeURIComponent(language)}`); },
     radio(songId, limit = 40) { return this.get(`/api/radio/${encodeURIComponent(songId)}?limit=${limit}`); },
     artistRadio(id, limit = 40) { return this.get(`/api/artists/${encodeURIComponent(id)}/radio?limit=${limit}`); },
-    mood(id, limit = 50) { return this.get(`/api/moods/${encodeURIComponent(id)}?limit=${limit}`); },
+    mood(id, limit = 50) {
+      // POSTed with history so the set is ordered against the listener's taste.
+      return this.post(`/api/moods/${encodeURIComponent(id)}`, { history: Store.history, limit });
+    },
     album(id) { return this.get(`/api/albums?id=${encodeURIComponent(id)}`); },
     playlist(id, limit = 100) { return this.get(`/api/playlists?id=${encodeURIComponent(id)}&limit=${limit}`); },
     artist(id) { return this.get(`/api/artists/${encodeURIComponent(id)}?songCount=30&albumCount=20`); },
@@ -427,7 +430,7 @@
     return `
       <div class="tracks" data-list-root="${key}">
         <div class="tracks__head">
-          <span>#</span><span>Title</span><span>Album</span><span>Why</span><span>Time</span>
+          <span>#</span><span>Title</span><span>Album</span><span>Why</span><span>Time</span><span></span>
         </div>
         ${songs.map((song, i) => trackRow(song, i, key, { hideArt })).join('')}
       </div>`;
@@ -940,15 +943,29 @@
         return;
       }
       const signals = rec.signals || {};
+      if (!Object.keys(signals).length) {
+        panel.innerHTML = `
+          <div class="why">
+            <div class="why__reason">${esc(rec.reason || 'Straight from the catalogue')}</div>
+            <p class="why__note">This track was not scored against a profile, so there is no signal breakdown. Play a few things and the engine starts ranking these sets around your taste.</p>
+          </div>`;
+        return;
+      }
       const labels = {
         artist: 'Artist match', collab: 'Co-listening', language: 'Language',
         era: 'Release era', popularity: 'Popularity fit', freshness: 'Freshness',
         recall: 'Source confidence',
       };
+      // A blank reason means nothing about this listener explains the pick, so
+      // say that plainly rather than rendering an empty heading.
+      const headline = rec.reason || 'Nothing in your history explains this one';
+      const note = rec.score === undefined
+        ? 'It came from the set you opened, ordered by fit.'
+        : `Ranked ${rec.rank} with a blended score of ${Number(rec.score).toFixed(3)}. Here is what each signal contributed.`;
       panel.innerHTML = `
         <div class="why">
-          <div class="why__reason">${esc(rec.reason)}</div>
-          <p class="why__note">Ranked ${rec.rank} with a blended score of ${Number(rec.score).toFixed(3)}. Here is what each signal contributed.</p>
+          <div class="why__reason">${esc(headline)}</div>
+          <p class="why__note">${esc(note)}</p>
           <div class="why__bars">
             ${Object.entries(signals).map(([key, value]) => `
               <div class="why__bar">
@@ -1345,11 +1362,15 @@
       remember(data.items);
       const listKey = registerList(data.items, data.mood.name);
       document.documentElement.style.setProperty('--hue', String(data.mood.hue));
+      const personalised = data.meta?.personalised;
+      const blurb = personalised
+        ? `${plural(data.meta.pool, 'track')} pulled for this mood, then ordered by how well each one fits your listening.`
+        : `${plural(data.items.length, 'track')} for this mood, in the catalogue's own order. Play a few things and this set reorders around your taste.`;
       setView(`
         <section class="hero">
           <span class="hero__eyebrow">${ICON_SPARK} Mood</span>
           <h1>${esc(data.mood.name)}</h1>
-          <p>${plural(data.items.length, 'track')} pulled for this mood, then ordered by how well each one fits your history.</p>
+          <p>${esc(blurb)}</p>
           <div class="hero__actions">
             <button class="btn btn--primary btn--lg" data-play-list="${listKey}">${ICON_PLAY} Play</button>
             <button class="btn btn--outline btn--lg" data-shuffle-list="${listKey}">Shuffle</button>
@@ -1563,7 +1584,7 @@
     const list = moods?.length ? moods : MOODS_FALLBACK;
     return `
       <section class="section">
-        <div class="section__head"><div><h2>Moods</h2><p>Ranked against your taste, not just tagged</p></div></div>
+        <div class="section__head"><div><h2>Moods</h2><p>Ready made sets, reordered around what you play</p></div></div>
         <div class="shelf" style="grid-auto-columns:190px">
           ${list.map((mood) => `
             <a class="card" href="#/mood/${esc(mood.id)}" style="background:linear-gradient(135deg, hsl(${mood.hue} 70% 34%), hsl(${(mood.hue + 40) % 360} 66% 24%));border-color:transparent">

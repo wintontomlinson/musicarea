@@ -813,9 +813,16 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
 /* ── Track list ─────────────────────────────────────────────────────────── */
 
 .tracks { display: flex; flex-direction: column; }
+
+/* Six columns for six cells: index, title, album, why, time, actions. Miss one
+   and the actions cell wraps to an implicit second row, doubling row height. */
+.tracks__head, .track {
+  grid-template-columns:
+    34px minmax(0, 2.9fr) minmax(0, 1.8fr) minmax(0, 2fr) 56px 76px;
+}
+
 .tracks__head {
   display: grid;
-  grid-template-columns: 34px minmax(0, 3.2fr) minmax(0, 2.2fr) 78px 96px;
   gap: 14px;
   align-items: center;
   padding: 0 14px 9px;
@@ -827,11 +834,10 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
   text-transform: uppercase;
   color: var(--text-faint);
 }
-.tracks__head span:last-child { text-align: right; }
+.tracks__head span:nth-child(5) { text-align: right; }
 
 .track {
   display: grid;
-  grid-template-columns: 34px minmax(0, 3.2fr) minmax(0, 2.2fr) 78px 96px;
   gap: 14px;
   align-items: center;
   padding: 8px 14px;
@@ -1529,11 +1535,13 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
 }
 
 @media (max-width: 900px) {
-  .tracks__head, .track { grid-template-columns: 30px minmax(0, 1fr) 66px; }
-  .tracks__head span:nth-child(3), .tracks__head span:nth-child(4),
-  .track__album, .track__reason { display: none; }
-  .track__actions { display: none; }
-  .tracks__head span:last-child { display: none; }
+  /* Drop album, why and actions, leaving index, title and time on both the
+     header and the rows so the two stay in step. */
+  .tracks__head, .track { grid-template-columns: 30px minmax(0, 1fr) 62px; }
+  .tracks__head span:nth-child(3),
+  .tracks__head span:nth-child(4),
+  .tracks__head span:nth-child(6),
+  .track__album, .track__reason, .track__actions { display: none; }
 }
 
 @media (max-width: 760px) {
