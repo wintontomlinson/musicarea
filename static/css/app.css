@@ -2251,37 +2251,6 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
 .rank__bar i { display: block; height: 100%; border-radius: 99px; background: var(--brand); }
 .rank__name { font-size: 13px; font-weight: 600; }
 
-/* ── Footer ─────────────────────────────────────────────────────────────── */
-
-.foot {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 14px 26px;
-  margin-top: 46px;
-  padding: 24px 0 8px;
-  border-top: 1px solid var(--line);
-}
-.foot__brand { display: flex; align-items: center; gap: 11px; }
-.foot__brand img { border-radius: 9px; opacity: .9; }
-.foot__brand strong { display: block; font-size: 13.5px; font-weight: 800; letter-spacing: -.2px; }
-.foot__brand small { display: block; font-size: 11.5px; color: var(--text-faint); }
-.foot__links { display: flex; flex-wrap: wrap; gap: 6px 18px; }
-.foot__links a {
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--text-dim);
-  transition: color var(--fast);
-}
-.foot__links a:hover { color: var(--text); }
-.foot__note {
-  flex: 1 1 100%;
-  margin: 0;
-  font-size: 11.5px;
-  line-height: 1.6;
-  color: var(--text-faint);
-}
-
 /* ── Offline banner ─────────────────────────────────────────────────────── */
 
 .offline {
@@ -2652,7 +2621,6 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
   .chip { height: 38px; padding: 0 16px; }
   .section__head h2 { font-size: 19px; }
   .detail__actions .btn { flex: 1 1 auto; }
-  .foot { flex-direction: column; align-items: flex-start; gap: 12px; }
 
   .player {
     left: 0; right: 0;

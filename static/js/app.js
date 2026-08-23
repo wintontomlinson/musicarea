@@ -265,7 +265,6 @@
       write(KEYS.history, this.history);
       Feed.invalidate();
       Mixes.invalidate();
-      Home.scheduleRefresh();
       renderTasteCard();
     },
 
@@ -1868,31 +1867,10 @@
   /* ====================================================================== */
 
   const view = $('#view');
-
-  const FOOTER = `
-    <footer class="foot">
-      <div class="foot__brand">
-        <img src="/static/img/logo.svg" alt="" width="30" height="30">
-        <div>
-          <strong>MusicArea</strong>
-          <small>Music that feels personal</small>
-        </div>
-      </div>
-      <nav class="foot__links" aria-label="Footer">
-        <a href="#/home">Home</a>
-        <a href="#/browse">Explore</a>
-        <a href="#/library">Library</a>
-        <a href="#/taste">Taste profile</a>
-        <a href="#/settings">Settings</a>
-      </nav>
-      <p class="foot__note">
-        Your listening history, likes and playlists are stored in this browser only.
-        Nothing is uploaded and no account is required.
-      </p>
-    </footer>`;
+  let activeRouteGeneration = 0;
 
   function setView(html) {
-    view.innerHTML = html + FOOTER;
+    view.innerHTML = html;
     view.scrollTop = 0;
     markCurrentRows();
   }
@@ -1907,7 +1885,8 @@
   }
 
   const Views = {
-    async home() {
+    async home(routeGeneration) {
+      const isCurrent = () => routeGeneration === activeRouteGeneration && currentRoute().path === 'home';
       setView(`
         <div id="homeHero"></div>
         ${skeletonShelf('Made for you')}
@@ -1917,6 +1896,7 @@
 
       const feedData = feed.status === 'fulfilled' ? feed.value : null;
       const browseData = browse.status === 'fulfilled' ? browse.value : null;
+      if (!isCurrent()) return;
 
       if (!feedData && !browseData) {
         setView(emptyState('Could not reach the music service',
@@ -1976,7 +1956,6 @@
       }
 
       setView(hero + quickPicks() + rows.join(''));
-      Home.feed = feedData;
       if (profile && !profile.coldStart) loadMixesRow();
     },
 
@@ -2655,18 +2634,6 @@
     },
   };
 
-  const Home = {
-    feed: null,
-    refreshTimer: 0,
-
-    scheduleRefresh() {
-      clearTimeout(this.refreshTimer);
-      this.refreshTimer = window.setTimeout(() => {
-        if (currentRoute().path === 'home') Views.home();
-      }, 900);
-    },
-  };
-
   const SHORTCUTS = [
     ['Space', 'Play or pause'],
     ['K', 'Play or pause'],
@@ -2974,6 +2941,7 @@
   }
 
   async function route() {
+    const routeGeneration = ++activeRouteGeneration;
     const { path, param } = currentRoute();
     $$('[data-route]').forEach((link) => {
       link.classList.toggle('is-active', link.dataset.route === path);
@@ -2999,7 +2967,7 @@
 
     try {
       switch (path) {
-        case 'home': return await Views.home();
+        case 'home': return await Views.home(routeGeneration);
         case 'browse': return await Views.browse();
         case 'search': return await Views.search(decodeURIComponent(param || ''));
         case 'album': return await Views.album(param);
@@ -4006,5 +3974,5 @@
   renderTasteCard();
   renderQueue();
   if (!location.hash) location.hash = '#/home';
-  route();
+  else route();
 })();

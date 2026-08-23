@@ -478,7 +478,7 @@ the hero clips overflow. The art renders only when the feed supplied three
 covers, and is dropped entirely below 1080px instead of being shrunk into
 illegibility.
 - **Details.** Per route page titles, which give way to `Song · Artist |
-  MusicArea` once something is playing, a footer, and an offline banner.
+  MusicArea` once something is playing, and an offline banner.
 
 ## Deploying
 
