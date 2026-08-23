@@ -12,7 +12,7 @@ empty list instead of an exception, so one bad call can never blank out a feed.
 from concurrent.futures import ThreadPoolExecutor
 from typing import Iterable, List, Optional
 
-from helpers import clean_text, create_image_links, jiosaavn_fetch_cached
+from helpers import clean_text, create_image_links, jiosaavn_fetch_cached  # noqa: F401
 from models import build_album, build_artist, build_playlist, build_song
 
 # Cache lifetimes, in seconds. Editorial content moves slowly, search results
@@ -30,17 +30,20 @@ LANGUAGES = [
 
 # Mood and genre seeds used for the browse shelves and for the exploration arm
 # of the recommender.
+# `query` is the broad search. `keyword` is a single word that survives being
+# combined with a language ("punjabi party"), which the upstream literal search
+# needs: "party anthems punjabi" matches nothing at all.
 MOODS = [
-    {"id": "romance",  "name": "Romance",     "query": "romantic hits",        "hue": 336},
-    {"id": "party",    "name": "Party",       "query": "party anthems",        "hue": 24},
-    {"id": "chill",    "name": "Chill",       "query": "chill lofi",           "hue": 190},
-    {"id": "sad",      "name": "Heartbreak",  "query": "sad songs",            "hue": 220},
-    {"id": "workout",  "name": "Workout",     "query": "workout pump",         "hue": 8},
-    {"id": "devotion", "name": "Devotional",  "query": "bhakti devotional",    "hue": 44},
-    {"id": "retro",    "name": "Retro Gold",  "query": "90s bollywood retro",  "hue": 268},
-    {"id": "indie",    "name": "Indie",       "query": "indie india",          "hue": 158},
-    {"id": "sufi",     "name": "Sufi",        "query": "sufi qawwali",         "hue": 292},
-    {"id": "focus",    "name": "Focus",       "query": "instrumental focus",   "hue": 210},
+    {"id": "romance",  "name": "Romance",    "query": "romantic hits",       "keyword": "romantic",     "hue": 336},
+    {"id": "party",    "name": "Party",      "query": "party anthems",       "keyword": "party",        "hue": 24},
+    {"id": "chill",    "name": "Chill",      "query": "chill lofi",          "keyword": "chill",        "hue": 190},
+    {"id": "sad",      "name": "Heartbreak", "query": "sad songs",           "keyword": "sad",          "hue": 220},
+    {"id": "workout",  "name": "Workout",    "query": "workout pump",        "keyword": "workout",      "hue": 8},
+    {"id": "devotion", "name": "Devotional", "query": "bhakti devotional",   "keyword": "bhakti",       "hue": 44},
+    {"id": "retro",    "name": "Retro Gold", "query": "90s bollywood retro", "keyword": "retro",        "hue": 268},
+    {"id": "indie",    "name": "Indie",      "query": "indie india",         "keyword": "indie",        "hue": 158},
+    {"id": "sufi",     "name": "Sufi",       "query": "sufi qawwali",        "keyword": "sufi",         "hue": 292},
+    {"id": "focus",    "name": "Focus",      "query": "instrumental focus",  "keyword": "instrumental", "hue": 210},
 ]
 
 MOOD_BY_ID = {m["id"]: m for m in MOODS}
@@ -333,3 +336,42 @@ def mood_songs(mood_id: str, limit: int = 30) -> List[dict]:
     if not mood:
         return []
     return search_songs(mood["query"], limit=limit)
+
+
+def mood_pool(mood_id: str, limit: int = 160,
+              languages: Optional[List[str]] = None) -> List[dict]:
+    """A wide pool for one mood, from search plus curated playlists.
+
+    Search alone returns a few dozen tracks in a fixed order, which gives
+    personalised ranking nothing to choose between. Two things widen it:
+
+      * the mood's editorial playlists, and
+      * the same mood query repeated per language the listener actually plays.
+
+    The second matters more than it looks. A bare "party anthems" search skews
+    heavily Hindi, so a Punjabi listener would be ranked against a pool that
+    holds almost nothing they like. Asking for the mood in their language gives
+    the ranking real material to work with.
+    """
+    mood = MOOD_BY_ID.get(mood_id)
+    if not mood:
+        return []
+
+    keyword = mood.get("keyword") or mood["query"]
+    langs = [l for l in (languages or [])[:2] if l]
+
+    # Language first, because "punjabi party" matches while the reverse order
+    # and the longer phrase both return nothing.
+    song_queries = [mood["query"]] + [f"{lang} {keyword}" for lang in langs]
+    playlist_queries = [mood["query"]] + [f"{lang} {keyword}" for lang in langs]
+
+    jobs = [(lambda q=q: search_songs(q, limit=40)) for q in song_queries]
+    for query in playlist_queries:
+        for card in search_playlist_cards(query, limit=2):
+            if card.get("id"):
+                jobs.append(lambda pid=card["id"]: playlist_songs(pid, limit=40))
+
+    gathered: List[dict] = []
+    for result in parallel(jobs, workers=10):
+        gathered.extend(result or [])
+    return dedupe_songs(gathered)[:limit]

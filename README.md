@@ -21,7 +21,7 @@ python3 -m venv .venv
 Verification scripts:
 
 ```bash
-.venv/bin/python scripts/verify_api.py       # exercises every endpoint end to end
+.venv/bin/python scripts/verify_api.py       # 61 endpoint and output-quality checks
 .venv/bin/python scripts/try_recommender.py  # prints ranked output for sample profiles
 ```
 
@@ -102,9 +102,15 @@ Then the penalties: already-heard tracks are pushed down rather than removed,
 alternate cuts (lofi flips, remixes, instrumentals) sit behind the original,
 skipped artists are damped, and dislikes are dropped outright.
 
-Four weight profiles reshape the same signals per surface. `radio` leans on
+Five weight profiles reshape the same signals per surface. `radio` leans on
 co-listening and ignores freshness; `discover` almost zeroes out artist affinity;
-`fresh` inverts toward new releases.
+`fresh` inverts toward new releases; `mood` leans on artist and language, since
+belonging to the mood is already true of every candidate.
+
+Reasons are only shown when they are actually about you. On surfaces where
+membership is a given, a row whose top signal is popularity or freshness gets no
+reason at all and the list shows play counts instead. A shelf where every line
+reads "Big with everyone right now" carries no information.
 
 ### 4. Diversity aware re-ranking
 
@@ -127,6 +133,12 @@ Two upstream quirks that materially affect output, both handled:
 - **Duplicates.** The same recording appears repeatedly (`Kesariya` and
   `Kesariya (From "Brahmastra")`). Tracks are keyed on normalized title plus
   shared artists, so a variant of something you have already heard is suppressed.
+- **Literal search.** Upstream search does not understand phrases. `party
+  anthems punjabi` returns zero results while `punjabi party` returns forty, so
+  each mood carries a short `keyword` alongside its broad `query` purely so it
+  can be combined with a language. This is what lets a mood set actually follow
+  the listener: without it, a Punjabi listener opening Party is ranked against a
+  pool that is 99% Hindi and there is nothing for the ranking to find.
 
 ## API
 
@@ -140,7 +152,7 @@ Everything is namespaced under `/api`. `GET /api` returns the index.
 | `GET /api/radio/<song_id>` | Station seeded from one track |
 | `GET /api/artists/<artist_id>/radio` | Station seeded from an artist |
 | `POST /api/similar` | "More like this". Body: `{ids, limit}` |
-| `GET /api/moods/<mood_id>` | Mood set, ranked against your taste |
+| `POST /api/moods/<mood_id>` | Mood set ordered by taste fit. Body: `{history, limit}`. A plain `GET` returns the catalogue order and reports `meta.personalised: false`. |
 
 Recommended tracks carry a `recommendation` block:
 

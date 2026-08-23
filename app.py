@@ -575,13 +575,21 @@ def api_similar():
     return ok({"items": recommender.similar_to_songs(seeds, limit=limit)})
 
 
-@app.route("/api/moods/<mood_id>")
+@app.route("/api/moods/<mood_id>", methods=["GET", "POST"])
 def api_mood(mood_id):
-    mood = catalog.MOOD_BY_ID.get(mood_id)
-    if not mood:
+    """A mood set, ordered against the listener's taste when one is supplied.
+
+    POST with {"history": [...]} to personalise the order. A plain GET returns
+    the catalog order and says so via meta.personalised.
+    """
+    if not catalog.MOOD_BY_ID.get(mood_id):
         return err("Unknown mood", 404)
-    songs = catalog.mood_songs(mood_id, limit=_int_arg("limit", 40, 5, 60))
-    return ok({"mood": mood, "items": songs})
+    body = _payload()
+    limit = max(5, min(60, int(body.get("limit") or request.args.get("limit") or 40)))
+    result = recommender.mood_set(mood_id, history=body.get("history") or [], limit=limit)
+    if not result.get("items"):
+        return err("Could not build that mood right now", 404)
+    return ok(result)
 
 
 @app.route("/api/trending")
