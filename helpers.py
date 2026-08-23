@@ -76,7 +76,23 @@ def create_download_links(encrypted_media_url: str) -> list:
             encrypted += b"\x00" * pad_len
         cipher = Cipher(TripleDES(_KEY * 3), modes.ECB(), backend=default_backend())
         decryptor = cipher.decryptor()
-        decrypted = (decryptor.update(encrypted) + decryptor.finalize()).decode("utf-8", errors="ignore").rstrip("\x00")
+        plain = decryptor.update(encrypted) + decryptor.finalize()
+
+        # The plaintext carries PKCS#5 padding: the final byte says how many
+        # padding bytes to drop. Stripping only NUL bytes, as this used to,
+        # left four 0x04 bytes on the end of every URL, which the browser then
+        # sent as "..._320.mp4%04%04%04%04". The CDN happened to tolerate it,
+        # but nothing guarantees that.
+        if plain:
+            pad = plain[-1]
+            if 1 <= pad <= 8 and plain[-pad:] == bytes([pad]) * pad:
+                plain = plain[:-pad]
+
+        decrypted = plain.decode("utf-8", errors="ignore").rstrip("\x00").strip()
+        # Belt and braces: no control character belongs in a URL.
+        decrypted = "".join(ch for ch in decrypted if ord(ch) >= 32)
+        if not decrypted:
+            return []
         return [
             {"quality": quality, "url": decrypted.replace("_96", suffix)}
             for quality, suffix in QUALITIES

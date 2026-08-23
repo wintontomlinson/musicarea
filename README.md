@@ -120,6 +120,54 @@ caps of two per artist and two per album, and reserves every fifth slot for an
 artist you have no history with. Alternate cuts of a composition are collapsed
 before ranking so the same song never appears twice.
 
+### Stream URL padding
+
+Stream URLs are 3DES encrypted upstream and the plaintext carries PKCS#5 padding.
+The decrypt only stripped NUL bytes, so every URL came out ending in four 0x04
+bytes and reached the browser as `..._320.mp4%04%04%04%04`. The CDN happened to
+serve it anyway, which is why it went unnoticed, but nothing guaranteed that: one
+stricter proxy or CDN config and every track 404s. The pad length is now read
+from the final byte and removed, with a control character filter behind it.
+
+## Smoothness
+
+The interface ran at **4 FPS** at rest. Isolated by toggling one thing at a time:
+
+| condition | FPS |
+| --- | --- |
+| as shipped | 4.1 |
+| ambient layer hidden | 46.4 |
+| ambient shown, blur removed | 38.6 |
+| blur kept, animation stopped | 47.7 |
+| all backdrop-filters removed | 6.8 |
+
+So backdrop-filter was not the problem, and neither blur nor motion was fatal on
+its own. The cost was specifically **moving a blurred element**: three 952px
+circles carrying `filter: blur(120px)` on infinite transform animations, which
+forces the blur to re-rasterise every frame.
+
+The ambient wash is now painted with radial gradients on a single element. A
+gradient is soft to begin with, so it needs no filter and no animation to look
+like an aurora.
+
+Three smaller layout-thrash fixes went in alongside:
+
+- the seek bar animated `width`, now `transform: scaleX`
+- the visualizer wrote `height` on 28 bars every frame, now `transform: scaleY`
+- shelves get `content-visibility: auto` so offscreen ones cost nothing
+
+| measurement | before | after |
+| --- | --- | --- |
+| idle | 4.1 FPS | 50.5 FPS |
+| scrolling the feed | 4.9 FPS | 49.9 FPS |
+| now playing, live visualizer | n/a | 60 FPS, zero janky frames |
+| mobile idle (390px) | 4.1 FPS | 48.7 FPS |
+| FCP | 836ms | 152ms |
+| LCP | 836ms | 316ms |
+
+Measured in headless Chromium with software rendering and no GPU, so these are a
+floor rather than a best case.
+
 ### Player state note
 
 Turning shuffle **off** mid playback used to reset the queue pointer to position
@@ -190,9 +238,18 @@ Recommended tracks carry a `recommendation` block:
 
 `#/settings` holds everything about playback.
 
-**Quality.** Defaults to the highest the source offers, 320 kbps AAC. There is no
-lossless tier upstream, so that is the ceiling and the app does not pretend
-otherwise. High (160) and Data saver (96) are there for weak connections. If a
+**Quality.** Defaults to the highest the source offers, 320 kbps AAC.
+
+There is no lossless tier and this is worth being plain about. Sampled across
+sixteen tracks, the catalogue publishes exactly five rungs, 12/48/96/160/320 kbps,
+every one of them AAC in an MP4 container on the same CDN. No FLAC, ALAC or WAV
+variant exists to request. 320 kbps is therefore a real ceiling rather than a
+setting, and a "lossless" switch in this app would do nothing but mislabel the
+same AAC stream.
+
+What the app does instead is guarantee you are actually getting the ceiling. The
+badge beside the volume slider reports the rung **in use**, not the one asked
+for, and turns amber when a particular track forced a step down. High (160) and Data saver (96) are there for weak connections. If a
 particular track is missing your chosen rung, it steps down for that track only
 rather than failing. Switching mid-track keeps your position by waiting for the
 new source to report its duration before seeking, since assigning `currentTime`
