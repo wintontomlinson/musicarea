@@ -552,10 +552,16 @@ def api_browse():
 
     return ok({
         "rows": rows,
-        "moods": catalog.MOODS,
+        "moods": catalog.mood_cards(),
         "languages": catalog.LANGUAGES,
         "language": language,
     })
+
+
+@app.route("/api/moods")
+def api_mood_list():
+    """The mood tiles on their own, artwork included."""
+    return ok({"moods": catalog.mood_cards()})
 
 
 @app.route("/api/radio/<song_id>")

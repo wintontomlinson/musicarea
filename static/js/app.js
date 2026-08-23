@@ -108,17 +108,38 @@
 
   const QUALITY_ORDER = ['320kbps', '160kbps', '96kbps', '48kbps', '12kbps'];
 
-  function streamUrl(song, preferred) {
+  /** Resolve the stream to use, and report which rung it actually is.
+   *  The two can differ: not every track carries every rung, so the badge shows
+   *  what is really being served rather than what was asked for. */
+  function pickStream(song, preferred) {
     const urls = song?.downloadUrl;
-    if (!Array.isArray(urls) || !urls.length) return '';
+    if (!Array.isArray(urls) || !urls.length) return { url: '', quality: null };
     const byQuality = new Map(urls.map((u) => [u.quality, u.url]));
     const order = preferred
       ? [preferred, ...QUALITY_ORDER.filter((q) => q !== preferred)]
       : QUALITY_ORDER;
     for (const quality of order) {
-      if (byQuality.get(quality)) return byQuality.get(quality);
+      if (byQuality.get(quality)) return { url: byQuality.get(quality), quality };
     }
-    return urls[urls.length - 1].url;
+    const last = urls[urls.length - 1];
+    return { url: last.url, quality: last.quality || null };
+  }
+
+  function streamUrl(song, preferred) {
+    return pickStream(song, preferred).url;
+  }
+
+  /** Badge reflects the rung in use, and flags when it had to step down. */
+  function showServedQuality(song) {
+    const { quality } = pickStream(song, Store.prefs.quality);
+    const tag = $('#qualityTag');
+    if (!tag || !quality) return;
+    tag.textContent = quality.replace('kbps', '');
+    const steppedDown = quality !== Store.prefs.quality;
+    tag.classList.toggle('is-reduced', steppedDown);
+    $('#quality').title = steppedDown
+      ? `Playing at ${quality.replace('kbps', ' kbps')}. This track is not available at ${Store.prefs.quality.replace('kbps', ' kbps')}.`
+      : `Streaming at ${quality.replace('kbps', ' kbps')}, the highest this track offers`;
   }
 
   /* ====================================================================== */
@@ -485,7 +506,7 @@
     return `
       <article class="card" data-open-song="${esc(song.id)}">
         <div class="card__art">
-          <img loading="lazy" src="${esc(art(song, 500))}" alt="">
+          <img loading="lazy" decoding="async" src="${esc(art(song, 500))}" alt="">
           ${badge ? `<span class="card__badge">${esc(badge)}</span>` : ''}
           <button class="card__play" data-play-song="${esc(song.id)}" aria-label="Play ${esc(song.name)}">${ICON_PLAY}</button>
         </div>
@@ -500,8 +521,8 @@
   function mixCard(mix) {
     const covers = (mix.covers || []).slice(0, 4);
     const grid = covers.length >= 4
-      ? covers.map((c) => `<img loading="lazy" src="${esc(art({ image: c }, 150))}" alt="">`).join('')
-      : `<img loading="lazy" src="${esc(art(mix, 500))}" alt="" class="mix__solo">`;
+      ? covers.map((c) => `<img loading="lazy" decoding="async" src="${esc(art({ image: c }, 150))}" alt="">`).join('')
+      : `<img loading="lazy" decoding="async" src="${esc(art(mix, 500))}" alt="" class="mix__solo">`;
     return `
       <article class="card mix" data-goto="#/mix/${esc(mix.id)}" style="--hue:${hueOf(mix.id)}">
         <div class="card__art mix__art">
@@ -521,7 +542,7 @@
     return `
       <article class="card ${round ? 'card--round' : ''}" data-goto="#/${route}/${esc(item.id)}">
         <div class="card__art">
-          <img loading="lazy" src="${esc(art(item, 500))}" alt="">
+          <img loading="lazy" decoding="async" src="${esc(art(item, 500))}" alt="">
           <button class="card__play" data-play-${esc(route)}="${esc(item.id)}" aria-label="Play ${esc(item.name)}">${ICON_PLAY}</button>
         </div>
         <div class="card__title">${esc(item.name)}</div>
@@ -541,7 +562,7 @@
             : `<span class="track__index-num">${index + 1}</span><span class="track__index-play">${ICON_PLAY}</span>`}
         </div>
         <div class="track__main">
-          ${opts.hideArt ? '' : `<img class="track__art" loading="lazy" src="${esc(art(song, 150))}" alt="">`}
+          ${opts.hideArt ? '' : `<img class="track__art" loading="lazy" decoding="async" src="${esc(art(song, 150))}" alt="">`}
           <div class="track__text">
             <div class="track__name">${esc(song.name)}</div>
             <div class="track__byline">
@@ -1132,13 +1153,15 @@
 
   /** Paint the seek position onto every progress bar. */
   function paintProgress(ratio) {
-    const pct = `${clamp(ratio, 0, 1) * 100}%`;
+    const r = clamp(ratio, 0, 1);
+    const pct = `${r * 100}%`;
     $$('.js-scrub').forEach((bar) => {
       const fill = $('.js-fill', bar);
       const knob = $('.player__progress-knob', bar);
-      if (fill) fill.style.width = pct;
+      // scaleX rather than width: a transform is composited without relayout.
+      if (fill) fill.style.transform = `scaleX(${r})`;
       if (knob) knob.style.left = pct;
-      bar.setAttribute('aria-valuenow', String(Math.round(clamp(ratio, 0, 1) * 100)));
+      bar.setAttribute('aria-valuenow', String(Math.round(r * 100)));
     });
   }
 
@@ -1183,6 +1206,7 @@
 
     document.documentElement.style.setProperty('--hue', String(hueOf(song.id)));
     document.title = `${song.name} · ${artistLine(song)} | MusicArea`;
+    showServedQuality(song);
     if (!$('#np').hidden) renderNpPanel();
   }
 
@@ -1239,7 +1263,7 @@
       const current = orderPos === Player.pos;
       return `
         <div class="qrow ${current ? 'is-current' : ''}" data-queue-pos="${orderPos}" data-song="${esc(song.id)}">
-          <img loading="lazy" src="${esc(art(song, 150))}" alt="">
+          <img loading="lazy" decoding="async" src="${esc(art(song, 150))}" alt="">
           <div class="qrow__text">
             <strong>${esc(song.name)}</strong>
             <small>${esc(artistLine(song))}</small>
@@ -1281,7 +1305,7 @@
     const host = $('#npViz');
     if (host.children.length) return;
     host.innerHTML = Array.from({ length: 28 }, (_, i) =>
-      `<i style="height:${20 + ((i * 37) % 70)}%;animation-delay:-${(i * 90) % 1100}ms"></i>`).join('');
+      `<i style="animation-delay:-${(i * 90) % 1100}ms"></i>`).join('');
   }
 
   async function renderNpPanel() {
@@ -1297,7 +1321,7 @@
         const item = Player.queue[queueIndex];
         return `
           <div class="qrow ${orderPos === Player.pos ? 'is-current' : ''}" data-queue-pos="${orderPos}" data-song="${esc(item.id)}">
-            <img loading="lazy" src="${esc(art(item, 150))}" alt="">
+            <img loading="lazy" decoding="async" src="${esc(art(item, 150))}" alt="">
             <div class="qrow__text">
               <strong>${esc(item.name)}</strong>
               <small>${esc(artistLine(item))}</small>
@@ -1437,8 +1461,9 @@
         const step = Math.max(1, Math.floor(this.data.length / bars.length));
         bars.forEach((bar, i) => {
           const value = this.data[i * step] || 0;
-          bar.style.height = `${clamp(8 + (value / 255) * 100, 8, 100)}%`;
-          bar.style.animation = 'none';
+          // scaleY, not height. Writing height on 28 bars at 60fps forces a
+          // layout pass every frame.
+          bar.style.transform = `scaleY(${clamp(0.08 + (value / 255), 0.08, 1)})`;
         });
         this.raf = requestAnimationFrame(tick);
       };
@@ -1864,7 +1889,7 @@
         ? `${plural(data.meta.pool, 'track')} pulled for this mood, then ordered by how well each one fits your listening.`
         : `${plural(data.items.length, 'track')} for this mood, in the catalogue's own order. Play a few things and this set reorders around your taste.`;
       setView(`
-        <section class="hero">
+        <section class="hero hero--mood" style="--hue:${data.mood.hue}">
           <div class="hero__body">
             <span class="hero__eyebrow">${ICON_SPARK} Mood</span>
             <h1>${esc(data.mood.name)}</h1>
@@ -2047,7 +2072,8 @@
                   <span class="opt__tag">${esc(q.id.replace('kbps', ''))}</span>
                 </button>`).join('')}
             </div>
-            <p class="panel__note" style="margin-top:14px">If a track is not available at your chosen rate, MusicArea steps down one rung for that track only rather than failing.</p>
+            <p class="panel__note" style="margin-top:14px">If a track is not available at your chosen rate, MusicArea steps down one rung for that track only rather than failing, and the badge next to the volume slider turns amber to tell you.</p>
+            <p class="panel__note" style="margin-top:10px"><strong>On lossless:</strong> the catalogue this app streams from publishes five rungs, 12 to 320 kbps, all AAC. There is no FLAC or ALAC tier, so 320 kbps is a real ceiling and not a setting. Anything labelled "lossless" here would be a lie.</p>
           </div>
         </section>
 
@@ -2255,18 +2281,36 @@
     { id: 'indie', name: 'Indie', hue: 158 }, { id: 'focus', name: 'Focus', hue: 210 },
   ];
 
+  /** Mood tiles: real artwork under a tint in the mood's own hue, so they read
+   *  as moods rather than as albums. Falls back to the plain tint when the
+   *  catalogue gave us no image. */
   function moodStrip(moods) {
     const list = moods?.length ? moods : MOODS_FALLBACK;
     return `
-      <section class="section">
-        <div class="section__head"><div><h2>Moods</h2><p>Ready made sets, reordered around what you play</p></div></div>
-        <div class="shelf" style="grid-auto-columns:190px">
-          ${list.map((mood) => `
-            <a class="card" href="#/mood/${esc(mood.id)}" style="background:linear-gradient(135deg, hsl(${mood.hue} 70% 34%), hsl(${(mood.hue + 40) % 360} 66% 24%));border-color:transparent">
-              <div style="aspect-ratio:1.5;display:flex;align-items:flex-end;padding:6px">
-                <div class="card__title" style="font-size:17px;letter-spacing:-.4px">${esc(mood.name)}</div>
-              </div>
-            </a>`).join('')}
+      <section class="section" data-section="moods">
+        <div class="section__head">
+          <div><h2>Moods</h2><p>Ready made sets, reordered around what you play</p></div>
+        </div>
+        <div class="shelf shelf--moods">
+          ${list.map((mood) => {
+            const cover = mood.image ? art(mood, 500) : '';
+            // Four covers rather than one. Sleeve art routinely has the release
+            // title typeset across it, which at full tile size competed with the
+            // mood label; at a quarter each it reads as texture instead.
+            const tiles = (mood.covers || []).length >= 4
+              ? mood.covers.slice(0, 4).map((c) => art({ image: c }, 150))
+              : [];
+            return `
+            <a class="mood-tile" href="#/mood/${esc(mood.id)}" style="--hue:${mood.hue}">
+              ${tiles.length
+                ? `<span class="mood-tile__grid">${tiles.map((t) => `<img loading="lazy" decoding="async" src="${esc(t)}" alt="">`).join('')}</span>`
+                : (cover ? `<img class="mood-tile__img" loading="lazy" decoding="async" src="${esc(cover)}" alt="">` : '')}
+              <span class="mood-tile__tint"></span>
+              <span class="mood-tile__name">${esc(mood.name)}</span>
+              <button class="mood-tile__play" data-play-mood="${esc(mood.id)}"
+                      aria-label="Play ${esc(mood.name)}">${ICON_PLAY}</button>
+            </a>`;
+          }).join('')}
         </div>
       </section>`;
   }
@@ -2278,7 +2322,7 @@
     if (covers.length < 3) return '';
     return `
       <div class="hero__art" aria-hidden="true">
-        ${covers.map((url) => `<figure><img loading="lazy" src="${esc(url)}" alt=""></figure>`).join('')}
+        ${covers.map((url) => `<figure><img loading="lazy" decoding="async" src="${esc(url)}" alt=""></figure>`).join('')}
       </div>`;
   }
 
@@ -2514,7 +2558,7 @@
       ${items.map((item) => `
         <button class="suggest__item ${kind === 'artist' ? 'is-round' : ''}" type="button"
                 data-suggest-kind="${kind}" data-suggest-id="${esc(item.id)}" data-suggest-name="${esc(item.title || item.name)}">
-          <img loading="lazy" src="${esc(art(item, 150))}" alt="">
+          <img loading="lazy" decoding="async" src="${esc(art(item, 150))}" alt="">
           <span class="suggest__item-meta">
             <strong>${esc(stripTags(item.title || item.name))}</strong>
             <small>${esc(stripTags(item.description || item.primaryArtists || item.album || cap(kind)))}</small>
@@ -2649,6 +2693,23 @@
       if (trackEl) {
         const entry = LISTS.get(trackEl.dataset.list);
         if (entry) Player.play(entry.songs, Number(trackEl.dataset.index), { label: entry.label });
+        return;
+      }
+
+      const playMood = target.closest('[data-play-mood]');
+      if (playMood) {
+        event.preventDefault();
+        event.stopPropagation();
+        const id = playMood.dataset.playMood;
+        toast('Building that set');
+        try {
+          const data = await API.mood(id, 40);
+          if (!data.items?.length) throw new Error('empty');
+          remember(data.items);
+          Player.play(data.items, 0, { label: data.mood.name });
+        } catch {
+          toast('Could not build that mood right now');
+        }
         return;
       }
 
