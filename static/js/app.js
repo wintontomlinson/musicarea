@@ -792,6 +792,9 @@
     seeking: false,
     playRequest: 0,
     servedQuality: null,
+    crossfadeStarting: false,
+    handoffGeneration: 0,
+    handoffTimer: 0,
 
     fadeRaf: 0,
     fading: false,
@@ -881,18 +884,41 @@
       try { deck.load(); } catch { /* nothing to abort */ }
     },
 
+    /** Cancel a pending handoff so a late play promise cannot take ownership. */
+    cancelHandoff() {
+      this.handoffGeneration += 1;
+      if (this.handoffTimer) window.clearTimeout(this.handoffTimer);
+      this.handoffTimer = 0;
+      this.crossfadeStarting = false;
+      DECKS.forEach((deck) => { deck.dataset.retiring = ''; });
+    },
+
     /** Start `orderPos` on the idle deck and blend the two over `seconds`. */
     async crossfadeTo(orderPos, seconds) {
+      if (this.fading || this.crossfadeStarting) return false;
       if (orderPos < 0 || orderPos >= this.order.length) return false;
       const song = this.queue[this.order[orderPos]];
       const selectedStream = song && pickStream(song, Store.prefs.quality);
       const url = selectedStream?.url;
       if (!url) return false;
 
+      const handoff = ++this.handoffGeneration;
+      this.crossfadeStarting = true;
+      const clearRecovery = () => {
+        if (this.handoffGeneration !== handoff) return false;
+        if (this.handoffTimer) window.clearTimeout(this.handoffTimer);
+        this.handoffTimer = 0;
+        return true;
+      };
+
       const outgoing = audio;
       const incoming = idleDeck();
       const outgoingSong = this.current;
       const outgoingRatio = this.playedRatio;
+      const duration = Number.isFinite(outgoing.duration)
+        ? outgoing.duration
+        : (outgoingSong?.duration || 0);
+      const remaining = Math.max(0, duration - outgoing.currentTime);
 
       outgoing.dataset.retiring = '1';
       incoming.dataset.retiring = '';
@@ -905,14 +931,39 @@
       incoming.volume = 0;
       incoming.muted = !!Store.prefs.muted;
 
+      // The retiring deck's ordinary ended handler is intentionally muted, so
+      // recovery belongs to this handoff. Give the incoming play request a
+      // short grace period after the outgoing track should have ended, then
+      // hard-load the next track if it still has not started.
+      // Keep manual skips responsive too: unlike automatic fades they can begin
+      // well before the end of a long track, so the recovery cannot wait for
+      // the entire remaining duration.
+      const recoveryDelay = Math.min(2500, Math.max(350, Math.ceil(remaining * 1000) + 300));
+      this.handoffTimer = window.setTimeout(() => {
+        if (this.handoffGeneration === handoff && this.crossfadeStarting) {
+          this.load(orderPos);
+        }
+      }, recoveryDelay);
+
       try {
         await incoming.play();
       } catch {
-        // Autoplay refused the second deck: fall back to a plain switch.
+        if (!clearRecovery()) return false;
+        // Autoplay refused the second deck: restore the current deck. If it
+        // has already finished, use the same hard handoff as timeout recovery.
         outgoing.dataset.retiring = '';
+        this.crossfadeStarting = false;
+        if (outgoing.ended) this.load(orderPos);
         return false;
       }
 
+      // Explicit navigation or timeout recovery may have loaded another track
+      // while the incoming play promise was resolving.
+      if (!clearRecovery()) {
+        incoming.pause();
+        return false;
+      }
+      this.crossfadeStarting = false;
       // Hand the UI over immediately so the now playing view matches what is
       // becoming audible.
       audio = incoming;
@@ -929,7 +980,28 @@
       markCurrentRows();
       Viz.attach(incoming);
 
+      // The source can become ready a moment after the outgoing track reaches
+      // its end. In that case there is nothing left to blend, so make the
+      // already-playing incoming deck audible immediately rather than fading
+      // it in from silence for the full crossfade duration.
+      if (outgoing.ended) {
+        incoming.volume = gain();
+        outgoing.pause();
+        outgoing.removeAttribute('src');
+        outgoing.dataset.readyFor = '';
+        outgoing.load();
+        outgoing.dataset.retiring = '';
+        outgoing.volume = gain();
+        if (outgoingSong) {
+          Store.logEvent(outgoingSong, outgoingRatio > 0.9 ? 'complete' : 'play');
+        }
+        this.preloadNext();
+        this.topUpIfNeeded();
+        return true;
+      }
+
       this.runFade(outgoing, incoming, seconds, () => {
+        if (this.handoffGeneration !== handoff) return;
         outgoing.pause();
         outgoing.removeAttribute('src');
         outgoing.dataset.readyFor = '';
@@ -995,6 +1067,7 @@
 
       // Abandon any blend in progress and silence the other deck, otherwise a
       // retiring track keeps playing underneath the new one.
+      this.cancelHandoff();
       cancelAnimationFrame(this.fadeRaf);
       this.fading = false;
       const other = idleDeck();
@@ -1063,6 +1136,12 @@
       }
       const nextPos = this.pos + 1;
       if (nextPos < this.order.length) {
+        // An explicit skip always wins over an in-flight automatic handoff.
+        // load() invalidates the transition token, silences the other deck,
+        // and prevents a late incoming play promise from reclaiming the UI.
+        if (userInitiated && (this.crossfadeStarting || this.fading)) {
+          return this.load(nextPos);
+        }
         // A manual skip gets a short blend rather than the full crossfade
         // length, so the button still feels immediate. With crossfade off it
         // becomes a 60ms handover: inaudible, but it uses the already buffered
@@ -1191,10 +1270,16 @@
       // starts from audio that is already in memory.
       if (!this.fading && remaining <= seconds + 15) this.preloadNext();
 
-      // Begin the blend early enough that the outgoing track finishes silent.
-      if (seconds > 0 && !this.fading && Store.prefs.repeat !== 'one') {
-        if (remaining <= seconds && remaining > 0.2 && this.pos + 1 < this.order.length) {
-          this.crossfadeTo(this.pos + 1, Math.min(seconds, Math.max(0.3, remaining)));
+      // Start a fraction early. `audio.play()` can wait for the incoming deck's
+      // final buffer frame, and starting at the exact boundary made short or
+      // slow streams finish before their successor became audible. The tiny
+      // lead keeps a real overlap while still preserving the configured fade.
+      const earlyStart = 0.85;
+      if (seconds > 0 && !this.fading && !this.crossfadeStarting
+          && Store.prefs.repeat !== 'one' && this.pos + 1 < this.order.length) {
+        if (remaining <= seconds + earlyStart && remaining > 0.2) {
+          const fade = Math.min(seconds, Math.max(0.35, remaining - 0.15));
+          this.crossfadeTo(this.pos + 1, fade);
         }
       }
     },
@@ -2142,7 +2227,7 @@
               <button class="btn btn--outline btn--lg" data-shuffle-list="${listKey}">Shuffle</button>
             </div>
           </div>
-          ${heroArt(data.items)}
+          ${heroArt([data.mood, ...data.items])}
         </section>
         ${trackList(data.items, { label: data.mood.name })}`);
     },
@@ -2557,17 +2642,17 @@
         <div class="shelf shelf--moods">
           ${list.map((mood) => {
             const cover = mood.image ? art(mood, 500) : '';
-            // Four covers rather than one. Sleeve art routinely has the release
-            // title typeset across it, which at full tile size competed with the
-            // mood label; at a quarter each it reads as texture instead.
-            const tiles = (mood.covers || []).length >= 4
+            // Catalogue covers remain available when a mood visual is absent,
+            // but a supplied mood image always wins so Romance, Focus and Party
+            // feel distinct before the listener has opened the set.
+            const tiles = !cover && (mood.covers || []).length >= 4
               ? mood.covers.slice(0, 4).map((c) => art({ image: c }, 150))
               : [];
             return `
             <a class="mood-tile" href="#/mood/${esc(mood.id)}" style="--hue:${mood.hue}">
-              ${tiles.length
-                ? `<span class="mood-tile__grid">${tiles.map((t) => `<img loading="lazy" decoding="async" src="${esc(t)}" alt="">`).join('')}</span>`
-                : (cover ? `<img class="mood-tile__img" loading="lazy" decoding="async" src="${esc(cover)}" alt="">` : '')}
+              ${cover
+                ? `<img class="mood-tile__img" loading="lazy" decoding="async" src="${esc(cover)}" alt="${esc(mood.name)} mood artwork">`
+                : (tiles.length ? `<span class="mood-tile__grid">${tiles.map((t) => `<img loading="lazy" decoding="async" src="${esc(t)}" alt="">`).join('')}</span>` : '')}
               <span class="mood-tile__tint"></span>
               <span class="mood-tile__name">${esc(mood.name)}</span>
               <button class="mood-tile__play" data-play-mood="${esc(mood.id)}"

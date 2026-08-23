@@ -33,17 +33,20 @@ LANGUAGES = [
 # `query` is the broad search. `keyword` is a single word that survives being
 # combined with a language ("punjabi party"), which the upstream literal search
 # needs: "party anthems punjabi" matches nothing at all.
+# The catalogue covers keep the tiles recognisably musical, but they are often
+# generic album sleeves. These calm, editorial images give each mood its own
+# visual language before a listener opens it.
 MOODS = [
-    {"id": "romance",  "name": "Romance",    "query": "romantic hits",       "keyword": "romantic",     "hue": 336},
-    {"id": "party",    "name": "Party",      "query": "party anthems",       "keyword": "party",        "hue": 24},
-    {"id": "chill",    "name": "Chill",      "query": "chill lofi",          "keyword": "chill",        "hue": 190},
-    {"id": "sad",      "name": "Heartbreak", "query": "sad songs",           "keyword": "sad",          "hue": 220},
-    {"id": "workout",  "name": "Workout",    "query": "workout pump",        "keyword": "workout",      "hue": 8},
-    {"id": "devotion", "name": "Devotional", "query": "bhakti devotional",   "keyword": "bhakti",       "hue": 44},
-    {"id": "retro",    "name": "Retro Gold", "query": "90s bollywood retro", "keyword": "retro",        "hue": 268},
-    {"id": "indie",    "name": "Indie",      "query": "indie india",         "keyword": "indie",        "hue": 158},
-    {"id": "sufi",     "name": "Sufi",       "query": "sufi qawwali",        "keyword": "sufi",         "hue": 292},
-    {"id": "focus",    "name": "Focus",      "query": "instrumental focus",  "keyword": "instrumental", "hue": 210},
+    {"id": "romance",  "name": "Romance",    "query": "romantic hits",       "keyword": "romantic",     "hue": 336, "image": "https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?auto=format&fit=crop&w=1200&q=85"},
+    {"id": "party",    "name": "Party",      "query": "party anthems",       "keyword": "party",        "hue": 24,  "image": "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=1200&q=85"},
+    {"id": "chill",    "name": "Chill",      "query": "chill lofi",          "keyword": "chill",        "hue": 190, "image": "https://images.unsplash.com/photo-1499209974431-9dddcece7f88?auto=format&fit=crop&w=1200&q=85"},
+    {"id": "sad",      "name": "Heartbreak", "query": "sad songs",           "keyword": "sad",          "hue": 220, "image": "https://images.unsplash.com/photo-1470770841072-f978cf4d019e?auto=format&fit=crop&w=1200&q=85"},
+    {"id": "workout",  "name": "Workout",    "query": "workout pump",        "keyword": "workout",      "hue": 8,   "image": "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=1200&q=85"},
+    {"id": "devotion", "name": "Devotional", "query": "bhakti devotional",   "keyword": "bhakti",       "hue": 44,  "image": "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=85"},
+    {"id": "retro",    "name": "Retro Gold", "query": "90s bollywood retro", "keyword": "retro",        "hue": 268, "image": "https://images.unsplash.com/photo-1483412033650-1015ddeb83d1?auto=format&fit=crop&w=1200&q=85"},
+    {"id": "indie",    "name": "Indie",      "query": "indie india",         "keyword": "indie",        "hue": 158, "image": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=1200&q=85"},
+    {"id": "sufi",     "name": "Sufi",       "query": "sufi qawwali",        "keyword": "sufi",         "hue": 292, "image": "https://images.unsplash.com/photo-1548013146-72479768bada?auto=format&fit=crop&w=1200&q=85"},
+    {"id": "focus",    "name": "Focus",      "query": "instrumental focus",  "keyword": "instrumental", "hue": 210, "image": "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?auto=format&fit=crop&w=1200&q=85"},
 ]
 
 MOOD_BY_ID = {m["id"]: m for m in MOODS}
@@ -388,14 +391,13 @@ def mood_cards() -> List[dict]:
         playlists = results[index * 2] or []
         songs = results[index * 2 + 1] or []
         covers = [s["image"] for s in songs if s.get("image")][:4]
-        # Album art in preference to the editorial playlist cover. Playlist
-        # covers have their own title typeset into the artwork, which collided
-        # with the mood label drawn over the tile: "Romance" sat on top of a
-        # faint "Most Streamed Love Songs".
-        image = None
-        if covers:
+        # Curated mood art gives the tile an immediate emotional cue. Track covers
+        # are retained as a data fallback, but are deliberately not allowed to
+        # overwrite the mood's own visual identity.
+        image = mood.get("image")
+        if not image and covers:
             image = covers[0]
-        elif playlists and playlists[0].get("image"):
+        elif not image and playlists and playlists[0].get("image"):
             image = playlists[0]["image"]
         card = dict(mood)
         card["image"] = image
