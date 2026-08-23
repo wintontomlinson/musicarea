@@ -10,8 +10,13 @@ Original JioSaavn API layer credits: @ab_devs
 
 import json
 import re
-from flask import Flask, jsonify, request, make_response, render_template, send_from_directory
-from werkzeug.exceptions import HTTPException
+import threading
+import time
+from collections import deque
+from urllib.parse import urlsplit
+
+from flask import Flask, jsonify, request, render_template, send_from_directory
+from werkzeug.exceptions import HTTPException, RequestEntityTooLarge
 
 import catalog
 import recommender
@@ -29,25 +34,122 @@ from models import (
 )
 
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 128 * 1024
+
+_MAX_PATH_LENGTH = 2048
+_MAX_QUERY_LENGTH = 2048
+_MAX_VALUE_LENGTHS = {"query": 160, "id": 200, "ids": 2048, "link": 1000}
+_SAFE_LINK_HOSTS = {"jiosaavn.com", "www.jiosaavn.com", "saavn.com", "www.saavn.com"}
+_EXPENSIVE_API_PREFIXES = (
+    "/api/feed", "/api/mixes", "/api/radio/", "/api/artists/", "/api/moods/", "/api/similar",
+)
+_RATE_WINDOWS = {}
+_RATE_LOCK = threading.Lock()
+_RATE_CHECKS = 0
+_MAX_RATE_KEYS = 4096
 
 
-def _cors(response):
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
-    return response
+def _client_key():
+    # Only a trusted reverse proxy may safely supply a forwarded client address.
+    # This deployment has no trusted-proxy configuration, so use Flask's socket
+    # address rather than accepting a spoofable request header.
+    return (request.remote_addr or "unknown")[:128]
+
+
+def _rate_allowed():
+    global _RATE_CHECKS
+    if not request.path.startswith("/api/") or request.path == "/api/health":
+        return True
+    expensive = request.path.startswith(_EXPENSIVE_API_PREFIXES)
+    limit = 35 if expensive else 120
+    now = time.monotonic()
+    key = (_client_key(), "expensive" if expensive else "general")
+    with _RATE_LOCK:
+        _RATE_CHECKS += 1
+        # Expire inactive clients periodically and cap the remaining map. The
+        # limiter is per process, so this bounds its defense-in-depth memory use.
+        if _RATE_CHECKS % 64 == 0:
+            for stale_key, hits in list(_RATE_WINDOWS.items()):
+                if not hits or now - hits[-1] >= 60:
+                    _RATE_WINDOWS.pop(stale_key, None)
+        hits = _RATE_WINDOWS.get(key)
+        if hits is None:
+            if len(_RATE_WINDOWS) >= _MAX_RATE_KEYS:
+                oldest_key = min(_RATE_WINDOWS, key=lambda item: _RATE_WINDOWS[item][-1])
+                _RATE_WINDOWS.pop(oldest_key, None)
+            hits = deque()
+            _RATE_WINDOWS[key] = hits
+        while hits and now - hits[0] >= 60:
+            hits.popleft()
+        if len(hits) >= limit:
+            return False
+        hits.append(now)
+    return True
+
+
+def _valid_external_link(value):
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return False
+    return parsed.scheme in {"http", "https"} and parsed.hostname in _SAFE_LINK_HOSTS
+
 
 @app.after_request
 def after_request(response):
-    if request.path.startswith("/static/"):
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; script-src 'self'; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com; "
+        "img-src 'self' data: https://images.unsplash.com https://c.saavncdn.com; "
+        "media-src https://aac.saavncdn.com; connect-src 'self'; object-src 'none'; "
+        "base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+    )
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+    public_catalogue = request.method == "GET" and request.path in {
+        "/api/browse", "/api/trending", "/api/charts", "/api/new-releases", "/api/featured", "/api/moods", "/api/genres",
+    }
+    if response.status_code != 200:
+        response.headers["Cache-Control"] = "no-store"
+    elif request.path.endswith((".js", ".css")):
+        # The app shell uses stable asset names. Revalidate code assets so a
+        # deployment cannot mix a new HTML shell with an older player bundle.
+        response.headers["Cache-Control"] = "no-cache"
+    elif request.path.startswith("/static/"):
         response.headers["Cache-Control"] = "public, max-age=3600"
-    return _cors(response)
+    elif public_catalogue:
+        response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=600"
+    else:
+        response.headers["Cache-Control"] = "no-store"
+    return response
+
 
 @app.before_request
-def handle_options():
-    if request.method == "OPTIONS":
-        resp = make_response("", 204)
-        return _cors(resp)
+def validate_request():
+    if request.content_length and request.content_length > app.config["MAX_CONTENT_LENGTH"]:
+        return err("Request body is too large", 413)
+    if len(request.path) > _MAX_PATH_LENGTH or len(request.query_string) > _MAX_QUERY_LENGTH:
+        return err("Request target is too large", 414)
+    if request.path.startswith("/api/") and any(len(part) > 200 for part in request.path.split("/") if part):
+        return err("Request identifier is too long")
+    for name, limit in _MAX_VALUE_LENGTHS.items():
+        value = request.args.get(name)
+        if value is not None and len(value) > limit:
+            return err(f"{name} parameter is too long")
+    ids = request.args.get("ids")
+    if ids and (len([value for value in ids.split(",") if value]) > 25 or any(len(value) > 200 for value in ids.split(","))):
+        return err("Provide at most 25 valid song IDs")
+    link = request.args.get("link")
+    if link and not _valid_external_link(link):
+        return err("Link must be a JioSaavn URL")
+    language = request.args.get("language")
+    if language and language.lower() not in catalog.LANGUAGES:
+        return err("Unsupported language")
+    if not _rate_allowed():
+        return err("Too many requests. Please try again in a minute.", 429)
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -137,7 +239,7 @@ def get_song_by_id(song_id):
 
 @app.route("/api/songs/<song_id>/suggestions")
 def get_song_suggestions(song_id):
-    limit = int(request.args.get("limit", 10))
+    limit = _int_arg("limit", 10, 1, 40)
 
     # Step 1: create station
     encoded_id = json.dumps([song_id.replace(" ", "%20")])
@@ -185,15 +287,16 @@ def get_album():
         if not token:
             return err("Invalid JioSaavn album link")
         data = jiosaavn_fetch("webapi.get", {"token": token, "type": "album"})
-    else:
-        data = jiosaavn_fetch("content.getAlbumDetails", {"albumid": album_id})
+        # An id that belongs to a single rather than an album comes back as a
+        # shell with empty fields, so check for real content and not just a 200.
+        if not data or not data.get("id") or not data.get("title"):
+            return err("Album not found", 404)
+        return ok(build_album(data))
 
-    # An id that belongs to a single rather than an album comes back as a shell
-    # with empty fields, so check for real content and not just a 200.
-    if not data or not data.get("id") or not data.get("title"):
+    album = catalog.album(album_id, fresh=bool(request.args.get("refresh")))
+    if not album or not album.get("id"):
         return err("Album not found", 404)
-
-    return ok(build_album(data))
+    return ok(album)
 
 
 # ─── PLAYLISTS ────────────────────────────────────────────────────────────────
@@ -202,8 +305,8 @@ def get_album():
 def get_playlist():
     pl_id = request.args.get("id")
     link  = request.args.get("link")
-    page  = int(request.args.get("page", 0))
-    limit = int(request.args.get("limit", 10))
+    page  = _int_arg("page", 0, 0, 100)
+    limit = _int_arg("limit", 10, 1, 100)
 
     if not pl_id and not link:
         return err("Either playlist ID or link is required")
@@ -237,9 +340,9 @@ def get_playlist():
 def get_artist():
     artist_id  = request.args.get("id")
     link       = request.args.get("link")
-    page       = int(request.args.get("page", 0))
-    song_count = int(request.args.get("songCount", 10))
-    album_count= int(request.args.get("albumCount", 10))
+    page       = _int_arg("page", 0, 0, 100)
+    song_count = _int_arg("songCount", 10, 1, 100)
+    album_count= _int_arg("albumCount", 10, 1, 100)
     sort_by    = request.args.get("sortBy", "popularity")
     sort_order = request.args.get("sortOrder", "desc")
 
@@ -270,9 +373,9 @@ def get_artist():
 
 @app.route("/api/artists/<artist_id>")
 def get_artist_by_id(artist_id):
-    page       = int(request.args.get("page", 0))
-    song_count = int(request.args.get("songCount", 10))
-    album_count= int(request.args.get("albumCount", 10))
+    page       = _int_arg("page", 0, 0, 100)
+    song_count = _int_arg("songCount", 10, 1, 100)
+    album_count= _int_arg("albumCount", 10, 1, 100)
     sort_by    = request.args.get("sortBy", "popularity")
     sort_order = request.args.get("sortOrder", "desc")
 
@@ -288,7 +391,7 @@ def get_artist_by_id(artist_id):
 
 @app.route("/api/artists/<artist_id>/songs")
 def get_artist_songs(artist_id):
-    page       = int(request.args.get("page", 0))
+    page       = _int_arg("page", 0, 0, 100)
     sort_by    = request.args.get("sortBy", "popularity")
     sort_order = request.args.get("sortOrder", "desc")
 
@@ -306,7 +409,7 @@ def get_artist_songs(artist_id):
 
 @app.route("/api/artists/<artist_id>/albums")
 def get_artist_albums(artist_id):
-    page       = int(request.args.get("page", 0))
+    page       = _int_arg("page", 0, 0, 100)
     sort_by    = request.args.get("sortBy", "popularity")
     sort_order = request.args.get("sortOrder", "desc")
 
@@ -340,8 +443,8 @@ def search_all():
 @app.route("/api/search/songs")
 def search_songs():
     query = request.args.get("query", "").strip()
-    page  = int(request.args.get("page", 0))
-    limit = int(request.args.get("limit", 10))
+    page  = _int_arg("page", 0, 0, 100)
+    limit = _int_arg("limit", 10, 1, 100)
 
     if not query:
         return err("query parameter is required")
@@ -353,8 +456,8 @@ def search_songs():
 @app.route("/api/search/albums")
 def search_albums():
     query = request.args.get("query", "").strip()
-    page  = int(request.args.get("page", 0))
-    limit = int(request.args.get("limit", 10))
+    page  = _int_arg("page", 0, 0, 100)
+    limit = _int_arg("limit", 10, 1, 100)
 
     if not query:
         return err("query parameter is required")
@@ -366,8 +469,8 @@ def search_albums():
 @app.route("/api/search/artists")
 def search_artists():
     query = request.args.get("query", "").strip()
-    page  = int(request.args.get("page", 0))
-    limit = int(request.args.get("limit", 10))
+    page  = _int_arg("page", 0, 0, 100)
+    limit = _int_arg("limit", 10, 1, 100)
 
     if not query:
         return err("query parameter is required")
@@ -379,8 +482,8 @@ def search_artists():
 @app.route("/api/search/playlists")
 def search_playlists():
     query = request.args.get("query", "").strip()
-    page  = int(request.args.get("page", 0))
-    limit = int(request.args.get("limit", 10))
+    page  = _int_arg("page", 0, 0, 100)
+    limit = _int_arg("limit", 10, 1, 100)
 
     if not query:
         return err("query parameter is required")
@@ -419,7 +522,27 @@ def _history(value, limit=400):
     """Keep the local-first event log bounded and structurally safe for ranking."""
     if not isinstance(value, list):
         return []
-    return [item for item in value if isinstance(item, dict) and item.get("id")][-limit:]
+    entries = []
+    for item in value[-limit:]:
+        if not isinstance(item, dict):
+            continue
+        song_id = item.get("id")
+        if not isinstance(song_id, str) or not song_id or len(song_id) > 200:
+            continue
+        entry = {"id": song_id}
+        for key in ("name", "language", "year", "event", "at", "playCount"):
+            value = item.get(key)
+            if isinstance(value, (str, int, float)):
+                entry[key] = value if not isinstance(value, str) else value[:160]
+        artists = item.get("artists")
+        if isinstance(artists, list):
+            entry["artists"] = [
+                {"id": artist.get("id"), "name": str(artist.get("name", ""))[:160]}
+                for artist in artists[:12]
+                if isinstance(artist, dict) and isinstance(artist.get("id"), str)
+            ]
+        entries.append(entry)
+    return entries
 
 
 @app.route("/api/feed", methods=["POST"])
@@ -432,7 +555,8 @@ def api_feed():
     """
     body = _payload()
     history = _history(body.get("history"))
-    mood = body.get("mood") or None
+    mood = body.get("mood") if isinstance(body.get("mood"), str) else None
+    mood = mood[:80] if mood else None
     limit = _bounded_json_int(body.get("limit"), 24, 6, 40)
 
     profile = recommender.build_profile(history)
@@ -619,7 +743,8 @@ def api_artist_radio(artist_id):
 def api_similar():
     """"More like this" for an album, playlist or arbitrary selection."""
     body = _payload()
-    ids = [str(i) for i in (body.get("ids") or []) if i][:10]
+    raw_ids = body.get("ids") if isinstance(body.get("ids"), list) else []
+    ids = [song_id for song_id in raw_ids[:10] if isinstance(song_id, str) and 0 < len(song_id) <= 200]
     if not ids:
         return err("ids is required")
     seeds = catalog.songs_by_ids(ids)
@@ -713,6 +838,11 @@ def favicon():
 
 # ─── 404 fallback ─────────────────────────────────────────────────────────────
 
+@app.errorhandler(RequestEntityTooLarge)
+def request_too_large(_):
+    return err("Request body is too large", 413)
+
+
 @app.errorhandler(404)
 def not_found(_):
     return err("Route not found", 404)
@@ -730,4 +860,4 @@ def handle_error(e):
 # ─── Entry point (local dev) ──────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    app.run(port=5000)

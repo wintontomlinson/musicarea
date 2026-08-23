@@ -9,6 +9,8 @@ import random
 import re
 import threading
 import time
+from urllib.parse import urlsplit
+
 import requests
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
@@ -47,6 +49,21 @@ JIOSAAVN_API = "https://www.jiosaavn.com/api.php"
 
 
 PROVIDER_TOKENS = re.compile(r"\b(jio\s*saavn|saavn)\b", re.I)
+
+
+def _safe_saavn_url(value: str, *, media: bool = False) -> str:
+    """Accept only HTTPS URLs served by the catalogue CDN."""
+    if not isinstance(value, str) or not value:
+        return ""
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return ""
+    host = (parsed.hostname or "").lower()
+    allowed = host == "aac.saavncdn.com" if media else (host == "saavncdn.com" or host.endswith(".saavncdn.com"))
+    if parsed.scheme != "https" or not allowed or not parsed.path.startswith("/"):
+        return ""
+    return value
 
 
 def clean_text(value):
@@ -91,6 +108,7 @@ def create_download_links(encrypted_media_url: str) -> list:
         decrypted = plain.decode("utf-8", errors="ignore").rstrip("\x00").strip()
         # Belt and braces: no control character belongs in a URL.
         decrypted = "".join(ch for ch in decrypted if ord(ch) >= 32)
+        decrypted = _safe_saavn_url(decrypted, media=True)
         if not decrypted:
             return []
         return [
@@ -112,6 +130,9 @@ def create_image_links(link: str) -> list:
     if not link or _PLACEHOLDER_ART.search(link):
         return []
     link = re.sub(r"^http://", "https://", link)
+    link = _safe_saavn_url(link)
+    if not link:
+        return []
     return [
         {"quality": q, "url": re.sub(r"150x150|50x50", q, link)}
         for q in IMAGE_QUALITIES
@@ -205,5 +226,6 @@ def jiosaavn_fetch_cached(endpoint: str, params: dict, ctx: str = "web6dot0",
         data = jiosaavn_fetch(endpoint, params, ctx=ctx) or {}
     except Exception:
         return {}
-    CACHE.set(key, data, ttl)
+    if data:
+        CACHE.set(key, data, ttl)
     return data

@@ -189,6 +189,7 @@
 
   const MAX_HISTORY = 400;
   const MAX_RECENT = 60;
+  const PLAYBACK_KEY = 'ma.playback.v1';
 
   function read(key, fallback) {
     try {
@@ -199,6 +200,17 @@
 
   function write(key, value) {
     try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* quota */ }
+  }
+
+  function readSession(key, fallback) {
+    try {
+      const raw = sessionStorage.getItem(key);
+      return raw ? JSON.parse(raw) : fallback;
+    } catch { return fallback; }
+  }
+
+  function writeSession(key, value) {
+    try { sessionStorage.setItem(key, JSON.stringify(value)); } catch { /* unavailable */ }
   }
 
   const Store = {
@@ -381,6 +393,7 @@
 
     feed(payload) { return this.post('/api/feed', payload); },
     browse(language) { return this.get(`/api/browse?language=${encodeURIComponent(language)}`); },
+    moods() { return this.get('/api/moods'); },
     radio(songId, limit = 40) { return this.get(`/api/radio/${encodeURIComponent(songId)}?limit=${limit}`); },
     artistRadio(id, limit = 40) { return this.get(`/api/artists/${encodeURIComponent(id)}/radio?limit=${limit}`); },
     mood(id, limit = 50) {
@@ -588,7 +601,6 @@
   const ICON_VOLUME = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h3l4-4v14l-4-4H4zm11.5-1.3a5 5 0 0 1 0 8.6v-2A3 3 0 0 0 15.5 10z"/></svg>';
 
   function songCard(song, { badge } = {}) {
-    const reason = song.recommendation?.reason;
     return `
       <article class="card" data-open-song="${esc(song.id)}">
         <div class="card__art">
@@ -598,7 +610,6 @@
         </div>
         <div class="card__title">${esc(song.name)}</div>
         <div class="card__sub">${esc(artistLine(song))}</div>
-        ${reason ? `<div style="margin-top:7px"><span class="reason-pill"><span>${esc(reason)}</span></span></div>` : ''}
       </article>`;
   }
 
@@ -638,7 +649,6 @@
 
   function trackRow(song, index, listKey, opts = {}) {
     const liked = Store.isLiked(song.id);
-    const reason = song.recommendation?.reason;
     const current = Player.current?.id === song.id;
     return `
       <div class="track ${current ? 'is-current' : ''}" data-list="${esc(listKey)}" data-index="${index}" data-song="${esc(song.id)}">
@@ -658,7 +668,6 @@
           </div>
         </div>
         <div class="track__album">${esc(song.album?.name || '')}</div>
-        <div class="track__reason">${reason ? `<span class="reason-pill"><span>${esc(reason)}</span></span>` : (song.playCount ? `<span class="track__album">${esc(fmtCount(song.playCount))} plays</span>` : '')}</div>
         <div class="track__dur">${fmtTime(song.duration)}</div>
         <div class="track__actions">
           <button class="icon-btn" data-like="${esc(song.id)}" aria-pressed="${liked}" aria-label="Like">${ICON_HEART}</button>
@@ -679,7 +688,7 @@
     return `
       <div class="tracks" data-list-root="${key}">
         <div class="tracks__head">
-          <span>#</span><span>Title</span><span>Album</span><span>Why</span><span>Time</span><span></span>
+          <span>#</span><span>Title</span><span>Album</span><span>Time</span><span></span>
         </div>
         ${songs.map((song, i) => trackRow(song, i, key, { hideArt, removeFrom, unlike })).join('')}
       </div>`;
@@ -795,6 +804,11 @@
     crossfadeStarting: false,
     handoffGeneration: 0,
     handoffTimer: 0,
+    streamRecovery: null,
+    streamRecoveryGeneration: 0,
+    backgrounded: document.hidden,
+    checkpointAt: 0,
+    contextLabel: '',
 
     fadeRaf: 0,
     fading: false,
@@ -832,6 +846,115 @@
       });
     },
 
+    /** Save the current track and its next 99 queue positions for this session. */
+    checkpoint() {
+      if (!this.current || this.pos < 0 || !this.queue.length || !this.order.length) return;
+      const windowStart = Math.max(0, this.pos - 20);
+      const windowOrder = this.order.slice(windowStart, windowStart + 100);
+      const queueIndexMap = new Map();
+      const queue = [];
+      windowOrder.forEach((queueIndex) => {
+        if (!Number.isInteger(queueIndex) || queueIndex < 0 || queueIndex >= this.queue.length) return;
+        if (!queueIndexMap.has(queueIndex)) {
+          queueIndexMap.set(queueIndex, queue.length);
+          queue.push(Store.slim(this.queue[queueIndex]));
+        }
+      });
+      const order = windowOrder.map((queueIndex) => queueIndexMap.get(queueIndex)).filter(Number.isInteger);
+      const pos = this.pos - windowStart;
+      if (!queue.length || !order.length || pos < 0 || pos >= order.length) return;
+      writeSession(PLAYBACK_KEY, {
+        queue,
+        order,
+        pos,
+        currentId: this.current.id,
+        currentTime: Number.isFinite(audio.currentTime) ? Math.max(0, audio.currentTime) : 0,
+        wasPlaying: !audio.paused && !audio.ended,
+        contextLabel: this.contextLabel || '',
+      });
+      this.checkpointAt = Date.now();
+    },
+
+    /** Restore a reload-safe queue. Browser policy may still require a tap to resume audio. */
+    async restoreCheckpoint() {
+      const saved = readSession(PLAYBACK_KEY, null);
+      if (!saved || !Array.isArray(saved.queue) || !Array.isArray(saved.order)) return;
+      const savedPos = Number(saved.pos);
+      const savedQueueIndex = Number.isInteger(savedPos) ? saved.order[savedPos] : null;
+      const currentId = typeof saved.currentId === 'string'
+        ? saved.currentId
+        : saved.queue[savedQueueIndex]?.id;
+      if (!currentId) return;
+      const request = ++this.playRequest;
+      const resolved = await ensurePlayable(saved.queue.slice(0, 100));
+      if (request !== this.playRequest) return;
+      const playable = resolved.filter((song) => song?.id && song.downloadUrl?.length);
+      const indexById = new Map(playable.map((song, index) => [song.id, index]));
+      if (!indexById.has(currentId)) return;
+      const originalIds = saved.queue.map((song) => song?.id);
+      const order = [];
+      let pos = -1;
+      saved.order.forEach((index, savedOrderPos) => {
+        const playableIndex = indexById.get(originalIds[index]);
+        if (!Number.isInteger(playableIndex)) return;
+        if (savedOrderPos === savedPos) pos = order.length;
+        order.push(playableIndex);
+      });
+      if (pos < 0 || !order.length || playable[order[pos]]?.id !== currentId) return;
+      this.queue = playable;
+      this.order = order;
+      this.contextLabel = typeof saved.contextLabel === 'string' ? saved.contextLabel.slice(0, 120) : '';
+      await this.load(pos, false);
+      const restorePosition = () => {
+        audio.removeEventListener('loadedmetadata', restorePosition);
+        try { audio.currentTime = clamp(Number(saved.currentTime) || 0, 0, Math.max(0, (audio.duration || Infinity) - 0.25)); } catch { /* stream is not seekable */ }
+        updateMediaSessionPosition();
+        if (saved.wasPlaying) this.resume();
+      };
+      audio.addEventListener('loadedmetadata', restorePosition, { once: true });
+      if (audio.readyState >= 1) restorePosition();
+      renderQueue();
+    },
+
+    /** Stop rAF-dependent transitions while preserving the active audio element. */
+    settleForBackground() {
+      this.cancelHandoff();
+      this.cancelStreamRecovery();
+      cancelAnimationFrame(this.fadeRaf);
+      this.fadeRaf = 0;
+      this.fading = false;
+      const idle = idleDeck();
+      idle.pause();
+      idle.removeAttribute('src');
+      idle.dataset.readyFor = '';
+      idle.dataset.readyUrl = '';
+      idle.dataset.retiring = '';
+      try { idle.load(); } catch { /* nothing to abort */ }
+      audio.dataset.retiring = '';
+      audio.volume = gain();
+    },
+
+    setBackgrounded(hidden) {
+      this.backgrounded = hidden;
+      if (hidden) {
+        this.settleForBackground();
+        this.checkpoint();
+      } else {
+        updateMediaSessionPosition();
+      }
+    },
+
+    resume() {
+      if (!this.current) return this.toggle();
+      return audio.play().catch(() => setPlayerState('paused'));
+    },
+
+    pause() {
+      if (!this.current) return;
+      audio.pause();
+      this.checkpoint();
+    },
+
     /* ---- Crossfade ------------------------------------------------------ */
 
     /** Equal power fade. sin/cos keeps perceived loudness flat across the blend,
@@ -867,17 +990,19 @@
      *  It also removes the gap between tracks when crossfade is switched off.
      */
     preloadNext() {
-      if (this.fading) return;                 // idle deck is the retiring one
+      if (this.fading || this.backgrounded) return;
       const nextPos = this.pos + 1;
       if (nextPos >= this.order.length) return;
       const song = this.queue[this.order[nextPos]];
       if (!song) return;
-      const url = streamUrl(song, Store.prefs.quality);
+      const selectedStream = pickStream(song, Store.prefs.quality);
+      const url = selectedStream.url;
       if (!url) return;
 
       const deck = idleDeck();
-      if (deck.dataset.readyFor === song.id && deck.readyState >= 2) return;
+      if (deck.dataset.readyFor === song.id && deck.dataset.readyUrl === url && deck.readyState >= 2) return;
       deck.dataset.readyFor = song.id;
+      deck.dataset.readyUrl = url;
       deck.volume = 0;                         // never audible until we fade it in
       deck.muted = !!Store.prefs.muted;
       deck.src = url;
@@ -893,8 +1018,17 @@
       DECKS.forEach((deck) => { deck.dataset.retiring = ''; });
     },
 
+    /** Cancel a pending stream fallback before its deck changes source. */
+    cancelStreamRecovery() {
+      this.streamRecoveryGeneration += 1;
+      const recovery = this.streamRecovery;
+      if (recovery) recovery.deck.removeEventListener('loadedmetadata', recovery.resume);
+      this.streamRecovery = null;
+    },
+
     /** Start `orderPos` on the idle deck and blend the two over `seconds`. */
     async crossfadeTo(orderPos, seconds) {
+      if (this.backgrounded) return this.load(orderPos);
       if (this.fading || this.crossfadeStarting) return false;
       if (orderPos < 0 || orderPos >= this.order.length) return false;
       const song = this.queue[this.order[orderPos]];
@@ -924,9 +1058,11 @@
       incoming.dataset.retiring = '';
       // Reuse the preloaded buffer. Reassigning src would throw it away and
       // reintroduce the silent start this preloading exists to prevent.
-      if (incoming.dataset.readyFor !== song.id || !incoming.getAttribute('src')) {
+      if (incoming.dataset.readyFor !== song.id || incoming.dataset.readyUrl !== url || !incoming.getAttribute('src')) {
         incoming.src = url;
       }
+      incoming.dataset.readyFor = song.id;
+      incoming.dataset.readyUrl = url;
       try { incoming.currentTime = 0; } catch { /* not seekable yet */ }
       incoming.volume = 0;
       incoming.muted = !!Store.prefs.muted;
@@ -989,6 +1125,7 @@
         outgoing.pause();
         outgoing.removeAttribute('src');
         outgoing.dataset.readyFor = '';
+        outgoing.dataset.readyUrl = '';
         outgoing.load();
         outgoing.dataset.retiring = '';
         outgoing.volume = gain();
@@ -1005,6 +1142,7 @@
         outgoing.pause();
         outgoing.removeAttribute('src');
         outgoing.dataset.readyFor = '';
+        outgoing.dataset.readyUrl = '';
         outgoing.load();
         outgoing.dataset.retiring = '';
         outgoing.volume = gain();
@@ -1068,11 +1206,14 @@
       // Abandon any blend in progress and silence the other deck, otherwise a
       // retiring track keeps playing underneath the new one.
       this.cancelHandoff();
+      this.cancelStreamRecovery();
       cancelAnimationFrame(this.fadeRaf);
       this.fading = false;
       const other = idleDeck();
       other.pause();
       other.removeAttribute('src');
+      other.dataset.readyFor = '';
+      other.dataset.readyUrl = '';
       other.dataset.retiring = '';
       audio.dataset.retiring = '';
       audio.volume = gain();
@@ -1112,6 +1253,7 @@
       // Buffer whatever comes next straight away. This is what removes the gap
       // between tracks when crossfade is switched off.
       this.preloadNext();
+      this.checkpoint();
     },
 
     toggle() {
@@ -1121,8 +1263,8 @@
         if (first?.songs?.length) this.play(first.songs, 0, { label: first.label });
         return;
       }
-      if (audio.paused) audio.play().catch(() => setPlayerState('paused'));
-      else audio.pause();
+      if (audio.paused) this.resume();
+      else this.pause();
     },
 
     next(userInitiated = false) {
@@ -1136,6 +1278,9 @@
       }
       const nextPos = this.pos + 1;
       if (nextPos < this.order.length) {
+        // Background tabs can throttle animation frames. A direct handoff keeps
+        // playback progressing when an ended event fires while hidden.
+        if (this.backgrounded) return this.load(nextPos);
         // An explicit skip always wins over an in-flight automatic handoff.
         // load() invalidates the transition token, silences the other deck,
         // and prevents a late incoming play promise from reclaiming the UI.
@@ -1255,6 +1400,8 @@
       this.playedRatio = ratio;
       if (!this.seeking) paintProgress(ratio);
       $$('.js-now').forEach((el) => { el.textContent = fmtTime(audio.currentTime); });
+      updateMediaSessionPosition();
+      if (Date.now() - this.checkpointAt >= 5000) this.checkpoint();
 
       // A play only counts once we are past the intro.
       if (!this.loggedPlay && audio.currentTime > 12) {
@@ -1268,14 +1415,18 @@
 
       // Get the next track buffered well before it is needed, so the blend
       // starts from audio that is already in memory.
-      if (!this.fading && remaining <= seconds + 15) this.preloadNext();
+      if (!this.backgrounded && !this.fading && remaining <= seconds + 15) this.preloadNext();
 
       // Start a fraction early. `audio.play()` can wait for the incoming deck's
       // final buffer frame, and starting at the exact boundary made short or
       // slow streams finish before their successor became audible. The tiny
       // lead keeps a real overlap while still preserving the configured fade.
       const earlyStart = 0.85;
-      if (seconds > 0 && !this.fading && !this.crossfadeStarting
+      const nextSong = this.queue[this.order[this.pos + 1]];
+      const nextUrl = nextSong ? pickStream(nextSong, Store.prefs.quality).url : '';
+      const incomingReady = nextSong && idleDeck().dataset.readyFor === nextSong.id
+        && idleDeck().dataset.readyUrl === nextUrl && idleDeck().readyState >= 2;
+      if (seconds > 0 && !this.backgrounded && !this.fading && !this.crossfadeStarting && incomingReady
           && Store.prefs.repeat !== 'one' && this.pos + 1 < this.order.length) {
         if (remaining <= seconds + earlyStart && remaining > 0.2) {
           const fade = Math.min(seconds, Math.max(0.35, remaining - 0.15));
@@ -1300,17 +1451,37 @@
 
     onError() {
       if (!this.current) return;
-      // Fall back to a lower bitrate before giving up on the track.
-      const current = audio.src;
-      for (const quality of QUALITY_ORDER) {
-        const selectedStream = pickStream(this.current, quality);
-        if (selectedStream.url && selectedStream.url !== current) {
-          this.servedQuality = selectedStream.quality;
-          audio.src = selectedStream.url;
-          audio.play().catch(() => {});
-          showServedQuality(this.current, selectedStream.quality);
-          return;
-        }
+      // Step down only to genuinely lower available bitrates. Comparing
+      // normalised URLs prevents a failed stream from being selected again
+      // merely because the browser expanded its URL differently.
+      this.cancelStreamRecovery();
+      const deck = audio;
+      const failedSongId = this.current.id;
+      const failedUrl = new URL(deck.currentSrc || deck.src, location.href).href;
+      const currentRung = Math.max(-1, QUALITY_ORDER.indexOf(this.servedQuality || Store.prefs.quality));
+      const available = new Map((this.current.downloadUrl || []).map((stream) => [stream.quality, stream.url]));
+      const at = deck.currentTime;
+      for (const quality of QUALITY_ORDER.slice(currentRung + 1)) {
+        const candidate = available.get(quality);
+        const candidateUrl = candidate && new URL(candidate, location.href).href;
+        if (!candidateUrl || candidateUrl === failedUrl) continue;
+
+        this.servedQuality = quality;
+        const recovery = ++this.streamRecoveryGeneration;
+        const resume = () => {
+          deck.removeEventListener('loadedmetadata', resume);
+          if (this.streamRecovery?.token === recovery) this.streamRecovery = null;
+          const currentUrl = new URL(deck.currentSrc || deck.src, location.href).href;
+          if (this.streamRecoveryGeneration !== recovery || audio !== deck
+              || this.current?.id !== failedSongId || currentUrl !== candidateUrl) return;
+          try { deck.currentTime = at; } catch { /* not seekable yet */ }
+          deck.play().catch(() => {});
+        };
+        this.streamRecovery = { deck, resume, token: recovery };
+        deck.addEventListener('loadedmetadata', resume);
+        deck.src = candidate;
+        showServedQuality(this.current, quality);
+        return;
       }
       toast(`Could not play ${this.current.name}`);
       this.next();
@@ -1330,13 +1501,6 @@
       toast(`${seconds > 0 ? 'Forward' : 'Back'} ${Math.abs(seconds)}s`, ICON_SEEK);
     },
   };
-
-  /** Reason pills keep their label in a child span so it can ellipsize. */
-  function setPill(pill, text) {
-    if (!pill) return;
-    pill.hidden = !text;
-    if (text) pill.firstElementChild.textContent = text;
-  }
 
   function setPlayerState(state) {
     // Both the bar and the full screen overlay read this attribute, so their
@@ -1420,18 +1584,27 @@
     $('#playerArtist').textContent = artistLine(song);
     $$('.js-like').forEach((b) => b.setAttribute('aria-pressed', String(Store.isLiked(song.id))));
 
-    const reason = song.recommendation?.reason;
-    setPill($('#reasonPill'), reason);
-
     setArtwork($('#npImg'), cover, song.name || '');
     $('#npTitle').textContent = song.name || '';
     $('#npArtist').textContent = artistLine(song);
-    setPill($('#npReason'), reason);
 
     document.documentElement.style.setProperty('--hue', String(hueOf(song.id)));
     document.title = `${song.name} · ${artistLine(song)} | MusicArea`;
     showServedQuality(song, Player.servedQuality);
     if (!$('#np').hidden) renderNpPanel();
+  }
+
+  function updateMediaSessionPosition() {
+    if (!('mediaSession' in navigator) || !Player.current) return;
+    const duration = audio.duration || Player.current.duration || 0;
+    if (!Number.isFinite(duration) || duration <= 0) return;
+    try {
+      navigator.mediaSession.setPositionState({
+        duration,
+        playbackRate: audio.playbackRate || 1,
+        position: clamp(audio.currentTime || 0, 0, duration),
+      });
+    } catch { /* unsupported browser or non-seekable stream */ }
   }
 
   function updateMediaSession(song) {
@@ -1447,11 +1620,20 @@
           type: 'image/jpeg',
         })),
       });
-      navigator.mediaSession.setActionHandler('play', () => Player.toggle());
-      navigator.mediaSession.setActionHandler('pause', () => Player.toggle());
+      navigator.mediaSession.setActionHandler('play', () => Player.resume());
+      navigator.mediaSession.setActionHandler('pause', () => Player.pause());
       navigator.mediaSession.setActionHandler('previoustrack', () => Player.prev());
       navigator.mediaSession.setActionHandler('nexttrack', () => Player.next(true));
-    } catch { /* unsupported */ }
+      navigator.mediaSession.setActionHandler('seekbackward', (details) => Player.seekBy(-(details.seekOffset || 10)));
+      navigator.mediaSession.setActionHandler('seekforward', (details) => Player.seekBy(details.seekOffset || 10));
+      navigator.mediaSession.setActionHandler('seekto', (details) => {
+        const duration = audio.duration || Player.current?.duration || 0;
+        if (!duration || !Number.isFinite(details.seekTime)) return;
+        audio.currentTime = clamp(details.seekTime, 0, duration);
+        updateMediaSessionPosition();
+      });
+      updateMediaSessionPosition();
+    } catch { /* unsupported action */ }
   }
 
   function markCurrentRows() {
@@ -1555,63 +1737,6 @@
       return;
     }
 
-    if (npTab === 'why') {
-      if (!song) {
-        panel.innerHTML = '<p class="panel__note">Play something to see the reasoning.</p>';
-        return;
-      }
-      const rec = song.recommendation;
-      if (!rec) {
-        panel.innerHTML = `
-          <div class="why">
-            <div class="why__reason">You chose this one directly</div>
-            <p class="why__note">No prediction was involved, so there is nothing to explain. Tracks that arrive from a shelf or a station carry a full signal breakdown here.</p>
-          </div>`;
-        return;
-      }
-      const signals = rec.signals || {};
-      if (!Object.keys(signals).length) {
-        panel.innerHTML = `
-          <div class="why">
-            <div class="why__reason">${esc(rec.reason || 'Straight from the catalogue')}</div>
-            <p class="why__note">This track was not scored against a profile, so there is no signal breakdown. Play a few things and the engine starts ranking these sets around your taste.</p>
-          </div>`;
-        return;
-      }
-      const labels = {
-        artist: 'Artist match', collab: 'Co-listening', language: 'Language',
-        era: 'Release era', popularity: 'Popularity fit', freshness: 'Freshness',
-        recall: 'Source confidence',
-      };
-      // A blank reason means nothing about this listener explains the pick, so
-      // say that plainly rather than rendering an empty heading.
-      const headline = rec.reason || 'Nothing in your history explains this one';
-      const note = rec.score === undefined
-        ? 'It came from the set you opened, ordered by fit.'
-        : `Ranked ${rec.rank} with a blended score of ${Number(rec.score).toFixed(3)}. Here is what each signal contributed.`;
-      panel.innerHTML = `
-        <div class="why">
-          <div class="why__reason">${esc(headline)}</div>
-          <p class="why__note">${esc(note)}</p>
-          <div class="why__bars">
-            ${Object.entries(signals).map(([key, value]) => `
-              <div class="why__bar">
-                <span>${esc(labels[key] || key)}</span>
-                <div class="why__track"><i style="width:${clamp(value * 100, 0, 100)}%"></i></div>
-                <b>${Math.round(value * 100)}</b>
-              </div>`).join('')}
-          </div>
-          <div>
-            <p class="why__note" style="margin-bottom:8px">Found by</p>
-            <div class="why__sources">
-              ${(rec.sources || []).map((s) => `<span class="reason-pill"><span>${esc(s)}</span></span>`).join('')}
-              ${rec.discovery ? '<span class="reason-pill"><span>new to you</span></span>' : ''}
-            </div>
-          </div>
-        </div>`;
-      return;
-    }
-
     // Lyrics
     if (!song) {
       panel.innerHTML = '<p class="panel__note">Play something first.</p>';
@@ -1621,8 +1746,11 @@
     try {
       const data = await API.lyrics(song.id);
       if (Player.current?.id !== song.id) return;
+      const lyrics = esc(String(data.lyrics || '')
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<[^>]+>/g, ''));
       panel.innerHTML = `
-        <div class="lyrics">${data.lyrics.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '')}</div>
+        <div class="lyrics">${lyrics}</div>
         ${data.copyright ? `<p class="lyrics__copy">${esc(data.copyright)}</p>` : ''}`;
     } catch {
       if (Player.current?.id !== song.id) return;
@@ -1675,6 +1803,7 @@
     },
 
     start() {
+      if (document.hidden) return;
       this.ensure();
       if (!this.analyser) return;
       if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
@@ -1746,12 +1875,12 @@
         <img src="/static/img/logo.svg" alt="" width="30" height="30">
         <div>
           <strong>MusicArea</strong>
-          <small>Music that explains itself</small>
+          <small>Music that feels personal</small>
         </div>
       </div>
       <nav class="foot__links" aria-label="Footer">
         <a href="#/home">Home</a>
-        <a href="#/browse">Browse</a>
+        <a href="#/browse">Explore</a>
         <a href="#/library">Library</a>
         <a href="#/taste">Taste profile</a>
         <a href="#/settings">Settings</a>
@@ -1824,25 +1953,7 @@
               <span>${plural(profile.events, 'signal')} learned</span>
             </div>
           </section>`
-        : `
-          <section class="hero">
-            <div class="hero__body">
-              <span class="hero__eyebrow">${ICON_SPARK} Welcome to MusicArea</span>
-              <h1>Press play once.<br><em>The feed does the rest.</em></h1>
-              <p>MusicArea studies what you actually finish, skip and repeat, then builds a feed from it. No sign up, and nothing leaves your device: your taste profile lives in this browser.</p>
-              <div class="hero__actions">
-                <button class="btn btn--primary btn--lg" data-play-shelf="${esc(feedData?.rows?.[0]?.id || 'trending')}">${ICON_PLAY} Start listening</button>
-                <a class="btn btn--outline btn--lg" href="#/browse">Browse the catalogue</a>
-              </div>
-              <div class="hero__stats">
-                <div class="hero__stat"><span>Catalogue</span><strong>Millions of tracks</strong></div>
-                <div class="hero__stat"><span>Quality</span><strong>Up to 320 kbps</strong></div>
-                <div class="hero__stat"><span>Account</span><strong>Not needed</strong></div>
-                <div class="hero__stat"><span>Your data</span><strong>Stays local</strong></div>
-              </div>
-            </div>
-            ${heroArt(covers)}
-          </section>`;
+        : '';
 
       const rows = [];
       (feedData?.rows || []).forEach((row, index) => {
@@ -1870,33 +1981,20 @@
     },
 
     async browse() {
-      setView(`${skeletonShelf('Loading the catalogue')}${skeletonShelf('Charts')}`);
+      setView(`${skeletonShelf('Loading Explore')}${skeletonShelf('Charts')}`);
       const data = await API.browse(Store.prefs.language).catch(() => null);
       if (!data) {
-        setView(emptyState('Browse is unavailable', 'The catalogue service did not respond. Try again shortly.'));
+        setView(emptyState('Explore is unavailable', 'The catalogue service did not respond. Try again shortly.'));
         return;
       }
       setView(`
         <section class="section">
           <div class="section__head">
-            <div><h2>Browse</h2><p>Pick a language and dig in</p></div>
-          </div>
-          <div class="chip-row">
-            ${data.languages.map((lang) => `
-              <button class="chip ${lang === Store.prefs.language ? 'is-active' : ''}" data-language="${esc(lang)}">${esc(cap(lang))}</button>`).join('')}
-          </div>
-        </section>
-        <section class="section">
-          <div class="section__head">
-            <div><h2>Languages</h2><p>What is charting in each right now</p></div>
-          </div>
-          <div class="grid grid--genres" id="genreGrid">
-            ${Array.from({ length: 8 }, () => '<div class="skel" style="aspect-ratio:1.42;border-radius:var(--r-md)"></div>').join('')}
+            <div><h2>Explore</h2><p>Moods, fresh releases and playlists worth pressing play on</p></div>
           </div>
         </section>
         <div id="moodHost">${moodStrip(data.moods)}</div>
         ${(data.rows || []).map(shelf).join('')}`);
-      loadGenreTiles();
     },
 
     /** One language: what is trending, charting and newly out in it. */
@@ -1932,7 +2030,8 @@
     async search(query) {
       if (!query) {
         const recents = Store.recentSearches;
-        setView(`
+        const requestedHash = location.hash;
+        const renderEmptySearch = (moods) => setView(`
           ${recents.length ? `
           <section class="section">
             <div class="section__head">
@@ -1948,17 +2047,12 @@
                 </button>`).join('')}
             </div>
           </section>` : ''}
-          <section class="section">
-            <div class="section__head">
-              <div><h2>Browse by language</h2><p>What is charting in each right now</p></div>
-            </div>
-            <div class="grid grid--genres" id="genreGrid">
-              ${Array.from({ length: 8 }, () => '<div class="skel" style="aspect-ratio:1.42;border-radius:var(--r-md)"></div>').join('')}
-            </div>
-          </section>
-          <div id="moodHost">${moodStrip(MOODS_FALLBACK)}</div>`);
+          <div id="moodHost">${moodStrip(moods)}</div>`);
+        renderEmptySearch(MOODS_FALLBACK);
         if (!isMobile()) $('#searchInput').focus();
-        loadGenreTiles();
+        const moodData = await API.moods().catch(() => null);
+        if (location.hash !== requestedHash) return;
+        renderEmptySearch(moodData?.moods || MOODS_FALLBACK);
         return;
       }
       Store.rememberSearch(query);
@@ -2282,12 +2376,22 @@
       const lists = Store.playlists;
       setTimeout(loadMixesRow, 0);
       setView(`
+        <section class="library-hero">
+          <div>
+            <span class="library-hero__eyebrow">Your collection</span>
+            <h1>Your library</h1>
+            <p>Your saved music, recent plays and playlists in one focused place.</p>
+          </div>
+          <div class="library-hero__meta">
+            <span><strong>${Store.liked.length}</strong> liked</span>
+            <span><strong>${Store.playlists.length}</strong> playlists</span>
+            <span><strong>${Store.recent.length}</strong> recent</span>
+          </div>
+          <button class="btn btn--primary" id="libNewPlaylist">New playlist</button>
+        </section>
         <section class="section">
           <div class="section__head">
-            <div><h2>Your library</h2><p>Playlists, likes and history live in this browser</p></div>
-            <div class="section__head-actions">
-              <button class="btn btn--primary" id="libNewPlaylist">New playlist</button>
-            </div>
+            <div><h2>Collections</h2><p>Everything you have chosen to keep close</p></div>
           </div>
           <div class="grid">
             <article class="card" data-goto="#/liked">
@@ -2328,14 +2432,7 @@
               </article>`).join('')}
           </div>
         </section>
-        <div id="mixesRow"></div>
-        <section class="section">
-          <div class="section__head"><div><h2>Data</h2><p>Everything is local to this browser</p></div></div>
-          <div class="panel">
-            <p class="panel__note">${plural(Store.history.length, 'listening signal')} recorded. Clearing this resets your recommendations to a cold start.</p>
-            <div style="margin-top:14px"><button class="btn btn--outline" id="clearData">Clear my listening data</button></div>
-          </div>
-        </section>`);
+        <div id="mixesRow"></div>`);
     },
 
     localList(id) {
@@ -2887,9 +2984,13 @@
     }
     closeMenu();
     hideSuggest();
+    const mobileMenu = $('#mobileMenu');
+    const mobileToggle = $('#mobileNavToggle');
+    if (mobileMenu) mobileMenu.hidden = true;
+    if (mobileToggle) mobileToggle.setAttribute('aria-expanded', 'false');
 
     const TITLES = {
-      home: 'Home', browse: 'Browse', search: 'Search', library: 'Your library',
+      home: 'Home', browse: 'Explore', search: 'Search', library: 'Your library',
       liked: 'Liked songs', recent: 'Recently played', taste: 'Taste profile',
       settings: 'Settings',
     };
@@ -3680,6 +3781,12 @@
     /* --- history nav -------------------------------------------------- */
     $('#backBtn').addEventListener('click', () => history.back());
     $('#fwdBtn').addEventListener('click', () => history.forward());
+    $('#mobileNavToggle').addEventListener('click', () => {
+      const menu = $('#mobileMenu');
+      const opening = menu.hidden;
+      menu.hidden = !opening;
+      $('#mobileNavToggle').setAttribute('aria-expanded', String(opening));
+    });
 
     /* --- sticky topbar ------------------------------------------------ */
     view.addEventListener('scroll', () => {
@@ -3766,6 +3873,22 @@
 
     window.addEventListener('hashchange', route);
 
+    /* --- page lifecycle ------------------------------------------------ */
+    document.addEventListener('visibilitychange', () => {
+      const hidden = document.hidden;
+      Player.setBackgrounded(hidden);
+      if (hidden) {
+        Viz.stop();
+      } else if (!$('#np').hidden && Store.prefs.visualizer) {
+        Viz.start();
+      }
+    });
+    window.addEventListener('pagehide', () => Player.checkpoint());
+    window.addEventListener('pageshow', () => {
+      Player.setBackgrounded(document.hidden);
+      if (!document.hidden && !$('#np').hidden && Store.prefs.visualizer) Viz.start();
+    });
+
     /* --- connectivity ------------------------------------------------- */
     const showOffline = () => {
       if ($('#offlineBanner')) return;
@@ -3794,7 +3917,7 @@
     });
   }
 
-  /** Switch bitrate, keeping the current position. */
+  /** Switch bitrate, keeping the current position and refreshing the next deck. */
   function applyQuality(quality) {
     Store.prefs.quality = quality;
     Store.savePrefs();
@@ -3802,11 +3925,27 @@
     toast(`Streaming at ${quality.replace('kbps', ' kbps')}`);
 
     if (!Player.current) return;
+    Player.cancelStreamRecovery();
+    // A queued deck may have been prepared at the old quality. Rebuild that
+    // preload unless it is already involved in a handoff.
+    if (!Player.fading && !Player.crossfadeStarting) {
+      const queued = idleDeck();
+      queued.pause();
+      queued.removeAttribute('src');
+      queued.dataset.readyFor = '';
+      queued.dataset.readyUrl = '';
+      try { queued.load(); } catch { /* nothing to abort */ }
+    }
+
     const selectedStream = pickStream(Player.current, quality);
     const url = selectedStream.url;
     Player.servedQuality = selectedStream.quality;
     showServedQuality(Player.current, selectedStream.quality);
-    if (!url || url === audio.src) return;
+    const currentUrl = new URL(audio.currentSrc || audio.src, location.href).href;
+    if (!url || new URL(url, location.href).href === currentUrl) {
+      Player.preloadNext();
+      return;
+    }
 
     // Seeking has to wait for the new source to report its duration, otherwise
     // the assignment lands on an element that is still in HAVE_NOTHING.
@@ -3816,6 +3955,7 @@
       audio.removeEventListener('loadedmetadata', resume);
       try { audio.currentTime = at; } catch { /* not seekable yet */ }
       if (wasPlaying) audio.play().catch(() => {});
+      Player.preloadNext();
     };
     audio.addEventListener('loadedmetadata', resume);
     audio.src = url;
@@ -3859,6 +3999,7 @@
 
   installArtworkFallbacks();
   Player.init();
+  Player.restoreCheckpoint();
   wire();
   renderSidebarCounts();
   renderPlaylistList();

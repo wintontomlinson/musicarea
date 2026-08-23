@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>MusicArea · Music that learns what you love</title>
-<meta name="description" content="MusicArea is a premium music player with an algorithmic feed that explains every recommendation it makes.">
+<meta name="description" content="MusicArea is a premium music player with a personalized listening feed.">
 <meta name="theme-color" content="#07070b">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="manifest" href="/manifest.webmanifest">
@@ -40,7 +40,7 @@
       </a>
       <a class="nav__item" href="#/browse" data-route="browse">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18m0 2a7 7 0 1 1 0 14 7 7 0 0 1 0-14m3.4 3.6-2.2 5.2-5.2 2.2 2.2-5.2z"/></svg>
-        <span>Browse</span>
+        <span>Explore</span>
       </a>
       <a class="nav__item" href="#/library" data-route="library">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h3v16H4zm5 0h3v16H9zm6.2.6 2.9-.8 4 15.4-2.9.8z"/></svg>
@@ -113,9 +113,18 @@
       </form>
 
       <div class="topbar__right">
+        <button class="icon-btn mobile-nav-toggle" id="mobileNavToggle" aria-label="Open navigation" aria-expanded="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z"/></svg>
+        </button>
         <a class="icon-btn" href="#/settings" id="settingsBtn" title="Audio settings" aria-label="Audio settings">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8m0 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4m-1.4-8h2.8l.4 2.5 1.5.9 2.3-1 1.4 2.4-1.9 1.6q.1.5.1 1t-.1 1l1.9 1.6-1.4 2.4-2.3-1-1.5.9-.4 2.5h-2.8l-.4-2.5-1.5-.9-2.3 1L3 15.4l1.9-1.6q-.1-.5-.1-1t.1-1L3 10.2l1.4-2.4 2.3 1 1.5-.9z"/></svg>
         </a>
+        <nav class="mobile-menu" id="mobileMenu" hidden aria-label="Mobile navigation">
+          <a href="#/search">Search</a>
+          <a href="#/browse">Explore</a>
+          <a href="#/library">Library</a>
+          <a href="#/settings">Settings</a>
+        </nav>
       </div>
     </header>
 
@@ -179,7 +188,6 @@
     </div>
 
     <div class="player__extras">
-      <span class="reason-pill" id="reasonPill" hidden><span></span></span>
       <button class="icon-btn" id="lyricsBtn" data-pa="lyrics" title="Lyrics" aria-label="Lyrics">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v2H4zm0 4h11v2H4zm0 4h16v2H4zm0 4h11v2H4z"/></svg>
       </button>
@@ -224,7 +232,6 @@
       <div class="np__info">
         <h1 id="npTitle">Nothing playing</h1>
         <p id="npArtist"></p>
-        <span class="reason-pill reason-pill--lg" id="npReason" hidden><span></span></span>
       </div>
 
       <div class="np__viz" id="npViz" aria-hidden="true"></div>
@@ -288,7 +295,6 @@
       <div class="np__tabs" role="tablist">
         <button class="np__tab is-active" data-tab="queue" role="tab" aria-selected="true">Queue</button>
         <button class="np__tab" data-tab="lyrics" role="tab" aria-selected="false">Lyrics</button>
-        <button class="np__tab" data-tab="why" role="tab" aria-selected="false">Why this</button>
       </div>
       <div class="np__panel" id="npPanel"></div>
     </div>
@@ -308,26 +314,6 @@
   </header>
   <div class="drawer__body" id="queueBody"></div>
 </aside>
-
-<!-- ─── Mobile tab bar ─────────────────────────────────────────────────── -->
-<nav class="tabbar" aria-label="Primary mobile">
-  <a href="#/home" data-route="home">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-4.5v-6h-5v6H5a1 1 0 0 1-1-1z"/></svg>
-    <span>Home</span>
-  </a>
-  <a href="#/search" data-route="search">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 3a7.5 7.5 0 1 0 4.55 13.46l4.24 4.25 1.42-1.42-4.25-4.24A7.5 7.5 0 0 0 10.5 3m0 2a5.5 5.5 0 1 1 0 11 5.5 5.5 0 0 1 0-11"/></svg>
-    <span>Search</span>
-  </a>
-  <a href="#/browse" data-route="browse">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18m0 2a7 7 0 1 1 0 14 7 7 0 0 1 0-14m3.4 3.6-2.2 5.2-5.2 2.2 2.2-5.2z"/></svg>
-    <span>Browse</span>
-  </a>
-  <a href="#/library" data-route="library">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h3v16H4zm5 0h3v16H9zm6.2.6 2.9-.8 4 15.4-2.9.8z"/></svg>
-    <span>Library</span>
-  </a>
-</nav>
 
 <!-- ─── Dialog ─────────────────────────────────────────────────────────── -->
 <div class="modal" id="modal" hidden>
