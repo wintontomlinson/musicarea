@@ -1,10 +1,10 @@
 """
-models.py — Payload transformation functions for JioSaavn API
+models.py  |  Payload transformation functions for the JioSaavn catalog layer
 Credits: @ab_devs
 """
 
 import json
-from helpers import create_download_links, create_image_links
+from helpers import clean_text, create_download_links, create_image_links
 
 
 # ─── Artist Map ───────────────────────────────────────────────────────────────
@@ -12,7 +12,7 @@ from helpers import create_download_links, create_image_links
 def build_artist_map(artist: dict) -> dict:
     return {
         "id":    artist.get("id"),
-        "name":  artist.get("name"),
+        "name":  clean_text(artist.get("name")),
         "role":  artist.get("role"),
         "image": create_image_links(artist.get("image", "")),
         "type":  artist.get("type"),
@@ -27,7 +27,8 @@ def build_song(song: dict) -> dict:
     artist_map = mi.get("artistMap") or {}
     return {
         "id":             song.get("id"),
-        "name":           song.get("title"),
+        "name":           clean_text(song.get("title")),
+        "subtitle":       clean_text(song.get("subtitle")),
         "type":           song.get("type"),
         "year":           song.get("year") or None,
         "releaseDate":    mi.get("release_date") or None,
@@ -42,7 +43,7 @@ def build_song(song: dict) -> dict:
         "copyright":      mi.get("copyright_text") or None,
         "album": {
             "id":   mi.get("album_id") or None,
-            "name": mi.get("album") or None,
+            "name": clean_text(mi.get("album")) or None,
             "url":  mi.get("album_url") or None,
         },
         "artists": {
@@ -63,8 +64,9 @@ def build_album(album: dict) -> dict:
     songs_raw = album.get("list") or []
     return {
         "id":              album.get("id"),
-        "name":            album.get("title"),
-        "description":     album.get("header_desc"),
+        "name":            clean_text(album.get("title")),
+        "subtitle":        clean_text(album.get("subtitle")),
+        "description":     clean_text(album.get("header_desc")),
         "type":            album.get("type"),
         "year":            int(album["year"]) if album.get("year") else None,
         "playCount":       int(album["play_count"]) if album.get("play_count") else None,
@@ -89,8 +91,9 @@ def build_playlist(playlist: dict) -> dict:
     songs_raw = playlist.get("list") or []
     return {
         "id":              playlist.get("id"),
-        "name":            playlist.get("title"),
-        "description":     playlist.get("header_desc"),
+        "name":            clean_text(playlist.get("title")),
+        "subtitle":        clean_text(playlist.get("subtitle")),
+        "description":     clean_text(playlist.get("header_desc")),
         "type":            playlist.get("type"),
         "year":            int(playlist["year"]) if playlist.get("year") else None,
         "playCount":       int(playlist["play_count"]) if playlist.get("play_count") else None,
@@ -121,7 +124,8 @@ def build_artist(artist: dict) -> dict:
 
     return {
         "id":                 artist.get("artistId") or artist.get("id"),
-        "name":               artist.get("name"),
+        "name":               clean_text(artist.get("name")),
+        "subtitle":           clean_text(artist.get("subtitle")),
         "url":                (artist.get("urls") or {}).get("overview") or artist.get("perma_url"),
         "type":               artist.get("type"),
         "followerCount":      int(artist["follower_count"]) if artist.get("follower_count") else None,

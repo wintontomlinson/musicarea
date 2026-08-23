@@ -1,13 +1,21 @@
 """
-app.py — JioSaavn API  |  Flask + Vercel Edition
-Credits: @ab_devs
+app.py  |  MusicArea
+
+Flask application serving both the MusicArea web player and the JSON API it
+runs on. The catalog read layer lives in catalog.py and the recommendation
+engine in recommender.py.
+
+Original JioSaavn API layer credits: @ab_devs
 """
 
 import json
 import re
-from flask import Flask, jsonify, request, make_response
+from flask import Flask, jsonify, request, make_response, render_template, send_from_directory
+from werkzeug.exceptions import HTTPException
 
-from helpers import jiosaavn_fetch
+import catalog
+import recommender
+from helpers import CACHE, jiosaavn_fetch
 from models import (
     build_song,
     build_album,
@@ -25,12 +33,14 @@ app = Flask(__name__)
 
 def _cors(response):
     response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type"
     return response
 
 @app.after_request
 def after_request(response):
+    if request.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "public, max-age=3600"
     return _cors(response)
 
 @app.before_request
@@ -53,10 +63,27 @@ def err(msg, code=400):
 
 @app.route("/")
 def home():
+    """The MusicArea player. Everything is client rendered from the API below."""
+    return render_template("index.html")
+
+
+@app.route("/api")
+def api_index():
     return jsonify({
         "success": True,
-        "message": "JioSaavn API — Credits: @ab_devs",
+        "app": "MusicArea",
         "endpoints": {
+            "feed":        "POST /api/feed  (body: {history, mood, limit})",
+            "browse":      "/api/browse",
+            "radio":       "/api/radio/<song_id>",
+            "artistRadio": "/api/artists/<artist_id>/radio",
+            "mood":        "/api/moods/<mood_id>",
+            "trending":    "/api/trending?language=",
+            "charts":      "/api/charts",
+            "newReleases": "/api/new-releases?language=",
+            "featured":    "/api/featured?language=",
+            "lyrics":      "/api/songs/<song_id>/lyrics",
+            "similar":     "POST /api/similar  (body: {ids, limit})",
             "search":    "/api/search?query=",
             "songs":     "/api/songs?ids=  or  /api/songs?link=",
             "song_by_id": "/api/songs/<id>",
@@ -161,7 +188,9 @@ def get_album():
     else:
         data = jiosaavn_fetch("content.getAlbumDetails", {"albumid": album_id})
 
-    if not data:
+    # An id that belongs to a single rather than an album comes back as a shell
+    # with empty fields, so check for real content and not just a 200.
+    if not data or not data.get("id") or not data.get("title"):
         return err("Album not found", 404)
 
     return ok(build_album(data))
@@ -194,7 +223,7 @@ def get_playlist():
     else:
         data = jiosaavn_fetch("playlist.getDetails", {"listid": pl_id, "n": limit, "p": page})
 
-    if not data:
+    if not data or not data.get("id"):
         return err("Playlist not found", 404)
 
     playlist = build_playlist(data)
@@ -360,6 +389,266 @@ def search_playlists():
     return ok(build_search_playlists(data, limit))
 
 
+# ==========================================================================
+# MusicArea: discovery, browse and the recommendation feed
+# ==========================================================================
+
+def _payload():
+    return request.get_json(silent=True) or {}
+
+
+def _int_arg(name, default, low=1, high=100):
+    try:
+        value = int(request.args.get(name, default))
+    except (TypeError, ValueError):
+        return default
+    return max(low, min(high, value))
+
+
+@app.route("/api/feed", methods=["POST"])
+def api_feed():
+    """The personalised half of the home screen.
+
+    Takes the listener's local event log and returns several shelves. All of the
+    shelves are scored from a single shared candidate pool, so the whole screen
+    costs one recall pass rather than one per row.
+    """
+    body = _payload()
+    history = body.get("history") or []
+    mood = body.get("mood") or None
+    limit = max(6, min(40, int(body.get("limit") or 24)))
+
+    profile = recommender.build_profile(history)
+    pool = recommender.generate_candidates(profile, mood=mood, wide=True)
+
+    rows = []
+    used = set()
+
+    def add_row(row_id, title, subtitle, result):
+        items = [i for i in result["items"] if i["id"] not in used]
+        if not items:
+            return
+        used.update(i["id"] for i in items)
+        rows.append({
+            "id": row_id, "title": title, "subtitle": subtitle,
+            "kind": "songs", "items": items, "meta": result.get("meta", {}),
+        })
+
+    primary = recommender.recommend(profile=profile, pool=pool, limit=limit,
+                                    weight_profile="default")
+    add_row(
+        "made-for-you",
+        "Made for you" if not profile["coldStart"] else "Start here",
+        ("Tuned to your listening" if not profile["coldStart"]
+         else "Play a few tracks and this becomes yours"),
+        primary,
+    )
+
+    if not profile["coldStart"]:
+        seeds = profile["seeds"]
+        if seeds:
+            seed = seeds[0]
+            seed_history = [h for h in history if h.get("id") == seed["id"]] or [{
+                "id": seed["id"], "name": seed["name"], "event": "like",
+            }]
+            seed_profile = recommender.build_profile(seed_history)
+            add_row(
+                "because-you-played",
+                f"Because you played {seed['name']}" if seed.get("name") else "More like this",
+                seed.get("artist") or "",
+                recommender.recommend(profile=seed_profile, pool=pool, limit=16,
+                                      weight_profile="radio", salt=str(seed["id"]),
+                                      exclude=used | profile["heard"]),
+            )
+
+        add_row(
+            "discover",
+            "Discovery",
+            "Artists you have not played yet",
+            recommender.recommend(profile=profile, pool=pool, limit=16,
+                                  weight_profile="discover", exclude=used),
+        )
+        add_row(
+            "fresh-for-you",
+            "Fresh drops for you",
+            "New releases that fit your taste",
+            recommender.recommend(profile=profile, pool=pool, limit=16,
+                                  weight_profile="fresh", exclude=used),
+        )
+
+        # Heavy rotation is plain history, not a prediction.
+        rotation_ids = [s["id"] for s in profile["seeds"][:12]]
+        rotation = catalog.songs_by_ids(rotation_ids)
+        if rotation:
+            order = {sid: i for i, sid in enumerate(rotation_ids)}
+            rotation.sort(key=lambda s: order.get(s["id"], 99))
+            rows.append({
+                "id": "heavy-rotation", "title": "On repeat",
+                "subtitle": "Your most played lately", "kind": "songs",
+                "items": rotation, "meta": {},
+            })
+
+    return ok({
+        "rows": rows,
+        "profile": {
+            "coldStart": profile["coldStart"],
+            "strength": profile["strength"],
+            "events": profile["events"],
+            "topArtists": profile["topArtists"][:8],
+            "topLanguages": profile["topLanguages"],
+            "eraCenter": round(profile["eraCenter"]) if profile["eraCenter"] else None,
+            "mainstream": profile["mainstream"],
+        },
+        "candidates": len(pool),
+    })
+
+
+@app.route("/api/browse")
+def api_browse():
+    """Editorial shelves. Identical for everyone, so aggressively cacheable."""
+    language = (request.args.get("language") or "hindi").lower()
+    trending_songs, chart_cards, releases, playlists, fresh_songs = catalog.parallel([
+        lambda: catalog.trending(language),
+        lambda: catalog.charts(limit=12),
+        lambda: catalog.new_releases(language, limit=18),
+        lambda: catalog.featured_playlists(language, limit=18),
+        lambda: catalog.new_release_songs(language, limit=20),
+    ])
+
+    rows = []
+    if trending_songs:
+        rows.append({"id": "trending", "title": f"Trending in {language.title()}",
+                     "subtitle": "What the country has on repeat",
+                     "kind": "songs", "items": trending_songs[:24]})
+    if chart_cards:
+        rows.append({"id": "charts", "title": "Top charts",
+                     "subtitle": "Updated daily", "kind": "playlists",
+                     "items": chart_cards})
+    if fresh_songs:
+        rows.append({"id": "new-songs", "title": "Just released",
+                     "subtitle": "Singles that landed this week",
+                     "kind": "songs", "items": fresh_songs})
+    if releases:
+        rows.append({"id": "new-releases", "title": "New albums",
+                     "subtitle": "Fresh records", "kind": "albums", "items": releases})
+    if playlists:
+        rows.append({"id": "featured", "title": "Editor's playlists",
+                     "subtitle": "Handpicked by humans", "kind": "playlists",
+                     "items": playlists})
+
+    return ok({
+        "rows": rows,
+        "moods": catalog.MOODS,
+        "languages": catalog.LANGUAGES,
+        "language": language,
+    })
+
+
+@app.route("/api/radio/<song_id>")
+def api_radio(song_id):
+    """An endless, algorithmically ordered station seeded from one track."""
+    station = recommender.radio(song_id, limit=_int_arg("limit", 40, 5, 60))
+    if not station.get("items") and not station.get("seed"):
+        return err("Could not build a station for that song", 404)
+    return ok(station)
+
+
+@app.route("/api/artists/<artist_id>/radio")
+def api_artist_radio(artist_id):
+    station = recommender.artist_radio(artist_id, limit=_int_arg("limit", 40, 5, 60))
+    if not station.get("items"):
+        return err("Could not build a station for that artist", 404)
+    return ok(station)
+
+
+@app.route("/api/similar", methods=["POST"])
+def api_similar():
+    """"More like this" for an album, playlist or arbitrary selection."""
+    body = _payload()
+    ids = [str(i) for i in (body.get("ids") or []) if i][:10]
+    if not ids:
+        return err("ids is required")
+    seeds = catalog.songs_by_ids(ids)
+    if not seeds:
+        return err("None of those songs could be resolved", 404)
+    limit = max(4, min(40, int(body.get("limit") or 16)))
+    return ok({"items": recommender.similar_to_songs(seeds, limit=limit)})
+
+
+@app.route("/api/moods/<mood_id>")
+def api_mood(mood_id):
+    mood = catalog.MOOD_BY_ID.get(mood_id)
+    if not mood:
+        return err("Unknown mood", 404)
+    songs = catalog.mood_songs(mood_id, limit=_int_arg("limit", 40, 5, 60))
+    return ok({"mood": mood, "items": songs})
+
+
+@app.route("/api/trending")
+def api_trending():
+    language = (request.args.get("language") or "hindi").lower()
+    return ok({"language": language, "items": catalog.trending(language)})
+
+
+@app.route("/api/charts")
+def api_charts():
+    return ok({"items": catalog.charts(request.args.get("language"), limit=_int_arg("limit", 20, 1, 40))})
+
+
+@app.route("/api/new-releases")
+def api_new_releases():
+    language = (request.args.get("language") or "hindi").lower()
+    return ok({"language": language,
+               "items": catalog.new_releases(language, limit=_int_arg("limit", 20, 1, 40))})
+
+
+@app.route("/api/featured")
+def api_featured():
+    language = (request.args.get("language") or "hindi").lower()
+    return ok({"language": language,
+               "items": catalog.featured_playlists(language, limit=_int_arg("limit", 20, 1, 40))})
+
+
+@app.route("/api/songs/<song_id>/lyrics")
+def api_lyrics(song_id):
+    song = catalog.song_by_id(song_id)
+    if not song:
+        return err("Song not found", 404)
+    if not song.get("lyricsId"):
+        return err("No lyrics available for this song", 404)
+    found = catalog.lyrics(song["lyricsId"])
+    if not found:
+        return err("No lyrics available for this song", 404)
+    return ok(found)
+
+
+@app.route("/api/health")
+def api_health():
+    return ok({"status": "ok", "cache": CACHE.stats()})
+
+
+@app.route("/manifest.webmanifest")
+def manifest():
+    return jsonify({
+        "name": "MusicArea",
+        "short_name": "MusicArea",
+        "description": "A premium music player with an algorithmic feed.",
+        "start_url": "/",
+        "display": "standalone",
+        "background_color": "#07070b",
+        "theme_color": "#07070b",
+        "icons": [
+            {"src": "/static/img/logo.svg", "sizes": "any", "type": "image/svg+xml",
+             "purpose": "any maskable"},
+        ],
+    })
+
+
+@app.route("/favicon.svg")
+def favicon():
+    return send_from_directory(app.static_folder, "img/logo.svg")
+
+
 # ─── 404 fallback ─────────────────────────────────────────────────────────────
 
 @app.errorhandler(404)
@@ -369,7 +658,11 @@ def not_found(_):
 
 @app.errorhandler(Exception)
 def handle_error(e):
-    return err(str(e), 500)
+    # Let real HTTP errors keep their status instead of collapsing to a 500.
+    if isinstance(e, HTTPException):
+        return err(e.description or e.name, e.code or 500)
+    app.logger.exception("Unhandled error on %s", request.path)
+    return err("Something went wrong while loading that. Please try again.", 500)
 
 
 # ─── Entry point (local dev) ──────────────────────────────────────────────────
