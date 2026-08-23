@@ -335,6 +335,40 @@ def search_artist_cards(query: str, limit: int = 10) -> List[dict]:
     return cards[:limit]
 
 
+def mood_cards() -> List[dict]:
+    """The mood list with real artwork attached, for the browse tiles.
+
+    Each mood borrows the cover of the editorial playlist that best matches it,
+    and carries a few track covers behind that as a fallback and for collages.
+    Every lookup is individually cached, so this is cheap after the first call.
+    """
+    jobs = []
+    for mood in MOODS:
+        jobs.append(lambda q=mood["query"]: search_playlist_cards(q, limit=1))
+        jobs.append(lambda q=mood["query"]: search_songs(q, limit=4))
+    results = parallel(jobs, workers=10)
+
+    cards = []
+    for index, mood in enumerate(MOODS):
+        playlists = results[index * 2] or []
+        songs = results[index * 2 + 1] or []
+        covers = [s["image"] for s in songs if s.get("image")][:4]
+        # Album art in preference to the editorial playlist cover. Playlist
+        # covers have their own title typeset into the artwork, which collided
+        # with the mood label drawn over the tile: "Romance" sat on top of a
+        # faint "Most Streamed Love Songs".
+        image = None
+        if covers:
+            image = covers[0]
+        elif playlists and playlists[0].get("image"):
+            image = playlists[0]["image"]
+        card = dict(mood)
+        card["image"] = image
+        card["covers"] = covers
+        cards.append(card)
+    return cards
+
+
 def mood_songs(mood_id: str, limit: int = 30) -> List[dict]:
     mood = MOOD_BY_ID.get(mood_id)
     if not mood:
