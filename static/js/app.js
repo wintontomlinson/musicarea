@@ -145,7 +145,20 @@
     recent: read(KEYS.recent, []),
     playlists: read(KEYS.playlists, []),
     prefs: Object.assign(
-      { volume: 0.85, muted: false, quality: '320kbps', repeat: 'off', shuffle: false, language: 'hindi', autoplay: true },
+      {
+        volume: 0.85,
+        muted: false,
+        // 320kbps AAC is the highest the source offers. streamUrl() steps down
+        // per track only when a given rung is missing.
+        quality: '320kbps',
+        repeat: 'off',
+        shuffle: false,
+        language: 'hindi',
+        autoplay: true,
+        crossfade: 0,      // seconds, 0 disables the second deck entirely
+        visualizer: true,
+        sleepTimer: 0,     // minutes, 0 is off. Never persisted as active.
+      },
       read(KEYS.prefs, {}),
     ),
 
@@ -309,6 +322,8 @@
         .then((data) => {
           this.cache = data;
           this.at = Date.now();
+          // Reconcile the sidebar meter with the engine's own figure.
+          renderTasteCard(data?.profile?.strength);
           return data;
         })
         .finally(() => { this.inflight = null; });
@@ -505,7 +520,15 @@
   /* Player                                                                 */
   /* ====================================================================== */
 
-  const audio = $('#audio');
+  /* Two decks. `audio` always points at the deck that owns the UI state; the
+     other one is idle, or fading in during a crossfade. Because `audio` is a
+     mutable binding, every existing `audio.x` reference follows the swap. */
+  const DECKS = [$('#audioA'), $('#audioB')];
+  let audio = DECKS[0];
+  const idleDeck = () => (audio === DECKS[0] ? DECKS[1] : DECKS[0]);
+
+  /** Target playback gain, respecting mute. Fades scale against this. */
+  const gain = () => (Store.prefs.muted ? 0 : Store.prefs.volume);
 
   const Player = {
     queue: [],
@@ -517,9 +540,14 @@
     autoplayPending: false,
     seeking: false,
 
+    fadeRaf: 0,
+    fading: false,
+
     init() {
-      audio.volume = Store.prefs.muted ? 0 : Store.prefs.volume;
-      audio.muted = !!Store.prefs.muted;
+      DECKS.forEach((deck) => {
+        deck.volume = gain();
+        deck.muted = !!Store.prefs.muted;
+      });
       $('#volume').value = Math.round(Store.prefs.volume * 100);
       setVolumeFill(Store.prefs.volume * 100);
       $('#muteBtn').classList.toggle('is-muted', !!Store.prefs.muted);
@@ -528,18 +556,109 @@
       $('#shuffleBtn').setAttribute('aria-pressed', String(!!Store.prefs.shuffle));
       $('#qualityTag').textContent = Store.prefs.quality.replace('kbps', '');
 
-      audio.addEventListener('loadedmetadata', () => {
-        $('#timeTotal').textContent = fmtTime(audio.duration || this.current?.duration || 0);
+      // Both decks are wired, but only the active one is allowed to drive the
+      // UI. A deck that is fading out must not repaint state or advance tracks.
+      DECKS.forEach((deck) => {
+        const isActive = () => deck === audio && deck.dataset.retiring !== '1';
+
+        deck.addEventListener('loadedmetadata', () => {
+          if (!isActive()) return;
+          $('#timeTotal').textContent = fmtTime(deck.duration || this.current?.duration || 0);
+        });
+        deck.addEventListener('timeupdate', () => { if (isActive()) this.onTime(); });
+        deck.addEventListener('ended', () => { if (isActive()) this.onEnded(); });
+        deck.addEventListener('play', () => { if (isActive()) setPlayerState('playing'); });
+        deck.addEventListener('pause', () => {
+          if (isActive() && !deck.ended) setPlayerState('paused');
+        });
+        deck.addEventListener('waiting', () => { if (isActive()) setPlayerState('loading'); });
+        deck.addEventListener('playing', () => { if (isActive()) setPlayerState('playing'); });
+        deck.addEventListener('error', () => { if (isActive()) this.onError(); });
       });
-      audio.addEventListener('timeupdate', () => this.onTime());
-      audio.addEventListener('ended', () => this.onEnded());
-      audio.addEventListener('play', () => setPlayerState('playing'));
-      audio.addEventListener('pause', () => {
-        if (!audio.ended) setPlayerState('paused');
+    },
+
+    /* ---- Crossfade ------------------------------------------------------ */
+
+    /** Equal power fade. sin/cos keeps perceived loudness flat across the blend,
+     *  where a linear ramp audibly dips in the middle. */
+    runFade(fromDeck, toDeck, seconds, onDone) {
+      cancelAnimationFrame(this.fadeRaf);
+      const target = gain();
+      const startFrom = fromDeck ? fromDeck.volume : 0;
+      const started = performance.now();
+      const duration = Math.max(0.05, seconds) * 1000;
+      this.fading = true;
+
+      const step = () => {
+        const p = clamp((performance.now() - started) / duration, 0, 1);
+        if (toDeck) toDeck.volume = clamp(target * Math.sin((p * Math.PI) / 2), 0, 1);
+        if (fromDeck) fromDeck.volume = clamp(startFrom * Math.cos((p * Math.PI) / 2), 0, 1);
+        if (p < 1) {
+          this.fadeRaf = requestAnimationFrame(step);
+          return;
+        }
+        this.fading = false;
+        if (toDeck) toDeck.volume = target;
+        if (onDone) onDone();
+      };
+      this.fadeRaf = requestAnimationFrame(step);
+    },
+
+    /** Start `orderPos` on the idle deck and blend the two over `seconds`. */
+    async crossfadeTo(orderPos, seconds) {
+      if (orderPos < 0 || orderPos >= this.order.length) return false;
+      const song = this.queue[this.order[orderPos]];
+      const url = song && streamUrl(song, Store.prefs.quality);
+      if (!url) return false;
+
+      const outgoing = audio;
+      const incoming = idleDeck();
+      const outgoingSong = this.current;
+      const outgoingRatio = this.playedRatio;
+
+      outgoing.dataset.retiring = '1';
+      incoming.dataset.retiring = '';
+      incoming.src = url;
+      incoming.currentTime = 0;
+      incoming.volume = 0;
+      incoming.muted = !!Store.prefs.muted;
+
+      try {
+        await incoming.play();
+      } catch {
+        // Autoplay refused the second deck: fall back to a plain switch.
+        outgoing.dataset.retiring = '';
+        return false;
+      }
+
+      // Hand the UI over immediately so the now playing view matches what is
+      // becoming audible.
+      audio = incoming;
+      this.pos = orderPos;
+      this.current = song;
+      this.playedRatio = 0;
+      this.loggedPlay = false;
+      paintNowPlaying(song);
+      Store.pushRecent(song);
+      updateMediaSession(song);
+      setPlayerState('playing');
+      renderQueue();
+      markCurrentRows();
+      Viz.attach(incoming);
+
+      this.runFade(outgoing, incoming, seconds, () => {
+        outgoing.pause();
+        outgoing.removeAttribute('src');
+        outgoing.load();
+        outgoing.dataset.retiring = '';
+        outgoing.volume = gain();
+        if (outgoingSong) {
+          Store.logEvent(outgoingSong, outgoingRatio > 0.9 ? 'complete' : 'play');
+        }
       });
-      audio.addEventListener('waiting', () => setPlayerState('loading'));
-      audio.addEventListener('playing', () => setPlayerState('playing'));
-      audio.addEventListener('error', () => this.onError());
+
+      this.topUpIfNeeded();
+      return true;
     },
 
     /** Play a list of songs starting at an index. */
@@ -575,6 +694,18 @@
 
     async load(orderPos, autoplay = true) {
       if (orderPos < 0 || orderPos >= this.order.length) return;
+
+      // Abandon any blend in progress and silence the other deck, otherwise a
+      // retiring track keeps playing underneath the new one.
+      cancelAnimationFrame(this.fadeRaf);
+      this.fading = false;
+      const other = idleDeck();
+      other.pause();
+      other.removeAttribute('src');
+      other.dataset.retiring = '';
+      audio.dataset.retiring = '';
+      audio.volume = gain();
+
       this.pos = orderPos;
       const song = this.queue[this.order[orderPos]];
       if (!song) return;
@@ -626,6 +757,12 @@
         audio.currentTime = 0;
         audio.play().catch(() => {});
         return;
+      }
+      // A manual skip gets a short blend rather than the full crossfade length,
+      // so the response still feels immediate.
+      const manualFade = Math.min(Store.prefs.crossfade, 1.2);
+      if (manualFade > 0 && !audio.paused && this.pos + 1 < this.order.length) {
+        return this.crossfadeTo(this.pos + 1, manualFade);
       }
       if (this.pos + 1 < this.order.length) return this.load(this.pos + 1);
       if (Store.prefs.repeat === 'all' && this.order.length) return this.load(0);
@@ -726,6 +863,15 @@
         Store.logEvent(this.current, 'play');
       }
       if (ratio > 0.82 && this.pos + 2 >= this.order.length) this.topUpIfNeeded();
+
+      // Begin the blend early enough that the outgoing track finishes silent.
+      const seconds = Store.prefs.crossfade;
+      if (seconds > 0 && !this.fading && Store.prefs.repeat !== 'one') {
+        const remaining = duration - audio.currentTime;
+        if (remaining <= seconds && remaining > 0.2 && this.pos + 1 < this.order.length) {
+          this.crossfadeTo(this.pos + 1, Math.min(seconds, Math.max(0.3, remaining)));
+        }
+      }
     },
 
     onEnded() {
@@ -889,7 +1035,7 @@
     document.body.style.overflow = 'hidden';
     renderNpViz();
     renderNpPanel();
-    Viz.start();
+    if (Store.prefs.visualizer) Viz.start();
   }
 
   function closeNp() {
@@ -1013,6 +1159,7 @@
     data: null,
     raf: 0,
     failed: false,
+    sources: new WeakMap(),
 
     ensure() {
       if (this.ctx || this.failed) return;
@@ -1020,18 +1167,30 @@
         const AudioCtx = window.AudioContext || window.webkitAudioContext;
         if (!AudioCtx) throw new Error('no audio context');
         this.ctx = new AudioCtx();
-        const source = this.ctx.createMediaElementSource(audio);
         this.analyser = this.ctx.createAnalyser();
         this.analyser.fftSize = 128;
         this.analyser.smoothingTimeConstant = 0.78;
-        source.connect(this.analyser);
         this.analyser.connect(this.ctx.destination);
         this.data = new Uint8Array(this.analyser.frequencyBinCount);
+        // Tap both decks so a crossfade stays visible and, more importantly,
+        // stays audible: an element left unrouted would go silent.
+        DECKS.forEach((deck) => this.attach(deck));
       } catch {
         // Falls back to the CSS keyframe bars. Never let this break audio.
         this.failed = true;
         this.ctx = null;
       }
+    },
+
+    /** Route a deck into the analyser. A media element can only ever have one
+     *  source node, so the WeakMap guards against a second attempt. */
+    attach(deck) {
+      if (!this.ctx || !this.analyser || this.sources.has(deck)) return;
+      try {
+        const source = this.ctx.createMediaElementSource(deck);
+        source.connect(this.analyser);
+        this.sources.set(deck, source);
+      } catch { /* already routed, or unsupported */ }
     },
 
     start() {
@@ -1099,10 +1258,41 @@
 
   const view = $('#view');
 
+  const FOOTER = `
+    <footer class="foot">
+      <div class="foot__brand">
+        <img src="/static/img/logo.svg" alt="" width="30" height="30">
+        <div>
+          <strong>MusicArea</strong>
+          <small>Music that explains itself</small>
+        </div>
+      </div>
+      <nav class="foot__links" aria-label="Footer">
+        <a href="#/home">Home</a>
+        <a href="#/browse">Browse</a>
+        <a href="#/library">Library</a>
+        <a href="#/taste">Taste profile</a>
+        <a href="#/settings">Settings</a>
+      </nav>
+      <p class="foot__note">
+        Your listening history, likes and playlists are stored in this browser only.
+        Catalogue and streams are provided by JioSaavn.
+      </p>
+    </footer>`;
+
   function setView(html) {
-    view.innerHTML = html;
+    view.innerHTML = html + FOOTER;
     view.scrollTop = 0;
     markCurrentRows();
+  }
+
+  /** Page title per route, for when nothing is playing yet.
+   *  Once a track is loaded the tab shows that instead, which is the more useful
+   *  thing for a music app to advertise, so this defers to it. */
+  function setTitle(parts) {
+    if (Player.current) return;
+    const list = (Array.isArray(parts) ? parts : [parts]).filter(Boolean);
+    document.title = list.length ? `${list.join(' · ')} | MusicArea` : 'MusicArea';
   }
 
   const Views = {
@@ -1130,7 +1320,7 @@
           <section class="hero">
             <span class="hero__eyebrow">${ICON_SPARK} Your mix is ready</span>
             <h1>Music that keeps<br>learning what you love</h1>
-            <p>Built from ${plural(profile.events, 'listening signal')} across ${plural(profile.topArtists.length, 'artist')}. Every pick below tells you why it is there.</p>
+            <p>Built from ${plural(profile.events, 'listening signal')} across ${plural(profile.artistCount ?? profile.topArtists.length, 'artist')}. Every pick below tells you why it is there.</p>
             <div class="hero__actions">
               <button class="btn btn--primary btn--lg" data-play-shelf="made-for-you">${ICON_PLAY} Play my mix</button>
               <a class="btn btn--outline btn--lg" href="#/taste">See my taste profile</a>
@@ -1193,6 +1383,7 @@
         return;
       }
       $('#searchInput').value = query;
+      setTitle([query, 'Search']);
       setView(`<div class="spinner-row"><span class="spinner"></span>Searching for ${esc(query)}</div>`);
 
       const [songs, albums, artists, playlists] = await Promise.all([
@@ -1245,6 +1436,7 @@
       remember(songs);
       document.documentElement.style.setProperty('--hue', String(hueOf(album.id)));
       const listKey = registerList(songs, album.name);
+      setTitle([album.name, 'Album']);
       const total = songs.reduce((sum, s) => sum + (s.duration || 0), 0);
 
       setView(`
@@ -1284,6 +1476,7 @@
       remember(songs);
       document.documentElement.style.setProperty('--hue', String(hueOf(playlist.id)));
       const listKey = registerList(songs, playlist.name);
+      setTitle([playlist.name, 'Playlist']);
 
       setView(`
         <header class="detail">
@@ -1319,6 +1512,7 @@
       remember(songs);
       document.documentElement.style.setProperty('--hue', String(hueOf(artist.id)));
       const listKey = registerList(songs, artist.name);
+      setTitle([artist.name, 'Artist']);
       const bio = Array.isArray(artist.bio) ? artist.bio.map((b) => b.text).filter(Boolean).join('\n\n') : '';
 
       setView(`
@@ -1362,6 +1556,7 @@
       remember(data.items);
       const listKey = registerList(data.items, data.mood.name);
       document.documentElement.style.setProperty('--hue', String(data.mood.hue));
+      setTitle([data.mood.name, 'Mood']);
       const personalised = data.meta?.personalised;
       const blurb = personalised
         ? `${plural(data.meta.pool, 'track')} pulled for this mood, then ordered by how well each one fits your listening.`
@@ -1507,6 +1702,114 @@
         ${trackList(list.songs, { label: list.name })}`);
     },
 
+    settings() {
+      const p = Store.prefs;
+      const qualities = [
+        { id: '320kbps', name: 'Highest', note: '320 kbps AAC, the best the source offers' },
+        { id: '160kbps', name: 'High', note: '160 kbps, roughly half the data' },
+        { id: '96kbps', name: 'Data saver', note: '96 kbps, for a weak connection' },
+      ];
+      const timers = [0, 15, 30, 45, 60];
+
+      setView(`
+        <section class="hero">
+          <span class="hero__eyebrow">${ICON_SPARK} Settings</span>
+          <h1>Playback</h1>
+          <p>Everything here is stored in this browser and applies the moment you change it.</p>
+        </section>
+
+        <section class="section">
+          <div class="section__head"><div><h2>Audio quality</h2><p>Applies to the next track, and to the current one straight away</p></div></div>
+          <div class="panel">
+            <div class="opt-list">
+              ${qualities.map((q) => `
+                <button class="opt ${p.quality === q.id ? 'is-active' : ''}" data-set-quality="${q.id}">
+                  <span class="opt__radio"></span>
+                  <span class="opt__body">
+                    <strong>${esc(q.name)}</strong>
+                    <small>${esc(q.note)}</small>
+                  </span>
+                  <span class="opt__tag">${esc(q.id.replace('kbps', ''))}</span>
+                </button>`).join('')}
+            </div>
+            <p class="panel__note" style="margin-top:14px">If a track is not available at your chosen rate, MusicArea steps down one rung for that track only rather than failing.</p>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section__head"><div><h2>Crossfade</h2><p>Blend the end of one track into the start of the next</p></div></div>
+          <div class="panel">
+            <div class="setting">
+              <div class="setting__text">
+                <strong>Smooth crossfade</strong>
+                <small id="xfLabel">${p.crossfade > 0 ? `${p.crossfade} seconds` : 'Off'}</small>
+              </div>
+              <button class="switch ${p.crossfade > 0 ? 'is-on' : ''}" id="xfToggle" role="switch"
+                      aria-checked="${p.crossfade > 0}" aria-label="Smooth crossfade">
+                <span></span>
+              </button>
+            </div>
+            <div class="setting setting--stack" id="xfRow" ${p.crossfade > 0 ? '' : 'hidden'}>
+              <input class="range" id="xfRange" type="range" min="1" max="12" step="1"
+                     value="${p.crossfade || 6}" aria-label="Crossfade length in seconds">
+              <div class="range__scale"><span>1s</span><span>6s</span><span>12s</span></div>
+            </div>
+            <p class="panel__note">Uses an equal power curve, so the blend holds a steady loudness instead of dipping in the middle. Skipping by hand uses a shorter blend so the button still feels instant. Crossfade is bypassed when Repeat one is active.</p>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section__head"><div><h2>Playback</h2></div></div>
+          <div class="panel">
+            <div class="setting">
+              <div class="setting__text">
+                <strong>Keep the music going</strong>
+                <small>When the queue runs out, extend it with an algorithmic station</small>
+              </div>
+              <button class="switch ${p.autoplay ? 'is-on' : ''}" id="autoplayToggle" role="switch"
+                      aria-checked="${!!p.autoplay}" aria-label="Autoplay station"><span></span></button>
+            </div>
+            <div class="setting">
+              <div class="setting__text">
+                <strong>Audio visualizer</strong>
+                <small>Real frequency analysis on the now playing screen</small>
+              </div>
+              <button class="switch ${p.visualizer ? 'is-on' : ''}" id="vizToggle" role="switch"
+                      aria-checked="${!!p.visualizer}" aria-label="Audio visualizer"><span></span></button>
+            </div>
+            <div class="setting setting--stack">
+              <div class="setting__text">
+                <strong>Sleep timer</strong>
+                <small id="sleepLabel">${Sleep.remainingLabel()}</small>
+              </div>
+              <div class="chip-row" style="padding-bottom:0">
+                ${timers.map((m) => `
+                  <button class="chip ${Sleep.minutes === m ? 'is-active' : ''}" data-sleep="${m}">
+                    ${m === 0 ? 'Off' : `${m} min`}
+                  </button>`).join('')}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section__head"><div><h2>Your data</h2><p>None of this leaves your device</p></div></div>
+          <div class="panel">
+            <p class="panel__note">${plural(Store.history.length, 'listening signal')} recorded, ${plural(Store.liked.length, 'liked song')}, ${plural(Store.playlists.length, 'playlist')}. Your taste profile is sent with a request only to rank that one response, and is never stored on the server.</p>
+            <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">
+              <a class="btn btn--outline" href="#/taste">View my taste profile</a>
+              <button class="btn btn--outline" id="clearData">Clear my listening data</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section__head"><div><h2>Keyboard</h2></div></div>
+          <div class="panel"><div class="keys">${SHORTCUTS.map(([k, d]) => `
+            <div class="keys__row"><kbd>${esc(k)}</kbd><span>${esc(d)}</span></div>`).join('')}</div></div>
+        </section>`);
+    },
+
     async taste() {
       setView(`<div class="spinner-row"><span class="spinner"></span>Reading your profile</div>`);
       const data = await Feed.load().catch(() => null);
@@ -1572,6 +1875,55 @@
   };
 
   const Home = { feed: null };
+
+  const SHORTCUTS = [
+    ['Space', 'Play or pause'],
+    ['N', 'Next track'],
+    ['P', 'Previous track'],
+    ['L', 'Like the current track'],
+    ['S', 'Shuffle'],
+    ['R', 'Repeat'],
+    ['Q', 'Queue'],
+    ['M', 'Mute'],
+    ['/', 'Search'],
+    ['Shift + arrows', 'Seek 10 seconds'],
+    ['Esc', 'Close now playing'],
+  ];
+
+  /** Sleep timer. Fades out rather than cutting off mid bar. */
+  const Sleep = {
+    minutes: 0,
+    endsAt: 0,
+    handle: 0,
+
+    set(minutes) {
+      clearTimeout(this.handle);
+      this.minutes = minutes;
+      if (!minutes) {
+        this.endsAt = 0;
+        toast('Sleep timer off');
+        return;
+      }
+      this.endsAt = Date.now() + minutes * 60000;
+      this.handle = setTimeout(() => {
+        Player.runFade(audio, null, 6, () => {
+          audio.pause();
+          audio.volume = gain();
+          setPlayerState('paused');
+        });
+        this.minutes = 0;
+        this.endsAt = 0;
+        toast('Sleep timer reached, fading out');
+      }, minutes * 60000);
+      toast(`Sleeping in ${minutes} minutes`);
+    },
+
+    remainingLabel() {
+      if (!this.endsAt) return 'Off';
+      const mins = Math.max(0, Math.round((this.endsAt - Date.now()) / 60000));
+      return `Stops in about ${plural(mins, 'minute')}`;
+    },
+  };
 
   const MOODS_FALLBACK = [
     { id: 'romance', name: 'Romance', hue: 336 }, { id: 'party', name: 'Party', hue: 24 },
@@ -1665,6 +2017,14 @@
     closeMenu();
     hideSuggest();
 
+    const TITLES = {
+      home: 'Home', browse: 'Browse', search: 'Search', library: 'Your library',
+      liked: 'Liked songs', recent: 'Recently played', taste: 'Taste profile',
+      settings: 'Settings',
+    };
+    // Detail views set a richer title once their data lands.
+    setTitle(TITLES[path] || null);
+
     try {
       switch (path) {
         case 'home': return await Views.home();
@@ -1679,6 +2039,7 @@
         case 'library': return Views.library();
         case 'list': return Views.localList(param);
         case 'taste': return await Views.taste();
+        case 'settings': return Views.settings();
         default:
           location.hash = '#/home';
           return undefined;
@@ -1712,13 +2073,41 @@
       </a>`).join('');
   }
 
-  function renderTasteCard() {
-    // Mirrors the server side profile strength: positive weight over a target.
-    const events = Store.history.filter((e) => !['skip', 'dislike'].includes(e.event));
-    const strength = clamp(events.length / 40, 0, 1);
+  /* Kept deliberately in step with recommender.py. These previously used two
+     different formulas, so the sidebar bar and the taste page reported two
+     different strengths for the same profile (35% against 100%). Change one and
+     you must change the other. */
+  const EVENT_WEIGHTS = {
+    play: 1.0, complete: 1.7, repeat: 2.2, like: 2.6, playlist_add: 2.0,
+    queue: 1.1, search_play: 1.3, skip: -0.7, dislike: -2.4,
+  };
+  const HALF_LIFE_DAYS = 21;
+  const STRENGTH_TARGET = 25;
+
+  /** Time decayed sum of positive signals, normalised to 0..1. */
+  function localProfileStrength() {
+    const now = Date.now();
+    let total = 0;
+    for (const entry of Store.history) {
+      const base = EVENT_WEIGHTS[entry.event] ?? 1.0;
+      if (base <= 0) continue;
+      const ageDays = entry.at ? Math.max(0, (now - entry.at) / 86400000) : null;
+      const decay = ageDays === null ? 0.35 : 0.5 ** (ageDays / HALF_LIFE_DAYS);
+      total += base * decay;
+    }
+    return clamp(total / STRENGTH_TARGET, 0, 1);
+  }
+
+  function renderTasteCard(serverStrength) {
+    // Prefer the value the engine actually reported; fall back to the identical
+    // local calculation before the first feed request has landed.
+    const strength = typeof serverStrength === 'number'
+      ? serverStrength
+      : localProfileStrength();
+    const counted = Store.history.filter((e) => (EVENT_WEIGHTS[e.event] ?? 1) > 0).length;
     $('#tasteBar').style.width = `${Math.round(strength * 100)}%`;
-    $('#tasteHint').textContent = events.length
-      ? `${plural(events.length, 'signal')} learned`
+    $('#tasteHint').textContent = counted
+      ? `${Math.round(strength * 100)}% from ${plural(counted, 'signal')}`
       : 'Listening to learn';
   }
 
@@ -1976,6 +2365,47 @@
         return;
       }
 
+      /* --- settings controls ----------------------------------------- */
+
+      const setQuality = target.closest('[data-set-quality]');
+      if (setQuality) {
+        applyQuality(setQuality.dataset.setQuality);
+        Views.settings();
+        return;
+      }
+
+      if (target.closest('#xfToggle')) {
+        const on = Store.prefs.crossfade > 0;
+        Store.prefs.crossfade = on ? 0 : 6;
+        Store.savePrefs();
+        Views.settings();
+        toast(on ? 'Crossfade off' : 'Crossfade on, 6 seconds');
+        return;
+      }
+
+      if (target.closest('#autoplayToggle')) {
+        Store.prefs.autoplay = !Store.prefs.autoplay;
+        Store.savePrefs();
+        Views.settings();
+        toast(Store.prefs.autoplay ? 'Queue will keep extending' : 'Queue will stop at the end');
+        return;
+      }
+
+      if (target.closest('#vizToggle')) {
+        Store.prefs.visualizer = !Store.prefs.visualizer;
+        Store.savePrefs();
+        if (!Store.prefs.visualizer) Viz.stop();
+        Views.settings();
+        return;
+      }
+
+      const sleepBtn = target.closest('[data-sleep]');
+      if (sleepBtn) {
+        Sleep.set(Number(sleepBtn.dataset.sleep));
+        Views.settings();
+        return;
+      }
+
       if (target.closest('#clearData')) {
         if (confirm('Clear all listening data? Recommendations reset to a cold start.')) {
           Store.clearHistory();
@@ -1998,8 +2428,13 @@
       if (Player.queue.length) {
         const currentQueueIndex = Player.order[Player.pos];
         Player.rebuildOrder(currentQueueIndex);
-        Player.pos = 0;
+        // Stay pointed at the track that is actually playing. Shuffling on puts
+        // it first, but shuffling off restores the original list order, where it
+        // can sit anywhere. Assuming position 0 made Next jump backwards and the
+        // queue drawer mark the wrong row as playing.
+        Player.pos = Math.max(0, Player.order.indexOf(currentQueueIndex));
         renderQueue();
+        markCurrentRows();
       }
       toast(Store.prefs.shuffle ? 'Shuffle on' : 'Shuffle off');
     });
@@ -2026,7 +2461,8 @@
       Store.prefs.volume = value;
       Store.prefs.muted = value === 0;
       Store.savePrefs();
-      audio.muted = false;
+      DECKS.forEach((deck) => { deck.muted = false; });
+      // Mid-fade the ramp owns the volume, so only retarget the active deck.
       audio.volume = value;
       setVolumeFill(value * 100);
       $('#muteBtn').classList.toggle('is-muted', value === 0);
@@ -2035,23 +2471,24 @@
     $('#muteBtn').addEventListener('click', () => {
       Store.prefs.muted = !Store.prefs.muted;
       Store.savePrefs();
-      audio.muted = Store.prefs.muted;
+      DECKS.forEach((deck) => { deck.muted = Store.prefs.muted; });
       $('#muteBtn').classList.toggle('is-muted', Store.prefs.muted);
     });
 
     $('#quality').addEventListener('click', () => {
       const order = ['320kbps', '160kbps', '96kbps'];
-      const next = order[(order.indexOf(Store.prefs.quality) + 1) % order.length];
-      Store.prefs.quality = next;
+      applyQuality(order[(order.indexOf(Store.prefs.quality) + 1) % order.length]);
+    });
+
+    // Crossfade length slider lives inside a re-rendered view, so it is bound
+    // by delegation rather than a direct listener.
+    document.addEventListener('input', (event) => {
+      const range = event.target.closest?.('#xfRange');
+      if (!range) return;
+      Store.prefs.crossfade = Number(range.value);
       Store.savePrefs();
-      $('#qualityTag').textContent = next.replace('kbps', '');
-      toast(`Streaming at ${next}`);
-      if (Player.current && !audio.paused) {
-        const at = audio.currentTime;
-        audio.src = streamUrl(Player.current, next);
-        audio.currentTime = at;
-        audio.play().catch(() => {});
-      }
+      const label = $('#xfLabel');
+      if (label) label.textContent = `${Store.prefs.crossfade} seconds`;
     });
 
     /* --- scrubber ----------------------------------------------------- */
@@ -2191,6 +2628,25 @@
     });
 
     window.addEventListener('hashchange', route);
+
+    /* --- connectivity ------------------------------------------------- */
+    const showOffline = () => {
+      if ($('#offlineBanner')) return;
+      const node = document.createElement('div');
+      node.className = 'offline';
+      node.id = 'offlineBanner';
+      node.innerHTML = `
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18m0 2a7 7 0 0 1 5.6 11.2L6.8 6.4A7 7 0 0 1 12 5M5.4 7.8 16.2 18.6A7 7 0 0 1 5.4 7.8"/></svg>
+        <span>You are offline. Playback and browsing need a connection.</span>`;
+      document.body.appendChild(node);
+    };
+    window.addEventListener('offline', showOffline);
+    window.addEventListener('online', () => {
+      $('#offlineBanner')?.remove();
+      toast('Back online');
+      Feed.invalidate();
+    });
+    if (!navigator.onLine) showOffline();
   }
 
   function syncNpTabs() {
@@ -2199,6 +2655,30 @@
       tab.classList.toggle('is-active', active);
       tab.setAttribute('aria-selected', String(active));
     });
+  }
+
+  /** Switch bitrate, keeping the current position. */
+  function applyQuality(quality) {
+    Store.prefs.quality = quality;
+    Store.savePrefs();
+    $('#qualityTag').textContent = quality.replace('kbps', '');
+    toast(`Streaming at ${quality.replace('kbps', ' kbps')}`);
+
+    if (!Player.current) return;
+    const url = streamUrl(Player.current, quality);
+    if (!url || url === audio.src) return;
+
+    // Seeking has to wait for the new source to report its duration, otherwise
+    // the assignment lands on an element that is still in HAVE_NOTHING.
+    const at = audio.currentTime;
+    const wasPlaying = !audio.paused;
+    const resume = () => {
+      audio.removeEventListener('loadedmetadata', resume);
+      try { audio.currentTime = at; } catch { /* not seekable yet */ }
+      if (wasPlaying) audio.play().catch(() => {});
+    };
+    audio.addEventListener('loadedmetadata', resume);
+    audio.src = url;
   }
 
   function refreshLikeButtons(songId) {

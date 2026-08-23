@@ -120,6 +120,15 @@ caps of two per artist and two per album, and reserves every fifth slot for an
 artist you have no history with. Alternate cuts of a composition are collapsed
 before ranking so the same song never appears twice.
 
+### Player state note
+
+Turning shuffle **off** mid playback used to reset the queue pointer to position
+0. With shuffle on that is correct, because the rebuilt order puts the current
+track first, but switching off restores the original list order where the track
+can sit anywhere. The result was that Next jumped backwards and the queue drawer
+marked the wrong row as playing. The pointer is now looked up rather than
+assumed.
+
 ### Data quality notes
 
 Two upstream quirks that materially affect output, both handled:
@@ -177,20 +186,60 @@ Recommended tracks carry a `recommendation` block:
 `/api/artists/<id>/albums`, `/api/search`, `/api/search/{songs,albums,artists,playlists}`,
 `/api/health`.
 
+## Audio and settings
+
+`#/settings` holds everything about playback.
+
+**Quality.** Defaults to the highest the source offers, 320 kbps AAC. There is no
+lossless tier upstream, so that is the ceiling and the app does not pretend
+otherwise. High (160) and Data saver (96) are there for weak connections. If a
+particular track is missing your chosen rung, it steps down for that track only
+rather than failing. Switching mid-track keeps your position by waiting for the
+new source to report its duration before seeking, since assigning `currentTime`
+to an element still in `HAVE_NOTHING` is silently dropped.
+
+**Crossfade.** Off by default, 1 to 12 seconds when enabled. Implemented with two
+`<audio>` decks: the next track starts on the idle deck while the current one is
+still playing, and the two are blended. The ramp uses an equal power curve
+(`sin`/`cos`) rather than a linear one, so perceived loudness stays flat instead
+of dipping through the middle of the blend. At the crossover both decks sit at
+0.707 of target gain, which is the point of the curve.
+
+Details that matter in practice:
+
+- Only the active deck drives the UI. A deck that is fading out is marked
+  retiring, so it cannot repaint state or trigger the next track.
+- A manual skip uses a shorter blend, capped at 1.2s, so the button still feels
+  immediate.
+- Crossfade is bypassed when Repeat one is on.
+- Starting a track normally cancels any blend in progress and silences the other
+  deck, so a retiring track can never keep playing underneath.
+- The visualizer taps both decks. A media element can only ever have one source
+  node, so attachment is guarded; an unrouted deck would go silent.
+
+**Sleep timer.** 15 to 60 minutes, and it fades out over six seconds rather than
+cutting off mid bar.
+
+**Autoplay and visualizer** can both be switched off.
+
 ## The app
 
-- **Player.** Queue with shuffle and repeat, seek, volume, bitrate switching that
-  keeps your position, automatic fallback to a lower bitrate on a stream error,
-  Media Session integration for OS and lock screen controls, and a station that
-  extends itself before the queue runs out.
+- **Player.** Queue with shuffle and repeat, seek, volume, crossfade, bitrate
+  switching that keeps your position, automatic fallback to a lower bitrate on a
+  stream error, Media Session integration for OS and lock screen controls, and a
+  station that extends itself before the queue runs out.
 - **Now playing.** Full screen view with a real Web Audio frequency visualizer,
   queue, lyrics, and the "Why this" signal breakdown.
 - **Library.** Liked songs, recently played, and local playlists, all in
   `localStorage`. Clearing it resets the recommender to a cold start.
 - **Keyboard.** Space or `k` play/pause, `n`/`p` track, `l` like, `s` shuffle,
   `r` repeat, `q` queue, `m` mute, `/` search, Shift plus arrows to seek.
-- **Responsive.** Sidebar collapses to icons, then to a bottom tab bar on mobile.
-  Respects `prefers-reduced-motion`.
+- **Responsive.** Sidebar collapses to icons at 1180px, then to a bottom tab bar
+  at 760px. Track lists drop to three columns at 900px. Verified with no
+  horizontal overflow from 360px through 1920px. Respects
+  `prefers-reduced-motion`.
+- **Details.** Per route page titles, which give way to `Song · Artist |
+  MusicArea` once something is playing, a footer, and an offline banner.
 
 ## Deploying
 
