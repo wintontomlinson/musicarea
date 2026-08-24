@@ -19,16 +19,22 @@
   --text-dim: #a8a3bd;
   --text-faint: #6f6a85;
 
-  /* Brand */
-  --brand-1: #8b5cf6;
-  --brand-2: #d946a6;
-  --brand-3: #ff7a45;
+  /* Track palette. JavaScript changes --track-hue when playback changes.
+     Route cards may set a local --hue, but player accents remain song led. */
+  --track-hue: 268;
+  --track-brand-1: hsl(var(--track-hue) 78% 62%);
+  --track-brand-2: hsl(calc(var(--track-hue) + 34) 78% 61%);
+  --track-brand-3: hsl(calc(var(--track-hue) + 68) 88% 63%);
+  --brand-1: var(--track-brand-1);
+  --brand-2: var(--track-brand-2);
+  --brand-3: var(--track-brand-3);
   --brand: linear-gradient(115deg, var(--brand-1), var(--brand-2) 52%, var(--brand-3));
-  --brand-soft: linear-gradient(115deg, rgba(139, 92, 246, .22), rgba(217, 70, 166, .18));
-  --accent: #b388ff;
+  --brand-soft: linear-gradient(115deg, hsl(var(--track-hue) 78% 55% / .23), hsl(calc(var(--track-hue) + 34) 78% 55% / .18));
+  --accent: hsl(var(--track-hue) 86% 70%);
 
-  /* Ambient hue, rewritten by JS from the current track */
-  --hue: 268;
+  /* Defaults to the current track. A local component may scope this for its
+     own artwork without changing the ambient wash or primary controls. */
+  --hue: var(--track-hue);
 
   /* Geometry */
   --r-sm: 10px;
@@ -191,7 +197,7 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
   transition: color var(--fast), background var(--fast);
 }
 .nav__item:hover { color: var(--text); background: var(--surface); }
-.nav__item.is-active { color: var(--text); background: var(--surface-2); }
+.nav__item.is-active { color: var(--text); background: hsl(var(--track-hue) 78% 58% / .16); }
 .nav__item.is-active::before {
   content: '';
   position: absolute;
@@ -1673,7 +1679,8 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
   height: calc(var(--player-h) - 8px);
   border-radius: var(--r-lg);
   background: rgba(13, 12, 19, .82);
-  border: 1px solid var(--line);
+  border: 1px solid hsl(var(--track-hue) 72% 66% / .28);
+  transition: border-color var(--med), box-shadow var(--med), background var(--med);
   backdrop-filter: blur(30px) saturate(160%);
   -webkit-backdrop-filter: blur(30px) saturate(160%);
   box-shadow: var(--shadow-md);
@@ -1774,8 +1781,8 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
   width: 44px; height: 44px;
   border: 0;
   border-radius: 50%;
-  background: #fff;
-  color: #0b0710;
+  background: var(--brand);
+  color: #150c22;
   cursor: pointer;
   transition: transform var(--fast), box-shadow var(--fast);
 }
@@ -2022,6 +2029,7 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
 .np__panel { flex: 1; min-height: 0; overflow-y: auto; padding: 14px; }
 
 .lyrics { white-space: pre-wrap; font-size: 15px; line-height: 1.85; color: var(--text-dim); }
+.lyrics-empty { display: grid; gap: 12px; justify-items: start; padding: 8px 0; }
 .lyrics__copy { margin-top: 20px; font-size: 11px; color: var(--text-faint); }
 
 /* ── Queue drawer ───────────────────────────────────────────────────────── */
