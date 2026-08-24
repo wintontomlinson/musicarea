@@ -1879,31 +1879,20 @@
     clear(songId) { this.cache.delete(songId); },
 
     async get(song) {
-      let sourceSong = song;
-      // Local queue entries are intentionally compact and may not carry the
-      // lyrics id. Resolve one complete copy before deciding that lyrics are
-      // unavailable, otherwise replaying a saved song always showed a false
-      // empty state.
-      if (sourceSong.hasLyrics === undefined && sourceSong.lyricsId === undefined) {
-        const resolved = await API.songs([sourceSong.id]).catch(() => []);
-        if (resolved?.[0]) sourceSong = resolved[0];
-      }
-      const cached = this.cache.get(sourceSong.id);
+      const cached = this.cache.get(song.id);
       if (cached && Date.now() - cached.at < cached.ttl) return cached;
-      // Only skip the request when the track explicitly reports no lyrics. A
-      // missing lyricsId is not conclusive: upstream often omits it while the
-      // lyrics endpoint still resolves them from the song id itself.
-      if (sourceSong.hasLyrics === false) {
-        const entry = { kind: 'unavailable', at: Date.now(), ttl: this.missingTtl };
-        this.cache.set(sourceSong.id, entry);
-        return entry;
-      }
+
+      // Always ask the endpoint. The catalogue's hasLyrics flag is not
+      // trustworthy: a measured sample had lyrics for roughly a fifth of the
+      // tracks that reported hasLyrics false, and skipping the request on that
+      // flag was the reason those songs never showed any lyrics. The response
+      // is cached server side, so asking is cheap.
       try {
-        const data = await API.lyrics(sourceSong.id);
+        const data = await API.lyrics(song.id);
         const entry = data?.lyrics
           ? { kind: 'ready', data, at: Date.now(), ttl: this.ttl }
           : { kind: 'unavailable', at: Date.now(), ttl: this.missingTtl };
-        this.cache.set(sourceSong.id, entry);
+        this.cache.set(song.id, entry);
         return entry;
       } catch (error) {
         const unavailable = error?.status === 404;
@@ -1912,7 +1901,7 @@
           at: Date.now(),
           ttl: unavailable ? this.missingTtl : 0,
         };
-        this.cache.set(sourceSong.id, entry);
+        this.cache.set(song.id, entry);
         return entry;
       }
     },

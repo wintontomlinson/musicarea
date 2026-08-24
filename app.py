@@ -851,17 +851,16 @@ def api_featured():
 
 @app.route("/api/songs/<song_id>/lyrics")
 def api_lyrics(song_id):
-    song = catalog.song_by_id(song_id)
-    if not song:
-        return err("Song not found", 404)
+    # The upstream detail payload often omits lyricsId, and its hasLyrics flag is
+    # unreliable, so neither is treated as a precondition. The getLyrics endpoint
+    # accepts the song id itself: try the explicit lyrics id first, then the song
+    # id. A failed song lookup is not fatal for the same reason.
+    song = catalog.song_by_id(song_id) or {}
 
-    # The upstream detail payload often omits lyricsId even when the track
-    # carries lyrics. The getLyrics endpoint accepts the song id itself, so try
-    # the explicit lyrics id first and fall back to the song id before giving up.
     candidates = []
     if song.get("lyricsId"):
         candidates.append(str(song["lyricsId"]))
-    if song_id not in candidates:
+    if str(song_id) not in candidates:
         candidates.append(str(song_id))
 
     for candidate in candidates:
