@@ -1890,7 +1890,10 @@
       }
       const cached = this.cache.get(sourceSong.id);
       if (cached && Date.now() - cached.at < cached.ttl) return cached;
-      if (sourceSong.hasLyrics === false || !sourceSong.lyricsId) {
+      // Only skip the request when the track explicitly reports no lyrics. A
+      // missing lyricsId is not conclusive: upstream often omits it while the
+      // lyrics endpoint still resolves them from the song id itself.
+      if (sourceSong.hasLyrics === false) {
         const entry = { kind: 'unavailable', at: Date.now(), ttl: this.missingTtl };
         this.cache.set(sourceSong.id, entry);
         return entry;

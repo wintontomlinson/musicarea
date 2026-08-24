@@ -854,12 +854,22 @@ def api_lyrics(song_id):
     song = catalog.song_by_id(song_id)
     if not song:
         return err("Song not found", 404)
-    if not song.get("lyricsId"):
-        return err("No lyrics available for this song", 404)
-    found = catalog.lyrics(song["lyricsId"])
-    if not found:
-        return err("No lyrics available for this song", 404)
-    return ok(found)
+
+    # The upstream detail payload often omits lyricsId even when the track
+    # carries lyrics. The getLyrics endpoint accepts the song id itself, so try
+    # the explicit lyrics id first and fall back to the song id before giving up.
+    candidates = []
+    if song.get("lyricsId"):
+        candidates.append(str(song["lyricsId"]))
+    if song_id not in candidates:
+        candidates.append(str(song_id))
+
+    for candidate in candidates:
+        found = catalog.lyrics(candidate)
+        if found and found.get("lyrics"):
+            return ok(found)
+
+    return err("No lyrics available for this song", 404)
 
 
 @app.route("/api/health")
