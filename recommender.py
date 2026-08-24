@@ -258,7 +258,8 @@ def _primary_artist_name(song: dict) -> str:
     return (song.get("subtitle") or "").split(" - ")[0].strip()
 
 
-def build_profile(history: Optional[Iterable[dict]] = None) -> dict:
+def build_profile(history: Optional[Iterable[dict]] = None,
+                  preferred_languages: Optional[Iterable[str]] = None) -> dict:
     """Collapse a listening log into a taste profile.
 
     Each history entry looks like:
@@ -267,6 +268,10 @@ def build_profile(history: Optional[Iterable[dict]] = None) -> dict:
     Only `id` is strictly required; everything else sharpens the profile.
     """
     history = list(history or [])
+    preferred_languages = [
+        language for language in (preferred_languages or [])
+        if isinstance(language, str) and language in catalog.LANGUAGES
+    ][:4]
     now = _now_ms()
 
     artists: Dict[str, float] = defaultdict(float)
@@ -372,7 +377,7 @@ def build_profile(history: Optional[Iterable[dict]] = None) -> dict:
         ],
         "maxArtistWeight": top_artists[0][1] if top_artists else 0.0,
         "languages": dict(top_languages),
-        "topLanguages": [lang for lang, _ in top_languages[:4]] or list(DEFAULT_LANGUAGES),
+        "topLanguages": [lang for lang, _ in top_languages[:4]] or preferred_languages or list(DEFAULT_LANGUAGES),
         "maxLanguageWeight": top_languages[0][1] if top_languages else 0.0,
         "eraCenter": era_center,
         "mainstream": round(mainstream, 4),
@@ -600,8 +605,8 @@ def generate_candidates(profile: dict, mood: Optional[str] = None,
 
     if profile["coldStart"]:
         # Nothing to personalise from: lean on what the world is playing.
-        _recall_trending(pool, profile, list(DEFAULT_LANGUAGES))
-        _recall_fresh(pool, list(DEFAULT_LANGUAGES))
+        _recall_trending(pool, profile, languages)
+        _recall_fresh(pool, languages)
         chart_cards = catalog.charts(limit=3)
         chart_songs = catalog.parallel([
             (lambda cid=c["id"]: catalog.playlist_songs(cid, limit=30)) for c in chart_cards if c.get("id")

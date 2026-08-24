@@ -148,6 +148,11 @@ def validate_request():
     language = request.args.get("language")
     if language and language.lower() not in catalog.LANGUAGES:
         return err("Unsupported language")
+    languages = request.args.get("languages")
+    if languages:
+        requested = [value.strip().lower() for value in languages.split(",") if value.strip()]
+        if not requested or len(requested) > 4 or any(value not in catalog.LANGUAGES for value in requested):
+            return err("Provide up to four supported languages")
     if not _rate_allowed():
         return err("Too many requests. Please try again in a minute.", 429)
 
@@ -175,7 +180,7 @@ def api_index():
         "success": True,
         "app": "MusicArea",
         "endpoints": {
-            "feed":        "POST /api/feed  (body: {history, mood, limit})",
+            "feed":        "POST /api/feed  (body: {history, languages, mood, limit})",
             "browse":      "/api/browse",
             "radio":       "/api/radio/<song_id>",
             "artistRadio": "/api/artists/<artist_id>/radio",
@@ -501,6 +506,24 @@ def _payload():
     return payload if isinstance(payload, dict) else {}
 
 
+def _preferred_languages(value, default=None):
+    """Normalise a bounded local preference without trusting arbitrary input."""
+    raw = value if isinstance(value, list) else [value]
+    languages = []
+    seen = set()
+    for item in raw:
+        if not isinstance(item, str):
+            continue
+        for language in item.split(","):
+            language = language.strip().lower()
+            if language in catalog.LANGUAGES and language not in seen:
+                seen.add(language)
+                languages.append(language)
+            if len(languages) == 4:
+                return languages
+    return languages or list(default or [])
+
+
 def _int_arg(name, default, low=1, high=100):
     try:
         value = int(request.args.get(name, default))
@@ -555,11 +578,12 @@ def api_feed():
     """
     body = _payload()
     history = _history(body.get("history"))
+    languages = _preferred_languages(body.get("languages"))
     mood = body.get("mood") if isinstance(body.get("mood"), str) else None
     mood = mood[:80] if mood else None
     limit = _bounded_json_int(body.get("limit"), 24, 6, 40)
 
-    profile = recommender.build_profile(history)
+    profile = recommender.build_profile(history, preferred_languages=languages)
     pool = recommender.generate_candidates(profile, mood=mood, wide=True)
 
     rows = []
@@ -649,6 +673,7 @@ def api_feed():
             "languageCount": len(profile["languages"]),
             "topArtists": profile["topArtists"][:8],
             "topLanguages": profile["topLanguages"],
+            "preferredLanguages": languages,
             "eraCenter": round(profile["eraCenter"]) if profile["eraCenter"] else None,
             "mainstream": profile["mainstream"],
         },
@@ -667,20 +692,33 @@ def api_mixes():
 
 @app.route("/api/browse")
 def api_browse():
-    """Editorial shelves. Identical for everyone, so aggressively cacheable."""
-    language = (request.args.get("language") or "hindi").lower()
-    trending_songs, chart_cards, releases, playlists, fresh_songs = catalog.parallel([
-        lambda: catalog.trending(language),
-        lambda: catalog.charts(limit=12),
-        lambda: catalog.new_releases(language, limit=18),
-        lambda: catalog.featured_playlists(language, limit=18),
-        lambda: catalog.new_release_songs(language, limit=20),
-    ])
+    """Editorial shelves built from the listener's selected languages."""
+    raw_languages = request.args.get("languages") or request.args.get("language")
+    languages = _preferred_languages(raw_languages, default=["hindi"])
+    jobs = []
+    for language in languages:
+        jobs.extend([
+            lambda language=language: catalog.trending(language),
+            lambda language=language: catalog.new_releases(language, limit=18),
+            lambda language=language: catalog.featured_playlists(language, limit=18),
+            lambda language=language: catalog.new_release_songs(language, limit=20),
+        ])
+    results = catalog.parallel(jobs, workers=8)
+    trending_songs = catalog.dedupe_songs(
+        song for group in results[0::4] for song in (group or [])
+    )
+    releases = _dedupe_cards(group for group in results[1::4])
+    playlists = _dedupe_cards(group for group in results[2::4])
+    fresh_songs = catalog.dedupe_songs(
+        song for group in results[3::4] for song in (group or [])
+    )
+    chart_cards = catalog.charts(limit=12)
+    language_label = ", ".join(language.title() for language in languages)
 
     rows = []
     if trending_songs:
-        rows.append({"id": "trending", "title": f"Trending in {language.title()}",
-                     "subtitle": "What the country has on repeat",
+        rows.append({"id": "trending", "title": f"Trending in {language_label}",
+                     "subtitle": "Selected from the languages you listen to",
                      "kind": "songs", "items": trending_songs[:24]})
     if chart_cards:
         rows.append({"id": "charts", "title": "Top charts",
@@ -688,22 +726,37 @@ def api_browse():
                      "items": chart_cards})
     if fresh_songs:
         rows.append({"id": "new-songs", "title": "Just released",
-                     "subtitle": "Singles that landed this week",
-                     "kind": "songs", "items": fresh_songs})
+                     "subtitle": "New singles in your selected languages",
+                     "kind": "songs", "items": fresh_songs[:20]})
     if releases:
         rows.append({"id": "new-releases", "title": "New albums",
-                     "subtitle": "Fresh records", "kind": "albums", "items": releases})
+                     "subtitle": "Fresh records for your rotation", "kind": "albums", "items": releases[:18]})
     if playlists:
         rows.append({"id": "featured", "title": "Editor's playlists",
-                     "subtitle": "Handpicked by humans", "kind": "playlists",
-                     "items": playlists})
+                     "subtitle": "Handpicked around your languages", "kind": "playlists",
+                     "items": playlists[:18]})
 
     return ok({
         "rows": rows,
         "moods": catalog.mood_cards(),
         "languages": catalog.LANGUAGES,
-        "language": language,
+        "selectedLanguages": languages,
+        "language": languages[0],
     })
+
+
+def _dedupe_cards(groups):
+    """Keep the first editorial card for each id while combining languages."""
+    seen = set()
+    cards = []
+    for group in groups:
+        for card in group or []:
+            card_id = card.get("id") if isinstance(card, dict) else None
+            if not card_id or card_id in seen:
+                continue
+            seen.add(card_id)
+            cards.append(card)
+    return cards
 
 
 @app.route("/api/moods")

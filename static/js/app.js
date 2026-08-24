@@ -258,6 +258,20 @@
   const MAX_HISTORY = 400;
   const MAX_RECENT = 60;
   const PLAYBACK_KEY = 'ma.playback.v1';
+  const PREFERRED_LANGUAGES = [
+    'hindi', 'english', 'punjabi', 'tamil', 'telugu', 'marathi', 'bengali',
+    'kannada', 'malayalam', 'gujarati', 'bhojpuri', 'urdu', 'haryanvi',
+    'rajasthani', 'assamese', 'odia',
+  ];
+  const MAX_PREFERRED_LANGUAGES = 4;
+
+  function normalizePreferredLanguages(values) {
+    const seen = new Set();
+    return (Array.isArray(values) ? values : [values])
+      .map((value) => String(value || '').toLowerCase().trim())
+      .filter((value) => PREFERRED_LANGUAGES.includes(value) && !seen.has(value) && seen.add(value))
+      .slice(0, MAX_PREFERRED_LANGUAGES);
+  }
 
   function read(key, fallback) {
     try {
@@ -281,6 +295,8 @@
     try { sessionStorage.setItem(key, JSON.stringify(value)); } catch { /* unavailable */ }
   }
 
+  const SAVED_PREFS = read(KEYS.prefs, {});
+
   const Store = {
     history: read(KEYS.history, []),
     liked: read(KEYS.liked, []),
@@ -297,6 +313,8 @@
         repeat: 'off',
         shuffle: false,
         language: 'hindi',
+        languages: [],
+        languageOnboardingComplete: false,
         autoplay: true,
         // On by default: the next track rises over the tail of the current one.
         // Adjustable from 1 to 12 seconds, or off, in Settings.
@@ -305,10 +323,31 @@
         equalizer: 'flat',
         sleepTimer: 0,     // minutes, 0 is off. Never persisted as active.
       },
-      read(KEYS.prefs, {}),
+      SAVED_PREFS,
     ),
 
     savePrefs() { write(KEYS.prefs, this.prefs); },
+
+    normalizePrefs() {
+      const savedLanguages = Array.isArray(SAVED_PREFS.languages)
+        ? SAVED_PREFS.languages
+        : (SAVED_PREFS.language ? [SAVED_PREFS.language] : []);
+      this.prefs.languages = normalizePreferredLanguages(savedLanguages);
+      this.prefs.language = this.prefs.languages[0] || 'hindi';
+      this.prefs.languageOnboardingComplete = !!this.prefs.languageOnboardingComplete
+        && this.prefs.languages.length > 0;
+    },
+
+    hasLanguagePreferences() {
+      return this.prefs.languageOnboardingComplete && this.prefs.languages.length > 0;
+    },
+
+    setLanguages(values, { complete = false } = {}) {
+      this.prefs.languages = normalizePreferredLanguages(values);
+      this.prefs.language = this.prefs.languages[0] || 'hindi';
+      if (complete) this.prefs.languageOnboardingComplete = this.prefs.languages.length > 0;
+      this.savePrefs();
+    },
 
     /** Compact form of a song, which is what the recommender consumes. */
     slim(song) {
@@ -432,6 +471,8 @@
     },
   };
 
+  Store.normalizePrefs();
+
   /* ====================================================================== */
   /* API client                                                             */
   /* ====================================================================== */
@@ -464,7 +505,12 @@
     },
 
     feed(payload) { return this.post('/api/feed', payload); },
-    browse(language) { return this.get(`/api/browse?language=${encodeURIComponent(language)}`); },
+    browse(languages = []) {
+      const selected = normalizePreferredLanguages(languages);
+      const params = new URLSearchParams();
+      if (selected.length) params.set('languages', selected.join(','));
+      return this.get(`/api/browse${params.toString() ? `?${params}` : ''}`);
+    },
     moods() { return this.get('/api/moods'); },
     radio(songId, limit = 40) { return this.get(`/api/radio/${encodeURIComponent(songId)}?limit=${limit}`); },
     artistRadio(id, limit = 40) { return this.get(`/api/artists/${encodeURIComponent(id)}/radio?limit=${limit}`); },
@@ -493,24 +539,41 @@
   /** Personalised feed with a short lived cache so navigation stays instant. */
   const Feed = {
     cache: null,
+    cacheKey: '',
     at: 0,
     ttl: 4 * 60 * 1000,
     inflight: null,
+    inflightKey: '',
 
-    invalidate() { this.cache = null; },
+    invalidate() { this.cache = null; this.cacheKey = ''; },
 
     async load(force = false) {
-      if (!force && this.cache && Date.now() - this.at < this.ttl) return this.cache;
-      if (this.inflight) return this.inflight;
-      this.inflight = API.feed({ history: Store.history, limit: 24 })
+      const key = Store.prefs.languages.join(',');
+      if (!force && this.cache && this.cacheKey === key && Date.now() - this.at < this.ttl) return this.cache;
+      if (this.inflight && this.inflightKey === key) return this.inflight;
+      const request = API.feed({
+        history: Store.history,
+        languages: Store.prefs.languages,
+        limit: 24,
+      });
+      this.inflight = request
         .then((data) => {
-          this.cache = data;
-          this.at = Date.now();
-          // Reconcile the sidebar meter with the engine's own figure.
-          renderTasteCard(data?.profile?.strength);
+          if (Store.prefs.languages.join(',') === key) {
+            this.cache = data;
+            this.cacheKey = key;
+            this.at = Date.now();
+            // Reconcile the sidebar meter with the engine's own figure.
+            renderTasteCard(data?.profile?.strength);
+          }
           return data;
         })
-        .finally(() => { this.inflight = null; });
+        .finally(() => {
+          if (this.inflightKey === key) {
+            this.inflight = null;
+            this.inflightKey = '';
+          }
+        });
+      this.inflightKey = key;
       return this.inflight;
     },
   };
@@ -2043,6 +2106,45 @@
   }
 
   const Views = {
+    onboarding() {
+      setTitle('Welcome');
+      const selected = Store.prefs.languages;
+      const canContinue = selected.length > 0;
+      const selectedLabel = selected.length
+        ? `${selected.length} of ${MAX_PREFERRED_LANGUAGES} selected`
+        : `Choose up to ${MAX_PREFERRED_LANGUAGES}`;
+      setView(`
+        <section class="onboarding" aria-labelledby="onboardingTitle">
+          <div class="onboarding__glow" aria-hidden="true"></div>
+          <div class="onboarding__intro">
+            <span class="onboarding__brand">Music<em>Area</em></span>
+            <span class="onboarding__step">Your sound, first</span>
+            <h1 id="onboardingTitle">What languages do you listen to?</h1>
+            <p>Pick the languages you enjoy. Your Home and Explore picks will start with music that feels familiar, then keep learning as you play.</p>
+          </div>
+          <div class="onboarding__selection" aria-live="polite">${esc(selectedLabel)}</div>
+          <div class="onboarding__grid" role="group" aria-label="Listening languages">
+            ${PREFERRED_LANGUAGES.map((language) => {
+              const active = selected.includes(language);
+              const blocked = !active && selected.length >= MAX_PREFERRED_LANGUAGES;
+              return `<button class="language-choice ${active ? 'is-selected' : ''}" type="button"
+                        data-onboarding-language="${language}" aria-pressed="${active}" ${blocked ? 'disabled' : ''}
+                        style="--hue:${catalogHue(language)}">
+                <span class="language-choice__orb"></span>
+                <span class="language-choice__name">${esc(cap(language))}</span>
+                <span class="language-choice__check" aria-hidden="true">${active ? ICON_CHECK : ''}</span>
+              </button>`;
+            }).join('')}
+          </div>
+          <div class="onboarding__footer">
+            <p>Stored only in this browser. You can change this later in Settings.</p>
+            <button class="btn btn--primary btn--lg" data-complete-onboarding ${canContinue ? '' : 'disabled'}>
+              Continue with my picks ${ICON_PLAY}
+            </button>
+          </div>
+        </section>`);
+    },
+
     async home(routeGeneration) {
       const isCurrent = () => routeGeneration === activeRouteGeneration && currentRoute().path === 'home';
       setView(`
@@ -2050,7 +2152,7 @@
         ${skeletonShelf('Made for you')}
         ${skeletonShelf('Trending')}`);
 
-      const [feed, browse] = await Promise.allSettled([Feed.load(), API.browse(Store.prefs.language)]);
+      const [feed, browse] = await Promise.allSettled([Feed.load(), API.browse(Store.prefs.languages)]);
 
       const feedData = feed.status === 'fulfilled' ? feed.value : null;
       const browseData = browse.status === 'fulfilled' ? browse.value : null;
@@ -2119,7 +2221,7 @@
 
     async browse() {
       setView(`${skeletonShelf('Loading Explore')}${skeletonShelf('Charts')}`);
-      const data = await API.browse(Store.prefs.language).catch(() => null);
+      const data = await API.browse(Store.prefs.languages).catch(() => null);
       if (!data) {
         setView(emptyState('Explore is unavailable', 'The catalogue service did not respond. Try again shortly.'));
         return;
@@ -2154,7 +2256,7 @@
             <p>Everything charting, trending and newly released in ${esc(name)}.</p>
             <div class="hero__actions">
               ${songRow ? `<button class="btn btn--primary btn--lg" data-play-list="${registerList(songRow.items, `${name} trending`)}">${ICON_PLAY} Play trending</button>` : ''}
-              <button class="btn btn--outline btn--lg" data-language="${esc(id)}">Make this my default</button>
+              <button class="btn btn--outline btn--lg" data-language="${esc(id)}">${Store.prefs.languages.includes(id) ? 'Remove from my languages' : 'Add to my languages'}</button>
             </div>
           </div>
           ${heroArt(covers)}
@@ -2620,6 +2722,18 @@
             <span class="hero__eyebrow">${ICON_SPARK} Settings</span>
             <h1>Playback</h1>
             <p>Everything here is stored in this browser and applies the moment you change it.</p>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section__head"><div><h2>Listening languages</h2><p>Used to shape your Home and Explore picks before your listening history takes over</p></div></div>
+          <div class="panel">
+            <div class="chip-row" style="padding-bottom:0">
+              ${PREFERRED_LANGUAGES.map((language) => `
+                <button class="chip ${p.languages.includes(language) ? 'is-active' : ''}" data-language="${language}">
+                  ${esc(cap(language))}
+                </button>`).join('')}
+            </div>
           </div>
         </section>
 
@@ -3109,6 +3223,10 @@
   async function route() {
     const routeGeneration = ++activeRouteGeneration;
     const { path, param } = currentRoute();
+    if (!Store.hasLanguagePreferences()) {
+      Views.onboarding();
+      return;
+    }
     $$('[data-route]').forEach((link) => {
       const active = link.dataset.route === path;
       link.classList.toggle('is-active', active);
@@ -3293,6 +3411,28 @@
     /* --- global click delegation ------------------------------------- */
     document.addEventListener('click', async (event) => {
       const target = event.target;
+
+      const onboardingLanguage = target.closest('[data-onboarding-language]');
+      if (onboardingLanguage) {
+        const language = onboardingLanguage.dataset.onboardingLanguage;
+        const selected = Store.prefs.languages;
+        const next = selected.includes(language)
+          ? selected.filter((item) => item !== language)
+          : [...selected, language].slice(0, MAX_PREFERRED_LANGUAGES);
+        Store.setLanguages(next);
+        Views.onboarding();
+        return;
+      }
+
+      if (target.closest('[data-complete-onboarding]')) {
+        if (!Store.prefs.languages.length) return;
+        Store.setLanguages(Store.prefs.languages, { complete: true });
+        Feed.invalidate();
+        Mixes.invalidate();
+        toast(`Music picks ready for ${Store.prefs.languages.map(cap).join(', ')}`);
+        route();
+        return;
+      }
 
       const menuBtn = target.closest('[data-menu]');
       if (menuBtn) {
@@ -3575,8 +3715,17 @@
 
       const languageChip = target.closest('[data-language]');
       if (languageChip) {
-        Store.prefs.language = languageChip.dataset.language;
-        Store.savePrefs();
+        const language = languageChip.dataset.language;
+        const selected = Store.prefs.languages;
+        if (selected.includes(language) && selected.length === 1) {
+          toast('Keep at least one listening language selected');
+          return;
+        }
+        Store.setLanguages(selected.includes(language)
+          ? selected.filter((item) => item !== language)
+          : [...selected, language]);
+        Feed.invalidate();
+        Mixes.invalidate();
         route();
         return;
       }
