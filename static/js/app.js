@@ -50,7 +50,7 @@
   /** Local placeholder, used when the catalogue has no real artwork. The
    *  upstream default images are provider branded, so they are filtered out
    *  server side and never reach here. */
-  const ART_PLACEHOLDER = '/static/img/placeholder.svg';
+  const ART_PLACEHOLDER = '/static/img/cover-fallback.svg';
   // Artwork is intentionally revalidated in bounded windows. That lets provider
   // cover changes land without giving every render a unique URL or defeating
   // image caching during a normal listening session.
@@ -58,11 +58,23 @@
 
   function art(item, size = 500) {
     const list = item?.image;
-    const source = typeof list === 'string'
+    let source = typeof list === 'string'
       ? list
       : (Array.isArray(list) && list.length
         ? (list.find((i) => i.quality === `${size}x${size}`) || list[list.length - 1]).url
         : '');
+
+    // Some album responses omit the album cover while every track has one.
+    // Use the first track cover instead of showing the app placeholder on the album.
+    if (!source && Array.isArray(item?.songs)) {
+      const firstArtwork = item.songs.find((song) => song?.image)?.image;
+      source = typeof firstArtwork === 'string'
+        ? firstArtwork
+        : (Array.isArray(firstArtwork) && firstArtwork.length
+          ? (firstArtwork.find((image) => image.quality === `${size}x${size}`) || firstArtwork[firstArtwork.length - 1]).url
+          : '');
+    }
+
     if (!source) return ART_PLACEHOLDER;
     if (!/^https?:\/\//i.test(source)) return source;
     const join = source.includes('?') ? '&' : '?';
@@ -953,9 +965,9 @@
         deck.volume = gain();
         deck.muted = !!Store.prefs.muted;
       });
-      $('#volume').value = Math.round(Store.prefs.volume * 100);
+      $$('.js-volume').forEach((control) => { control.value = Math.round(Store.prefs.volume * 100); });
       setVolumeFill(Store.prefs.volume * 100);
-      $('#muteBtn').classList.toggle('is-muted', !!Store.prefs.muted);
+      syncMute();
       $('#qualityTag').textContent = Store.prefs.quality.replace('kbps', '');
       syncTransport();
 
@@ -1671,7 +1683,18 @@
   }
 
   function setVolumeFill(percent) {
-    $('#volume').style.setProperty('--vol', `${percent}%`);
+    $$('.js-volume').forEach((control) => {
+      control.style.setProperty('--vol', `${percent}%`);
+    });
+  }
+
+  function syncMute() {
+    $$('.js-mute').forEach((button) => {
+      button.classList.toggle('is-muted', !!Store.prefs.muted);
+      button.setAttribute('aria-pressed', String(!!Store.prefs.muted));
+      button.setAttribute('aria-label', Store.prefs.muted ? 'Unmute' : 'Mute');
+      button.title = Store.prefs.muted ? 'Unmute' : 'Mute';
+    });
   }
 
   /** Paint the seek position onto every progress bar. */
@@ -1698,11 +1721,23 @@
     DECKS.forEach((deck) => { deck.muted = Store.prefs.muted; });
     // Mid-crossfade the ramp owns the gain, so only retarget the active deck.
     if (!Player.fading) audio.volume = level;
-    $('#volume').value = Math.round(level * 100);
+    $$('.js-volume').forEach((control) => { control.value = Math.round(level * 100); });
     setVolumeFill(level * 100);
-    $('#muteBtn').classList.toggle('is-muted', Store.prefs.muted);
+    syncMute();
     if (announce) {
       toast(level === 0 ? 'Muted' : `Volume ${Math.round(level * 100)}%`, ICON_VOLUME);
+    }
+  }
+
+  function toggleMute() {
+    Store.prefs.muted = !Store.prefs.muted;
+    // Remember the level so unmuting restores it rather than jumping to full.
+    if (Store.prefs.muted) Store.prefs.lastVolume = Store.prefs.volume || 0.85;
+    Store.savePrefs();
+    DECKS.forEach((deck) => { deck.muted = Store.prefs.muted; });
+    syncMute();
+    if (!Store.prefs.muted && !Store.prefs.volume) {
+      applyVolume(Store.prefs.lastVolume || 0.85);
     }
   }
 
@@ -1844,17 +1879,28 @@
     clear(songId) { this.cache.delete(songId); },
 
     async get(song) {
-      const cached = this.cache.get(song.id);
+      let sourceSong = song;
+      // Local queue entries are intentionally compact and may not carry the
+      // lyrics id. Resolve one complete copy before deciding that lyrics are
+      // unavailable, otherwise replaying a saved song always showed a false
+      // empty state.
+      if (sourceSong.hasLyrics === undefined && sourceSong.lyricsId === undefined) {
+        const resolved = await API.songs([sourceSong.id]).catch(() => []);
+        if (resolved?.[0]) sourceSong = resolved[0];
+      }
+      const cached = this.cache.get(sourceSong.id);
       if (cached && Date.now() - cached.at < cached.ttl) return cached;
-      if (song.hasLyrics === false) {
+      if (sourceSong.hasLyrics === false || !sourceSong.lyricsId) {
         const entry = { kind: 'unavailable', at: Date.now(), ttl: this.missingTtl };
-        this.cache.set(song.id, entry);
+        this.cache.set(sourceSong.id, entry);
         return entry;
       }
       try {
-        const data = await API.lyrics(song.id);
-        const entry = { kind: 'ready', data, at: Date.now(), ttl: this.ttl };
-        this.cache.set(song.id, entry);
+        const data = await API.lyrics(sourceSong.id);
+        const entry = data?.lyrics
+          ? { kind: 'ready', data, at: Date.now(), ttl: this.ttl }
+          : { kind: 'unavailable', at: Date.now(), ttl: this.missingTtl };
+        this.cache.set(sourceSong.id, entry);
         return entry;
       } catch (error) {
         const unavailable = error?.status === 404;
@@ -1863,7 +1909,7 @@
           at: Date.now(),
           ttl: unavailable ? this.missingTtl : 0,
         };
-        this.cache.set(song.id, entry);
+        this.cache.set(sourceSong.id, entry);
         return entry;
       }
     },
@@ -1918,9 +1964,10 @@
       panel.innerHTML = '<p class="panel__note">Play something first.</p>';
       return;
     }
+    const requestedTab = npTab;
     panel.innerHTML = '<div class="spinner-row"><span class="spinner"></span>Looking for lyrics</div>';
     const result = await Lyrics.get(song);
-    if (Player.current?.id !== song.id) return;
+    if (Player.current?.id !== song.id || npTab !== requestedTab) return;
     if (result.kind === 'ready') {
       const data = result.data;
       const lyrics = esc(String(data.lyrics || '')
@@ -2113,36 +2160,51 @@
       const selectedLabel = selected.length
         ? `${selected.length} of ${MAX_PREFERRED_LANGUAGES} selected`
         : `Choose up to ${MAX_PREFERRED_LANGUAGES}`;
+      document.body.classList.add('is-setup-open');
       setView(`
-        <section class="onboarding" aria-labelledby="onboardingTitle">
-          <div class="onboarding__glow" aria-hidden="true"></div>
-          <div class="onboarding__intro">
+        <section class="onboarding-preview" aria-hidden="true">
+          <div class="onboarding-preview__glow"></div>
+          <div class="onboarding-preview__copy">
             <span class="onboarding__brand">Music<em>Area</em></span>
-            <span class="onboarding__step">Your sound, first</span>
-            <h1 id="onboardingTitle">What languages do you listen to?</h1>
-            <p>Pick the languages you enjoy. Your Home and Explore picks will start with music that feels familiar, then keep learning as you play.</p>
+            <span class="onboarding__step">Personal listening, made simple</span>
+            <h1>Your next favorite is waiting.</h1>
+            <p>Set your sound once, then press play. MusicArea will shape Home, Explore and your queue around what you love.</p>
+            <div class="onboarding-preview__stats"><span>Curated picks</span><span>Smart queue</span><span>Gapless playback</span></div>
           </div>
-          <div class="onboarding__selection" aria-live="polite">${esc(selectedLabel)}</div>
-          <div class="onboarding__grid" role="group" aria-label="Listening languages">
-            ${PREFERRED_LANGUAGES.map((language) => {
-              const active = selected.includes(language);
-              const blocked = !active && selected.length >= MAX_PREFERRED_LANGUAGES;
-              return `<button class="language-choice ${active ? 'is-selected' : ''}" type="button"
-                        data-onboarding-language="${language}" aria-pressed="${active}" ${blocked ? 'disabled' : ''}
-                        style="--hue:${catalogHue(language)}">
-                <span class="language-choice__orb"></span>
-                <span class="language-choice__name">${esc(cap(language))}</span>
-                <span class="language-choice__check" aria-hidden="true">${active ? ICON_CHECK : ''}</span>
-              </button>`;
-            }).join('')}
+          <div class="onboarding-preview__art" aria-hidden="true"><span></span><span></span><span></span></div>
+        </section>
+        <div class="setup-modal" role="dialog" aria-modal="true" aria-labelledby="onboardingTitle" aria-describedby="onboardingDescription">
+          <div class="setup-modal__scrim"></div>
+          <div class="setup-modal__box">
+            <div class="setup-modal__eyebrow">First play setup</div>
+            <h1 id="onboardingTitle">What should we play first?</h1>
+            <p id="onboardingDescription">Choose the languages you enjoy. We will build your first mix and start playback as soon as you continue.</p>
+            <div class="onboarding__selection" aria-live="polite">${esc(selectedLabel)}</div>
+            <div class="onboarding__grid" role="group" aria-label="Listening languages">
+              ${PREFERRED_LANGUAGES.map((language) => {
+                const active = selected.includes(language);
+                const blocked = !active && selected.length >= MAX_PREFERRED_LANGUAGES;
+                return `<button class="language-choice ${active ? 'is-selected' : ''}" type="button"
+                          data-onboarding-language="${language}" aria-pressed="${active}" ${blocked ? 'disabled' : ''}
+                          style="--hue:${catalogHue(language)}">
+                  <span class="language-choice__orb"></span>
+                  <span class="language-choice__name">${esc(cap(language))}</span>
+                  <span class="language-choice__check" aria-hidden="true">${active ? ICON_CHECK : ''}</span>
+                </button>`;
+              }).join('')}
+            </div>
+            <div class="setup-modal__footer">
+              <p>Saved only in this browser. You can change this anytime in Settings.</p>
+              <div class="setup-modal__actions">
+                <button class="btn btn--ghost" type="button" data-skip-onboarding>Use Hindi for now</button>
+                <button class="btn btn--primary btn--lg" type="button" data-complete-onboarding ${canContinue ? '' : 'disabled'}>
+                  Start listening ${ICON_PLAY}
+                </button>
+              </div>
+            </div>
           </div>
-          <div class="onboarding__footer">
-            <p>Stored only in this browser. You can change this later in Settings.</p>
-            <button class="btn btn--primary btn--lg" data-complete-onboarding ${canContinue ? '' : 'disabled'}>
-              Continue with my picks ${ICON_PLAY}
-            </button>
-          </div>
-        </section>`);
+        </div>`);
+      window.setTimeout(() => $('[data-complete-onboarding]')?.focus(), 30);
     },
 
     async home(routeGeneration) {
@@ -3394,6 +3456,39 @@
   /* Event wiring                                                           */
   /* ====================================================================== */
 
+  async function finishOnboarding({ fallback = false } = {}) {
+    const button = $('[data-complete-onboarding]');
+    if (button?.dataset.busy === '1') return;
+    const languages = fallback ? ['hindi'] : Store.prefs.languages;
+    if (!languages.length) return;
+    if (button) {
+      button.dataset.busy = '1';
+      button.disabled = true;
+      button.innerHTML = '<span class="spinner spinner--small" aria-hidden="true"></span> Preparing your mix';
+    }
+
+    Store.setLanguages(languages, { complete: true });
+    Feed.invalidate();
+    Mixes.invalidate();
+    document.body.classList.remove('is-setup-open');
+    toast('Building your first mix');
+
+    await route();
+    const feed = await Feed.load().catch(() => null);
+    let songs = (feed?.rows || []).find((row) => row.kind === 'songs' && row.items?.length)?.items || [];
+    if (!songs.length) {
+      const browse = await API.browse(Store.prefs.languages).catch(() => null);
+      songs = (browse?.rows || []).find((row) => row.kind === 'songs' && row.items?.length)?.items || [];
+    }
+    if (!songs.length) {
+      toast('Your home is ready. Choose a track to begin.');
+      return;
+    }
+
+    await Player.play(songs, 0, { label: 'Your first mix' });
+    toast(audio.paused ? 'Your first mix is ready. Tap Play to start.' : 'Your first mix is playing', ICON_PLAY);
+  }
+
   function playListFromKey(key, { shuffle = false, index = 0 } = {}) {
     const entry = LISTS.get(key);
     if (!entry?.songs?.length) return;
@@ -3425,12 +3520,14 @@
       }
 
       if (target.closest('[data-complete-onboarding]')) {
-        if (!Store.prefs.languages.length) return;
-        Store.setLanguages(Store.prefs.languages, { complete: true });
-        Feed.invalidate();
-        Mixes.invalidate();
-        toast(`Music picks ready for ${Store.prefs.languages.map(cap).join(', ')}`);
-        route();
+        event.preventDefault();
+        await finishOnboarding();
+        return;
+      }
+
+      if (target.closest('[data-skip-onboarding]')) {
+        event.preventDefault();
+        await finishOnboarding({ fallback: true });
         return;
       }
 
@@ -3880,7 +3977,9 @@
         case 'toggle': Player.toggle(); break;
         case 'next': Player.next(true); break;
         case 'prev': Player.prev(); break;
-        case 'mute': $('#muteBtn').click(); break;
+        case 'seek-back': Player.seekBy(-10); break;
+        case 'seek-forward': Player.seekBy(10); break;
+        case 'mute': toggleMute(); break;
         case 'queue':
         case 'queue-panel': {
           if (action === 'queue-panel' || !$('#np').hidden) {
@@ -3955,23 +4054,13 @@
       }
     });
 
-    $('#volume').addEventListener('input', (event) => {
-      applyVolume(Number(event.target.value) / 100);
+    $$('.js-volume').forEach((control) => {
+      control.addEventListener('input', (event) => {
+        applyVolume(Number(event.target.value) / 100);
+      });
     });
 
-    $('#muteBtn').addEventListener('click', () => {
-      Store.prefs.muted = !Store.prefs.muted;
-      // Remember the level so unmuting restores it rather than jumping to full.
-      if (Store.prefs.muted) {
-        Store.prefs.lastVolume = Store.prefs.volume || 0.85;
-      }
-      Store.savePrefs();
-      DECKS.forEach((deck) => { deck.muted = Store.prefs.muted; });
-      $('#muteBtn').classList.toggle('is-muted', Store.prefs.muted);
-      if (!Store.prefs.muted && !Store.prefs.volume) {
-        applyVolume(Store.prefs.lastVolume || 0.85);
-      }
-    });
+    $('#muteBtn').addEventListener('click', () => toggleMute());
 
     $('#quality').addEventListener('click', () => {
       const order = ['320kbps', '160kbps', '96kbps'];
@@ -4005,10 +4094,18 @@
       scrubber.addEventListener('pointermove', (event) => {
         if (Player.seeking) paintProgress(ratioFromEvent(event));
       });
-      scrubber.addEventListener('pointerup', (event) => {
+      const finishScrub = (event, commit) => {
         if (!Player.seeking) return;
         Player.seeking = false;
-        Player.seekToRatio(ratioFromEvent(event));
+        if (commit) Player.seekToRatio(ratioFromEvent(event));
+        if (event?.pointerId !== undefined && scrubber.hasPointerCapture?.(event.pointerId)) {
+          scrubber.releasePointerCapture(event.pointerId);
+        }
+      };
+      scrubber.addEventListener('pointerup', (event) => finishScrub(event, true));
+      scrubber.addEventListener('pointercancel', (event) => finishScrub(event, false));
+      scrubber.addEventListener('lostpointercapture', () => {
+        if (Player.seeking) Player.seeking = false;
       });
       scrubber.addEventListener('keydown', (event) => {
         if (!Player.current) return;
