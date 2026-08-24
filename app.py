@@ -672,6 +672,9 @@ def api_feed():
             "artistCount": len(profile["artists"]),
             "languageCount": len(profile["languages"]),
             "topArtists": profile["topArtists"][:8],
+            # What the listener has been playing in the last day or two, which
+            # the ranking now weighs separately from long term taste.
+            "recentArtists": profile.get("topSessionArtists", [])[:3],
             "topLanguages": profile["topLanguages"],
             "preferredLanguages": languages,
             "eraCenter": round(profile["eraCenter"]) if profile["eraCenter"] else None,

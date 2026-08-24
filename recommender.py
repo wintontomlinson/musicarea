@@ -52,14 +52,22 @@ EVENT_WEIGHTS = {
 # you loved today.
 HALF_LIFE_DAYS = 21.0
 
+# A second, much shorter memory. Long term taste says who you are; the last day
+# or two says what you are in the mood for right now, which is what the big
+# services lean on to make a feed feel responsive on the same day you use it.
+# Kept as a separate signal rather than a shorter global half life, so a single
+# evening of one genre cannot erase the profile underneath it.
+SESSION_HALF_LIFE_DAYS = 2.0
+
 # Relative importance of each scoring signal. These sum to 1.0 for readability.
 WEIGHTS = {
-    "artist": 0.26,      # affinity for the credited artists
-    "collab": 0.22,      # editorial playlist co-occurrence (item-item CF)
-    "language": 0.13,    # matches the languages you actually play
-    "era": 0.10,         # release window you gravitate to
-    "popularity": 0.10,  # mainstream vs deep-cut fit
-    "freshness": 0.09,   # recency of the release
+    "artist": 0.22,      # long term affinity for the credited artists
+    "collab": 0.20,      # editorial playlist co-occurrence (item-item CF)
+    "session": 0.10,     # what you have been playing in the last day or two
+    "language": 0.12,    # matches the languages you actually play
+    "era": 0.09,         # release window you gravitate to
+    "popularity": 0.09,  # mainstream vs deep-cut fit
+    "freshness": 0.08,   # recency of the release
     "recall": 0.10,      # prior on the source that surfaced the track
 }
 
@@ -69,22 +77,24 @@ WEIGHTS = {
 WEIGHT_PROFILES = {
     "default": WEIGHTS,
     "radio": {
-        "artist": 0.28, "collab": 0.34, "language": 0.14,
-        "era": 0.10, "popularity": 0.06, "freshness": 0.02, "recall": 0.06,
+        "artist": 0.25, "collab": 0.31, "session": 0.08, "language": 0.13,
+        "era": 0.09, "popularity": 0.05, "freshness": 0.02, "recall": 0.07,
     },
+    # Discovery deliberately almost ignores both artist memories, long term and
+    # short, or it just replays the current mood back at the listener.
     "discover": {
-        "artist": 0.08, "collab": 0.30, "language": 0.16,
-        "era": 0.10, "popularity": 0.08, "freshness": 0.16, "recall": 0.12,
+        "artist": 0.06, "collab": 0.28, "session": 0.04, "language": 0.15,
+        "era": 0.09, "popularity": 0.08, "freshness": 0.16, "recall": 0.14,
     },
     "fresh": {
-        "artist": 0.22, "collab": 0.12, "language": 0.16,
-        "era": 0.02, "popularity": 0.08, "freshness": 0.34, "recall": 0.06,
+        "artist": 0.20, "collab": 0.11, "session": 0.08, "language": 0.15,
+        "era": 0.02, "popularity": 0.08, "freshness": 0.31, "recall": 0.05,
     },
     # For a mood set, belonging to the mood is already a given for every
     # candidate, so the ranking is decided by taste fit instead.
     "mood": {
-        "artist": 0.34, "collab": 0.06, "language": 0.18,
-        "era": 0.12, "popularity": 0.16, "freshness": 0.04, "recall": 0.10,
+        "artist": 0.30, "collab": 0.06, "session": 0.10, "language": 0.16,
+        "era": 0.11, "popularity": 0.15, "freshness": 0.04, "recall": 0.08,
     },
 }
 
@@ -103,7 +113,7 @@ SOURCE_PRIOR = {
 # Diversity: multiplicative penalty per already selected item sharing a facet.
 # Signals measured from the listener's own history, as opposed to signals that
 # describe the catalog. Only these can justify a personalised explanation.
-PERSONAL_SIGNALS = {"artist", "collab", "language", "era"}
+PERSONAL_SIGNALS = {"artist", "collab", "session", "language", "era"}
 
 ARTIST_PENALTY = 0.42
 ALBUM_PENALTY = 0.55
@@ -111,6 +121,20 @@ ALBUM_PENALTY = 0.55
 # not be pushed out of it. Only bite after a run of the same language.
 LANGUAGE_PENALTY = 0.97
 LANGUAGE_PENALTY_AFTER = 3
+
+# Chart and trending recall pull from the same small set of global hits, so
+# without a correction the top of every shelf converges on them regardless of
+# taste. Popularity bias is a well known failure of recommenders: the fix here
+# is a run based discount, so the first big hit is unaffected and the fifth
+# has to genuinely outscore the alternatives.
+POPULARITY_PENALTY = 0.9
+POPULARITY_PENALTY_AFTER = 3
+VERY_POPULAR = 0.85
+
+# The same treatment for release windows, so a shelf does not become an
+# unbroken run of this year's releases.
+ERA_PENALTY = 0.95
+ERA_PENALTY_AFTER = 4
 
 MAX_PER_ARTIST = 2
 MAX_PER_ALBUM = 2
@@ -131,11 +155,12 @@ def _now_ms() -> float:
     return time.time() * 1000.0
 
 
-def _decay(timestamp_ms: Optional[float], now_ms: float) -> float:
+def _decay(timestamp_ms: Optional[float], now_ms: float,
+           half_life_days: float = HALF_LIFE_DAYS) -> float:
     if not timestamp_ms:
         return 0.35  # unknown age: count it, but quietly
     age_days = max(0.0, (now_ms - float(timestamp_ms)) / 86_400_000.0)
-    return 0.5 ** (age_days / HALF_LIFE_DAYS)
+    return 0.5 ** (age_days / half_life_days)
 
 
 def _to_year(value) -> Optional[int]:
@@ -276,6 +301,9 @@ def build_profile(history: Optional[Iterable[dict]] = None,
 
     artists: Dict[str, float] = defaultdict(float)
     artist_names: Dict[str, str] = {}
+    # Same accumulation, decayed on the short half life, so it reflects the last
+    # day or two rather than the last three weeks.
+    session_artists: Dict[str, float] = defaultdict(float)
     languages: Dict[str, float] = defaultdict(float)
     year_weight_sum = 0.0
     year_value_sum = 0.0
@@ -300,6 +328,7 @@ def build_profile(history: Optional[Iterable[dict]] = None,
         base = EVENT_WEIGHTS.get(event, 1.0)
         decay = _decay(entry.get("at"), now)
         weight = base * decay
+        session_weight = base * _decay(entry.get("at"), now, SESSION_HALF_LIFE_DAYS)
 
         heard.add(song_id)
         title = _normalize_title(entry.get("name"))
@@ -334,8 +363,10 @@ def build_profile(history: Optional[Iterable[dict]] = None,
             }
 
         share = weight / max(1, len(entry_artists)) if entry_artists else 0.0
+        session_share = session_weight / max(1, len(entry_artists)) if entry_artists else 0.0
         for artist in entry_artists:
             artists[artist["id"]] += share
+            session_artists[artist["id"]] += session_share
 
         language = (entry.get("language") or "").lower()
         if language:
@@ -358,6 +389,9 @@ def build_profile(history: Optional[Iterable[dict]] = None,
     top_artists = sorted(
         ((aid, w) for aid, w in artists.items() if w > 0), key=lambda kv: -kv[1]
     )
+    top_session = sorted(
+        ((aid, w) for aid, w in session_artists.items() if w > 0), key=lambda kv: -kv[1]
+    )
     top_languages = sorted(languages.items(), key=lambda kv: -kv[1])
     seeds = [
         track_meta[tid]
@@ -376,6 +410,12 @@ def build_profile(history: Optional[Iterable[dict]] = None,
             for aid, w in top_artists[:12]
         ],
         "maxArtistWeight": top_artists[0][1] if top_artists else 0.0,
+        "sessionArtists": dict(top_session),
+        "topSessionArtists": [
+            {"id": aid, "name": artist_names.get(aid, "")}
+            for aid, _ in top_session[:5]
+        ],
+        "maxSessionWeight": top_session[0][1] if top_session else 0.0,
         "languages": dict(top_languages),
         "topLanguages": [lang for lang, _ in top_languages[:4]] or preferred_languages or list(DEFAULT_LANGUAGES),
         "maxLanguageWeight": top_languages[0][1] if top_languages else 0.0,
@@ -647,6 +687,8 @@ def score_candidates(pool: CandidatePool, profile: dict, salt: str = "",
     weights = weights or WEIGHTS
     exclude = exclude or set()
     max_artist = profile["maxArtistWeight"] or 1.0
+    max_session = profile.get("maxSessionWeight") or 1.0
+    session_artists = profile.get("sessionArtists") or {}
     max_language = profile["maxLanguageWeight"] or 1.0
     era_center = profile["eraCenter"]
     mainstream = profile["mainstream"]
@@ -676,14 +718,23 @@ def score_candidates(pool: CandidatePool, profile: dict, salt: str = "",
         artist_affinity = 0.0
         artist_via = ""
         neighbor_affinity = 0.0
+        session_affinity = 0.0
+        session_via = ""
         for artist in artists:
             weight = profile["artists"].get(artist["id"], 0.0)
             if weight > artist_affinity:
                 artist_affinity = weight
                 artist_via = artist["name"]
+            recent = session_artists.get(artist["id"], 0.0)
+            if recent > session_affinity:
+                session_affinity = recent
+                session_via = artist["name"]
             neighbor_affinity = max(neighbor_affinity, pool.neighbors.get(artist["id"], 0.0))
         direct_signal = _clamp(artist_affinity / max_artist) if max_artist else 0.0
         artist_signal = max(direct_signal, 0.75 * neighbor_affinity)
+
+        # --- short term session affinity ------------------------------------
+        session_signal = _clamp(session_affinity / max_session) if max_session else 0.0
 
         # --- collaborative filtering ----------------------------------------
         collab = sources.get("collab")
@@ -721,6 +772,7 @@ def score_candidates(pool: CandidatePool, profile: dict, salt: str = "",
         signals = {
             "artist": round(artist_signal, 4),
             "collab": round(collab_signal, 4),
+            "session": round(session_signal, 4),
             "language": round(language_signal, 4),
             "era": round(era_signal, 4),
             "popularity": round(_clamp(popularity_signal), 4),
@@ -758,6 +810,9 @@ def score_candidates(pool: CandidatePool, profile: dict, salt: str = "",
             # neighbourhood, so exploration slots stay genuinely exploratory.
             "isDiscovery": direct_signal < 0.05,
             "directArtist": round(direct_signal, 4),
+            "sessionVia": session_via,
+            "popularity": round(_norm_popularity(song.get("playCount")), 4),
+            "year": year,
             "weights": weights,
         })
 
@@ -803,6 +858,8 @@ def _reason(candidate: dict, profile: dict, seed_label: Optional[str] = None,
         anchor = sources.get("similar", {}).get("via") or candidate["artistVia"]
         if anchor:
             return f"In the same lane as {anchor}"
+    if top == "session" and candidate.get("sessionVia"):
+        return f"On the back of your recent {candidate['sessionVia']} run"
     if top == "artist" and candidate["artistVia"]:
         return f"Because you listen to {candidate['artistVia']}"
     if top == "collab" and sources.get("collab", {}).get("via"):
@@ -852,6 +909,8 @@ def rerank(scored: List[dict], profile: dict, limit: int = 30,
     artist_counts: Dict[str, int] = defaultdict(int)
     album_counts: Dict[str, int] = defaultdict(int)
     language_counts: Dict[str, int] = defaultdict(int)
+    decade_counts: Dict[int, int] = defaultdict(int)
+    popular_count = 0
 
     while remaining and len(selected) < limit:
         slot = len(selected)
@@ -877,6 +936,17 @@ def rerank(scored: List[dict], profile: dict, limit: int = 30,
             language_run = max(0, language_counts[language] - LANGUAGE_PENALTY_AFTER)
             redundancy *= LANGUAGE_PENALTY ** language_run
 
+            # Popularity debiasing: only the run beyond the allowance is taxed,
+            # so genuine hits still lead while the shelf stops being a chart.
+            if candidate.get("popularity", 0.0) >= VERY_POPULAR:
+                popular_run = max(0, popular_count - POPULARITY_PENALTY_AFTER)
+                redundancy *= POPULARITY_PENALTY ** popular_run
+
+            year = candidate.get("year")
+            if year:
+                decade_run = max(0, decade_counts[year // 10] - ERA_PENALTY_AFTER)
+                redundancy *= ERA_PENALTY ** decade_run
+
             value = candidate["score"] * redundancy
             if want_discovery and candidate["isDiscovery"]:
                 value *= 1.6  # bias, not a guarantee
@@ -895,6 +965,10 @@ def rerank(scored: List[dict], profile: dict, limit: int = 30,
         if album_id:
             album_counts[album_id] += 1
         language_counts[(song.get("language") or "").lower()] += 1
+        if candidate.get("popularity", 0.0) >= VERY_POPULAR:
+            popular_count += 1
+        if candidate.get("year"):
+            decade_counts[candidate["year"] // 10] += 1
 
         selected.append(candidate)
 

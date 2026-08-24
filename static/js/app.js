@@ -540,7 +540,6 @@
     lyrics(id) { return this.get(`/api/songs/${encodeURIComponent(id)}/lyrics`); },
     similar(ids, limit = 16) { return this.post('/api/similar', { ids, limit }); },
     mixes(perMix = 24) { return this.post('/api/mixes', { history: Store.history, perMix }); },
-    genres() { return this.get('/api/genres'); },
     suggest(query) { return this.get(`/api/search?query=${encodeURIComponent(query)}`); },
     searchSongs(q, limit = 30) { return this.get(`/api/search/songs?query=${encodeURIComponent(q)}&limit=${limit}`); },
     searchAlbums(q, limit = 16) { return this.get(`/api/search/albums?query=${encodeURIComponent(q)}&limit=${limit}`); },
@@ -681,6 +680,23 @@
     }, 2600);
   }
 
+  /** Run an async action while the control that triggered it shows progress.
+   *  Album, playlist, mix and mood buttons all fetch before they can play, and
+   *  without this a slow connection makes them look like dead controls. */
+  async function withPending(button, action) {
+    if (!button || button.dataset.pending === '1') return action?.();
+    button.dataset.pending = '1';
+    button.classList.add('is-pending');
+    if (button.tagName === 'BUTTON') button.disabled = true;
+    try {
+      return await action();
+    } finally {
+      delete button.dataset.pending;
+      button.classList.remove('is-pending');
+      if (button.tagName === 'BUTTON') button.disabled = false;
+    }
+  }
+
   /* ====================================================================== */
   /* Registries: songs and playable lists                                   */
   /* ====================================================================== */
@@ -691,6 +707,7 @@
 
   function remember(songs) {
     (songs || []).forEach((s) => s?.id && SONGS.set(s.id, s));
+    if (SONGS.size > MAX_SONGS) prune(SONGS, MAX_SONGS);
   }
 
   /** Fill in stream URLs for stored songs.
@@ -725,10 +742,27 @@
     return list.map((s) => (s.downloadUrl?.length ? s : (byId.get(s.id) || s)));
   }
 
+  // Every render registers new lists and songs. Over a long session those maps
+  // grow without limit, so both are pruned oldest-first. Map preserves insertion
+  // order, which makes the oldest key the first one.
+  const MAX_LISTS = 300;
+  const MAX_SONGS = 4000;
+
+  function prune(map, limit) {
+    if (map.size <= limit) return;
+    const excess = map.size - limit;
+    let removed = 0;
+    for (const key of map.keys()) {
+      map.delete(key);
+      if (++removed >= excess) break;
+    }
+  }
+
   function registerList(songs, label) {
     const key = `l${++listSeq}`;
     remember(songs);
     LISTS.set(key, { songs: songs.filter((s) => s?.id), label: label || '' });
+    prune(LISTS, MAX_LISTS);
     return key;
   }
 
@@ -749,7 +783,8 @@
 
   function songCard(song, { badge } = {}) {
     return `
-      <article class="card" data-open-song="${esc(song.id)}">
+      <article class="card" data-open-song="${esc(song.id)}"
+               role="button" tabindex="0" aria-label="Play ${esc(song.name)} by ${esc(artistLine(song))}">
         <div class="card__art">
           <img loading="lazy" decoding="async" src="${esc(art(song, 500))}" alt="">
           ${badge ? `<span class="card__badge">${esc(badge)}</span>` : ''}
@@ -768,7 +803,8 @@
       ? covers.map((c) => `<img loading="lazy" decoding="async" src="${esc(art({ image: c }, 150))}" alt="">`).join('')
       : `<img loading="lazy" decoding="async" src="${esc(art(mix, 500))}" alt="" class="mix__solo">`;
     return `
-      <article class="card mix" data-goto="#/mix/${esc(mix.id)}" style="--hue:${hueOf(mix.id)}">
+      <article class="card mix" data-goto="#/mix/${esc(mix.id)}" style="--hue:${hueOf(mix.id)}"
+               role="link" tabindex="0" aria-label="${esc(mix.name)}">
         <div class="card__art mix__art">
           <div class="mix__grid">${grid}</div>
           <span class="mix__label">${esc(mix.name)}</span>
@@ -783,11 +819,21 @@
     const round = kind === 'artist';
     const route = kind === 'artist' ? 'artist' : kind === 'playlist' ? 'playlist' : 'album';
     const sub = item.subtitle || (item.songCount ? plural(item.songCount, 'song') : (item.year || ''));
+    // Albums open their own page rather than carrying a play overlay: the album
+    // page is where the track list, ordering and the real Play action live.
+    // Artists start a station, which is what that control actually does, so the
+    // label no longer promises a straight play.
+    const overlay = kind === 'playlist'
+      ? `<button class="card__play" data-play-playlist="${esc(item.id)}" aria-label="Play ${esc(item.name)}">${ICON_PLAY}</button>`
+      : kind === 'artist'
+        ? `<button class="card__play" data-artist-radio="${esc(item.id)}" aria-label="Start a station from ${esc(item.name)}">${ICON_PLAY}</button>`
+        : '';
     return `
-      <article class="card ${round ? 'card--round' : ''}" data-goto="#/${route}/${esc(item.id)}">
+      <article class="card ${round ? 'card--round' : ''}" data-goto="#/${route}/${esc(item.id)}"
+               role="link" tabindex="0" aria-label="${esc(item.name)}${sub ? `, ${esc(sub)}` : ''}">
         <div class="card__art">
           <img loading="lazy" decoding="async" src="${esc(art(item, 500))}" alt="">
-          <button class="card__play" data-play-${esc(route)}="${esc(item.id)}" aria-label="Play ${esc(item.name)}">${ICON_PLAY}</button>
+          ${overlay}
         </div>
         <div class="card__title">${esc(item.name)}</div>
         <div class="card__sub">${esc(sub)}</div>
@@ -798,7 +844,8 @@
     const liked = Store.isLiked(song.id);
     const current = Player.current?.id === song.id;
     return `
-      <div class="track ${current ? 'is-current' : ''}" data-list="${esc(listKey)}" data-index="${index}" data-song="${esc(song.id)}">
+      <div class="track ${current ? 'is-current' : ''}" data-list="${esc(listKey)}" data-index="${index}" data-song="${esc(song.id)}"
+           tabindex="0" aria-label="Play ${esc(song.name)} by ${esc(artistLine(song))}">
         <div class="track__index">
           ${current
             ? '<span class="eq" aria-label="Now playing"><i></i><i></i><i></i><i></i></span>'
@@ -855,10 +902,14 @@
     // is a song id, so it must render as a playable song card rather than a link
     // to an album page that does not exist.
     const kind = row.kind === 'playlists' ? 'playlist' : row.kind === 'artists' ? 'artist' : 'album';
-    const songs = items.filter((item) => item.type === 'song' && item.downloadUrl);
+    // Every song renders as a song card, including one that arrived without a
+    // stream. Treating a streamless single as an album linked it to
+    // #/album/<songId>, which is always a dead page; the stream itself is
+    // resolved on demand by ensurePlayable when the card is played.
+    const songs = items.filter((item) => item.type === 'song');
     const listKey = songs.length ? registerList(songs, row.title) : '';
     inner = items.map((item) => (
-      item.type === 'song' && item.downloadUrl
+      item.type === 'song'
         ? songCard(item)
         : entityCard(item, item.type === 'artist' ? 'artist' : item.type === 'playlist' ? 'playlist' : kind)
     )).join('');
@@ -921,6 +972,16 @@
         <p>${esc(message)}</p>
         ${actionHtml}
       </div>`;
+  }
+
+  /** A failure that the listener can actually do something about. Every page
+   *  that can fail now offers the same retry rather than dead-ending. */
+  function errorState(title, message, extraHtml = '') {
+    return emptyState(title, message, `
+      <div class="empty__actions">
+        <button class="btn btn--primary" data-retry-route="1">Try again</button>
+        ${extraHtml}
+      </div>`);
   }
 
   /* ====================================================================== */
@@ -2202,7 +2263,6 @@
     async home(routeGeneration) {
       const isCurrent = () => routeGeneration === activeRouteGeneration && currentRoute().path === 'home';
       setView(`
-        <div id="homeHero"></div>
         ${skeletonShelf('Made for you')}
         ${skeletonShelf('Trending')}`);
 
@@ -2215,19 +2275,15 @@
       if (!feedData && !browseData) {
         setView(emptyState('Could not reach the music service',
           'Check the connection and try again.',
-          '<button class="btn btn--primary" onclick="location.reload()">Retry</button>'));
+          '<button class="btn btn--primary" data-retry-route="1">Try again</button>'));
         return;
       }
 
       const profile = feedData?.profile;
-      // Real covers from the feed, so the hero panel is content and not filler.
-      const covers = (feedData?.rows?.[0]?.items
-        || browseData?.rows?.find((r) => r.kind === 'songs')?.items
-        || []).slice(0, 3);
+      const recent = (profile?.recentArtists || []).map((a) => a.name).filter(Boolean);
 
-      // A returning listener does not need the pitch. They get a greeting bar and
-      // their music. The full hero is kept for a first visit, where explaining
-      // the app is the useful thing to do.
+      // A returning listener gets a greeting bar and their music. A cold visitor
+      // still needs a heading, and used to get shelves with no title at all.
       const hero = profile && !profile.coldStart
         ? `
           <section class="greet">
@@ -2243,11 +2299,24 @@
               <i></i>
               <span>${esc((profile.topLanguages || []).slice(0, 2).map(cap).join(', ') || 'Mixed')}</span>
               ${profile.eraCenter ? `<i></i><span>${esc(profile.eraCenter)} era</span>` : ''}
+              ${recent.length ? `<i></i><span>Lately: <b>${esc(recent.slice(0, 2).join(', '))}</b></span>` : ''}
               <i></i>
               <span>${plural(profile.events, 'signal')} learned</span>
             </div>
           </section>`
-        : '';
+        : `
+          <section class="greet">
+            <div class="greet__row">
+              <h1>${esc(greeting())}</h1>
+              <div class="greet__actions">
+                <button class="btn btn--primary" data-play-shelf="made-for-you">${ICON_PLAY} Start listening</button>
+                <a class="btn btn--outline" href="#/browse">Explore</a>
+              </div>
+            </div>
+            <div class="greet__facts">
+              <span>Play a few tracks and Home starts shaping itself around you</span>
+            </div>
+          </section>`;
 
       const rows = [];
       (feedData?.rows || []).forEach((row, index) => {
@@ -2277,7 +2346,7 @@
       setView(`${skeletonShelf('Loading Explore')}${skeletonShelf('Charts')}`);
       const data = await API.browse(Store.prefs.languages).catch(() => null);
       if (!data) {
-        setView(emptyState('Explore is unavailable', 'The catalogue service did not respond. Try again shortly.'));
+        setView(errorState('Explore is unavailable', 'The catalogue service did not respond.'));
         return;
       }
       setView(`
@@ -2297,7 +2366,7 @@
       setView(`<div class="spinner-row"><span class="spinner"></span>Loading ${esc(name)}</div>`);
       const data = await API.browse(id).catch(() => null);
       if (!data) {
-        setView(emptyState(`${name} is unavailable`, 'The catalogue did not respond. Try again shortly.'));
+        setView(errorState(`${name} is unavailable`, 'The catalogue did not respond.'));
         return;
       }
       const songRow = (data.rows || []).find((r) => r.kind === 'songs');
@@ -2421,7 +2490,7 @@
       setView(detailSkeleton());
       const album = await API.album(id, { refresh }).catch(() => null);
       if (!album) {
-        setView(emptyState('Album not found', 'That album could not be loaded.'));
+        setView(errorState('Album not found', 'That album could not be loaded.'));
         return;
       }
       const songs = album.songs || [];
@@ -2461,7 +2530,7 @@
       setView(detailSkeleton());
       const playlist = await API.playlist(id, 100).catch(() => null);
       if (!playlist) {
-        setView(emptyState('Playlist not found', 'That playlist could not be loaded.'));
+        setView(errorState('Playlist not found', 'That playlist could not be loaded.'));
         return;
       }
       const songs = playlist.songs || [];
@@ -2496,7 +2565,7 @@
       setView(detailSkeleton());
       const artist = await API.artist(id).catch(() => null);
       if (!artist) {
-        setView(emptyState('Artist not found', 'That artist page could not be loaded.'));
+        setView(errorState('Artist not found', 'That artist page could not be loaded.'));
         return;
       }
       const songs = artist.topSongs || [];
@@ -2556,9 +2625,13 @@
       setView(`
         <header class="detail">
           <div class="detail__art">
-            <div class="mix__grid mix__grid--lg">
-              ${(mix.covers || []).slice(0, 4).map((c) => `<img src="${esc(art({ image: c }, 500))}" alt="">`).join('')}
-            </div>
+            ${(mix.covers || []).length >= 4
+              ? `<div class="mix__grid mix__grid--lg">
+                  ${mix.covers.slice(0, 4).map((c) => `<img src="${esc(art({ image: c }, 500))}" alt="">`).join('')}
+                 </div>`
+              // A four cell grid with two covers renders two empty holes, so a
+              // short mix uses a single cover instead, as its card already does.
+              : `<img src="${esc(art({ image: (mix.covers || [])[0] } , 500))}" alt="">`}
           </div>
           <div class="detail__body">
             <div class="detail__kind">Generated mix</div>
@@ -2586,7 +2659,7 @@
       setView(`<div class="spinner-row"><span class="spinner"></span>Building the set</div>`);
       const data = await API.mood(id).catch(() => null);
       if (!data?.items?.length) {
-        setView(emptyState('Mood unavailable', 'Could not build that set right now.'));
+        setView(errorState('Mood unavailable', 'Could not build that set right now.'));
         return;
       }
       remember(data.items);
@@ -2782,11 +2855,16 @@
         <section class="section">
           <div class="section__head"><div><h2>Listening languages</h2><p>Used to shape your Home and Explore picks before your listening history takes over</p></div></div>
           <div class="panel">
-            <div class="chip-row" style="padding-bottom:0">
-              ${PREFERRED_LANGUAGES.map((language) => `
-                <button class="chip ${p.languages.includes(language) ? 'is-active' : ''}" data-language="${language}">
+            <p class="panel__note" id="languageCount" aria-live="polite">${esc(languageCountLabel())}</p>
+            <div class="chip-grid" id="settingsLanguages" role="group" aria-label="Listening languages">
+              ${PREFERRED_LANGUAGES.map((language) => {
+                const active = p.languages.includes(language);
+                const blocked = !active && p.languages.length >= MAX_PREFERRED_LANGUAGES;
+                return `<button class="chip ${active ? 'is-active' : ''}" data-language="${language}"
+                          aria-pressed="${active}" ${blocked ? 'disabled' : ''}>
                   ${esc(cap(language))}
-                </button>`).join('')}
+                </button>`;
+              }).join('')}
             </div>
           </div>
         </section>
@@ -2794,9 +2872,10 @@
         <section class="section">
           <div class="section__head"><div><h2>Audio quality</h2><p>Applies to the next track, and to the current one straight away</p></div></div>
           <div class="panel">
-            <div class="opt-list">
+            <div class="opt-list" role="radiogroup" aria-label="Audio quality">
               ${qualities.map((q) => `
-                <button class="opt ${p.quality === q.id ? 'is-active' : ''}" data-set-quality="${q.id}">
+                <button class="opt ${p.quality === q.id ? 'is-active' : ''}" data-set-quality="${q.id}"
+                        role="radio" aria-checked="${p.quality === q.id}">
                   <span class="opt__radio"></span>
                   <span class="opt__body">
                     <strong>${esc(q.name)}</strong>
@@ -2813,9 +2892,10 @@
         <section class="section">
           <div class="section__head"><div><h2>Equalizer</h2><p>Shape the sound with a real three band audio filter</p></div></div>
           <div class="panel">
-            <div class="opt-list">
+            <div class="opt-list" role="radiogroup" aria-label="Equalizer preset">
               ${Object.entries(EQ_PRESETS).map(([id, preset]) => `
-                <button class="opt ${p.equalizer === id ? 'is-active' : ''}" data-set-eq="${id}">
+                <button class="opt ${p.equalizer === id ? 'is-active' : ''}" data-set-eq="${id}"
+                        role="radio" aria-checked="${p.equalizer === id}">
                   <span class="opt__radio"></span>
                   <span class="opt__body"><strong>${esc(preset.name)}</strong><small>${esc(preset.note)}</small></span>
                   <span class="opt__tag">${id === 'flat' ? 'Off' : 'EQ'}</span>
@@ -2871,9 +2951,10 @@
                 <strong>Sleep timer</strong>
                 <small id="sleepLabel">${Sleep.remainingLabel()}</small>
               </div>
-              <div class="chip-row" style="padding-bottom:0">
+              <div class="chip-grid" id="settingsSleep" role="group" aria-label="Sleep timer">
                 ${timers.map((m) => `
-                  <button class="chip ${Sleep.minutes === m ? 'is-active' : ''}" data-sleep="${m}">
+                  <button class="chip ${Sleep.minutes === m ? 'is-active' : ''}" data-sleep="${m}"
+                          aria-pressed="${Sleep.minutes === m}">
                     ${m === 0 ? 'Off' : `${m} min`}
                   </button>`).join('')}
               </div>
@@ -3118,6 +3199,68 @@
       </div>`;
   }
 
+  function languageCountLabel() {
+    const count = Store.prefs.languages.length;
+    return count
+      ? `${count} of ${MAX_PREFERRED_LANGUAGES} selected. Tap a selected language to remove it.`
+      : `Choose up to ${MAX_PREFERRED_LANGUAGES}.`;
+  }
+
+  /** Patch the Settings page in place.
+   *
+   *  Every control used to call Views.settings(), which rebuilt the whole view.
+   *  That scrolled the page back to the top, replayed the entrance animation and
+   *  threw away focus, which is worst on a phone where the page is tall and the
+   *  controls sit at the bottom. */
+  function syncSettingsUI() {
+    if (currentRoute().path !== 'settings') return;
+    const p = Store.prefs;
+
+    $$('[data-set-quality]').forEach((btn) => {
+      const on = btn.dataset.setQuality === p.quality;
+      btn.classList.toggle('is-active', on);
+      btn.setAttribute('aria-checked', String(on));
+    });
+    $$('[data-set-eq]').forEach((btn) => {
+      const on = btn.dataset.setEq === p.equalizer;
+      btn.classList.toggle('is-active', on);
+      btn.setAttribute('aria-checked', String(on));
+    });
+    $$('#settingsLanguages [data-language]').forEach((btn) => {
+      const active = p.languages.includes(btn.dataset.language);
+      btn.classList.toggle('is-active', active);
+      btn.setAttribute('aria-pressed', String(active));
+      btn.disabled = !active && p.languages.length >= MAX_PREFERRED_LANGUAGES;
+    });
+    const languageCount = $('#languageCount');
+    if (languageCount) languageCount.textContent = languageCountLabel();
+
+    const setSwitch = (id, on) => {
+      const el = $(id);
+      if (!el) return;
+      el.classList.toggle('is-on', !!on);
+      el.setAttribute('aria-checked', String(!!on));
+    };
+    setSwitch('#xfToggle', p.crossfade > 0);
+    setSwitch('#autoplayToggle', p.autoplay);
+    setSwitch('#vizToggle', p.visualizer);
+
+    const xfRow = $('#xfRow');
+    if (xfRow) xfRow.hidden = !(p.crossfade > 0);
+    const xfRange = $('#xfRange');
+    if (xfRange && p.crossfade > 0) xfRange.value = String(p.crossfade);
+    const xfLabel = $('#xfLabel');
+    if (xfLabel) xfLabel.textContent = p.crossfade > 0 ? `${p.crossfade} seconds` : 'Off';
+
+    $$('#settingsSleep [data-sleep]').forEach((btn) => {
+      const on = Number(btn.dataset.sleep) === Sleep.minutes;
+      btn.classList.toggle('is-active', on);
+      btn.setAttribute('aria-pressed', String(on));
+    });
+    const sleepLabel = $('#sleepLabel');
+    if (sleepLabel) sleepLabel.textContent = Sleep.remainingLabel();
+  }
+
   function greeting() {
     const hour = new Date().getHours();
     if (hour < 5) return 'Late one';
@@ -3175,16 +3318,6 @@
       <img loading="lazy" decoding="async" src="${esc(art({ image: c }, size))}" alt="">`).join('')}</span>`;
   }
 
-  /** Category tile, shared by languages on search and browse. */
-  function genreTile(item, href) {
-    return `
-      <a class="mood-tile" href="${esc(href)}" style="--hue:${item.hue}">
-        ${collage(item.covers, { cls: 'collage--soft' })}
-        <span class="mood-tile__tint"></span>
-        <span class="mood-tile__name">${esc(item.name)}</span>
-      </a>`;
-  }
-
   /** The single best match, given prominence at the top of a result page. */
   function topResultCard({ kind, name, sub, image, round, goto, playAttr }) {
     return `
@@ -3202,22 +3335,6 @@
           <button class="top-result__play" ${playAttr} aria-label="Play ${esc(name)}">${ICON_PLAY}</button>
         </article>
       </section>`;
-  }
-
-  /** Language tiles for the search screen, loaded after first paint. */
-  async function loadGenreTiles() {
-    const grid = $('#genreGrid');
-    if (!grid) return;
-    try {
-      const data = await API.genres();
-      if (!$('#genreGrid')) return;
-      grid.innerHTML = (data.languages || [])
-        .map((lang) => genreTile(lang, `#/language/${lang.id}`)).join('');
-      const moodHost = $('#moodHost');
-      if (moodHost && data.moods?.length) moodHost.innerHTML = moodStrip(data.moods);
-    } catch {
-      grid.innerHTML = '';
-    }
   }
 
   /** Fill the home mixes shelf. Deliberately after first paint: a cold build
@@ -3293,10 +3410,6 @@
     }
     closeMenu();
     hideSuggest();
-    const mobileMenu = $('#mobileMenu');
-    const mobileToggle = $('#mobileNavToggle');
-    if (mobileMenu) mobileMenu.hidden = true;
-    if (mobileToggle) mobileToggle.setAttribute('aria-expanded', 'false');
 
     const TITLES = {
       home: 'Home', browse: 'Explore', search: 'Search', library: 'Your library',
@@ -3328,7 +3441,8 @@
           return undefined;
       }
     } catch (error) {
-      setView(emptyState('Something broke on that page', error.message || 'Unknown error'));
+      setView(errorState('Something broke on that page',
+        'That page could not be built. Trying again usually clears it.'));
       return undefined;
     }
   }
@@ -3523,6 +3637,14 @@
         return;
       }
 
+      const retry = target.closest('[data-retry-route]');
+      if (retry) {
+        event.preventDefault();
+        Feed.invalidate();
+        await withPending(retry, () => route());
+        return;
+      }
+
       const menuBtn = target.closest('[data-menu]');
       if (menuBtn) {
         event.stopPropagation();
@@ -3595,10 +3717,10 @@
         event.stopPropagation();
         const shelfEl = playSong.closest('[data-shelf-list]');
         const song = SONGS.get(playSong.dataset.playSong);
-        if (shelfEl) {
-          const entry = LISTS.get(shelfEl.dataset.shelfList);
-          const index = entry.songs.findIndex((s) => s.id === playSong.dataset.playSong);
-          Player.play(entry.songs, Math.max(0, index), { label: entry.label });
+        const shelfEntry = shelfEl && LISTS.get(shelfEl.dataset.shelfList);
+        if (shelfEntry?.songs?.length) {
+          const index = shelfEntry.songs.findIndex((s) => s.id === playSong.dataset.playSong);
+          Player.play(shelfEntry.songs, Math.max(0, index), { label: shelfEntry.label });
         } else if (song) {
           Player.play([song], 0);
         }
@@ -3609,10 +3731,10 @@
       if (openSong) {
         const song = SONGS.get(openSong.dataset.openSong);
         const shelfEl = openSong.closest('[data-shelf-list]');
-        if (shelfEl) {
-          const entry = LISTS.get(shelfEl.dataset.shelfList);
-          const index = entry.songs.findIndex((s) => s.id === openSong.dataset.openSong);
-          Player.play(entry.songs, Math.max(0, index), { label: entry.label });
+        const shelfEntry = shelfEl && LISTS.get(shelfEl.dataset.shelfList);
+        if (shelfEntry?.songs?.length) {
+          const index = shelfEntry.songs.findIndex((s) => s.id === openSong.dataset.openSong);
+          Player.play(shelfEntry.songs, Math.max(0, index), { label: shelfEntry.label });
         } else if (song) Player.play([song], 0);
         return;
       }
@@ -3674,24 +3796,27 @@
         event.preventDefault();
         event.stopPropagation();
         const id = playMood.dataset.playMood;
-        toast('Building that set');
-        try {
-          const data = await API.mood(id, 40);
-          if (!data.items?.length) throw new Error('empty');
-          remember(data.items);
-          Player.play(data.items, 0, { label: data.mood.name });
-        } catch {
-          toast('Could not build that mood right now');
-        }
+        await withPending(playMood, async () => {
+          try {
+            const data = await API.mood(id, 40);
+            if (!data.items?.length) throw new Error('empty');
+            remember(data.items);
+            Player.play(data.items, 0, { label: data.mood.name });
+          } catch {
+            toast('Could not build that mood right now');
+          }
+        });
         return;
       }
 
       const playMix = target.closest('[data-play-mix]');
       if (playMix) {
         event.stopPropagation();
-        const mix = await Mixes.find(playMix.dataset.playMix).catch(() => null);
-        if (mix?.items?.length) Player.play(mix.items, 0, { label: mix.name });
-        else toast('Could not load that mix');
+        await withPending(playMix, async () => {
+          const mix = await Mixes.find(playMix.dataset.playMix).catch(() => null);
+          if (mix?.items?.length) Player.play(mix.items, 0, { label: mix.name });
+          else toast('Could not load that mix');
+        });
         return;
       }
 
@@ -3768,28 +3893,14 @@
         return;
       }
 
-      const playAlbum = target.closest('[data-play-album]');
-      if (playAlbum) {
-        event.stopPropagation();
-        const album = await API.album(playAlbum.dataset.playAlbum).catch(() => null);
-        if (album?.songs?.length) Player.play(album.songs, 0, { label: album.name });
-        else toast('Could not load that album');
-        return;
-      }
-
       const playPlaylist = target.closest('[data-play-playlist]');
       if (playPlaylist) {
         event.stopPropagation();
-        const list = await API.playlist(playPlaylist.dataset.playPlaylist, 60).catch(() => null);
-        if (list?.songs?.length) Player.play(list.songs, 0, { label: list.name });
-        else toast('Could not load that playlist');
-        return;
-      }
-
-      const playArtist = target.closest('[data-play-artist]');
-      if (playArtist) {
-        event.stopPropagation();
-        startArtistRadio(playArtist.dataset.playArtist);
+        await withPending(playPlaylist, async () => {
+          const list = await API.playlist(playPlaylist.dataset.playPlaylist, 60).catch(() => null);
+          if (list?.songs?.length) Player.play(list.songs, 0, { label: list.name });
+          else toast('Could not load that playlist');
+        });
         return;
       }
 
@@ -3815,7 +3926,10 @@
           : [...selected, language]);
         Feed.invalidate();
         Mixes.invalidate();
-        route();
+        // On Settings the chips are patched in place so the page does not jump.
+        // Anywhere else the language is part of the page content, so re-render.
+        if (currentRoute().path === 'settings') syncSettingsUI();
+        else route();
         return;
       }
 
@@ -3888,7 +4002,7 @@
       if (setEq) {
         const applied = Viz.setPreset(setEq.dataset.setEq);
         syncTransport();
-        Views.settings();
+        syncSettingsUI();
         toast(applied ? `${EQ_PRESETS[Store.prefs.equalizer].name} equalizer on` : 'Equalizer is not supported by this browser');
         return;
       }
@@ -3896,7 +4010,7 @@
       const setQuality = target.closest('[data-set-quality]');
       if (setQuality) {
         applyQuality(setQuality.dataset.setQuality);
-        Views.settings();
+        syncSettingsUI();
         return;
       }
 
@@ -3904,7 +4018,7 @@
         const on = Store.prefs.crossfade > 0;
         Store.prefs.crossfade = on ? 0 : 6;
         Store.savePrefs();
-        Views.settings();
+        syncSettingsUI();
         toast(on ? 'Crossfade off' : 'Crossfade on, 6 seconds');
         return;
       }
@@ -3912,7 +4026,7 @@
       if (target.closest('#autoplayToggle')) {
         Store.prefs.autoplay = !Store.prefs.autoplay;
         Store.savePrefs();
-        Views.settings();
+        syncSettingsUI();
         toast(Store.prefs.autoplay ? 'Queue will keep extending' : 'Queue will stop at the end');
         return;
       }
@@ -3921,14 +4035,15 @@
         Store.prefs.visualizer = !Store.prefs.visualizer;
         Store.savePrefs();
         if (!Store.prefs.visualizer) Viz.stop();
-        Views.settings();
+        syncSettingsUI();
+        toast(Store.prefs.visualizer ? 'Visualizer on' : 'Visualizer off');
         return;
       }
 
       const sleepBtn = target.closest('[data-sleep]');
       if (sleepBtn) {
         Sleep.set(Number(sleepBtn.dataset.sleep));
-        Views.settings();
+        syncSettingsUI();
         return;
       }
 
@@ -3992,6 +4107,7 @@
           const next = presets[(current + 1) % presets.length];
           const applied = Viz.setPreset(next);
           syncTransport();
+          syncSettingsUI();
           toast(applied ? `${EQ_PRESETS[next].name} equalizer` : 'Equalizer is not supported by this browser');
           break;
         }
@@ -4057,6 +4173,7 @@
     $('#quality').addEventListener('click', () => {
       const order = ['320kbps', '160kbps', '96kbps'];
       applyQuality(order[(order.indexOf(Store.prefs.quality) + 1) % order.length]);
+      syncSettingsUI();
     });
 
     // Crossfade length slider lives inside a re-rendered view, so it is bound
@@ -4184,17 +4301,28 @@
     /* --- history nav -------------------------------------------------- */
     $('#backBtn').addEventListener('click', () => history.back());
     $('#fwdBtn').addEventListener('click', () => history.forward());
-    $('#mobileNavToggle').addEventListener('click', () => {
-      const menu = $('#mobileMenu');
-      const opening = menu.hidden;
-      menu.hidden = !opening;
-      $('#mobileNavToggle').setAttribute('aria-expanded', String(opening));
-    });
 
     /* --- sticky topbar ------------------------------------------------ */
     view.addEventListener('scroll', () => {
       $('#topbar').classList.toggle('is-stuck', view.scrollTop > 16);
     }, { passive: true });
+
+    /* --- activate focused cards and rows by keyboard -------------------
+       Cards and track rows are content containers, not native controls, so
+       without this they were reachable by tab but impossible to open or play
+       without a mouse. */
+    document.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      // A real control inside the card owns its own keyboard behaviour.
+      if (target.closest('button, a[href], input, select, textarea')) return;
+      const activatable = target.closest('[data-goto][tabindex], [data-open-song][tabindex], .track[data-list][tabindex], [data-quick]');
+      if (!activatable) return;
+      event.preventDefault();
+      activatable.click();
+    });
 
     /* --- keyboard shortcuts ------------------------------------------- */
     document.addEventListener('keydown', (event) => {
@@ -4206,8 +4334,9 @@
       const el = event.target;
       if (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable) return;
 
-      // Space and Enter belong to whatever control has focus.
-      const focusedControl = el.closest?.('button, a[href], [role="switch"], [role="slider"]');
+      // Space and Enter belong to whatever control has focus, including the
+      // cards and rows that are activated by the handler above.
+      const focusedControl = el.closest?.('button, a[href], [role="switch"], [role="slider"], [tabindex="0"]');
       if (focusedControl && (event.key === ' ' || event.key === 'Enter')) return;
 
       // Normalise single characters so Shift and Caps Lock cannot break the
