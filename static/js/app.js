@@ -137,6 +137,74 @@
     return hash % 360;
   }
 
+  /** The playing track owns the app palette. Route art may still use a scoped
+   *  hue, but it must not replace the ambient colour or button accent. */
+  const trackPalette = new Map();
+
+  function rgbHue(r, g, b) {
+    const max = Math.max(r, g, b) / 255;
+    const min = Math.min(r, g, b) / 255;
+    const delta = max - min;
+    if (delta < 0.08 || max < 0.12 || max > 0.94) return null;
+    let hue;
+    if (max === r / 255) hue = ((g - b) / 255) / delta;
+    else if (max === g / 255) hue = 2 + ((b - r) / 255) / delta;
+    else hue = 4 + ((r - g) / 255) / delta;
+    return ((hue * 60) + 360) % 360;
+  }
+
+  function setTrackHue(hue) {
+    const root = document.documentElement;
+    root.style.setProperty('--track-hue', String(Math.round(hue)));
+  }
+
+  function artworkHue(url, fallback) {
+    if (!url || url === ART_PLACEHOLDER) return Promise.resolve(fallback);
+    return new Promise((resolve) => {
+      const image = new Image();
+      image.crossOrigin = 'anonymous';
+      image.decoding = 'async';
+      image.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = canvas.height = 32;
+          const ctx = canvas.getContext('2d', { willReadFrequently: true });
+          ctx.drawImage(image, 0, 0, 32, 32);
+          const pixels = ctx.getImageData(0, 0, 32, 32).data;
+          let x = 0;
+          let y = 0;
+          let weight = 0;
+          for (let i = 0; i < pixels.length; i += 16) {
+            const hue = rgbHue(pixels[i], pixels[i + 1], pixels[i + 2]);
+            if (hue === null || pixels[i + 3] < 180) continue;
+            const spread = Math.max(pixels[i], pixels[i + 1], pixels[i + 2]) - Math.min(pixels[i], pixels[i + 1], pixels[i + 2]);
+            const w = Math.max(1, spread);
+            x += Math.cos((hue * Math.PI) / 180) * w;
+            y += Math.sin((hue * Math.PI) / 180) * w;
+            weight += w;
+          }
+          resolve(weight ? ((Math.atan2(y, x) * 180 / Math.PI) + 360) % 360 : fallback);
+        } catch { resolve(fallback); }
+      };
+      image.onerror = () => resolve(fallback);
+      image.src = url;
+    });
+  }
+
+  function applyTrackPalette(song) {
+    const fallback = hueOf(song?.id);
+    setTrackHue(fallback);
+    if (!song?.id) return;
+    let promise = trackPalette.get(song.id);
+    if (!promise) {
+      promise = artworkHue(art(song, 500), fallback);
+      trackPalette.set(song.id, promise);
+    }
+    promise.then((hue) => {
+      if (Player.current?.id === song.id) setTrackHue(hue);
+    });
+  }
+
   const QUALITY_ORDER = ['320kbps', '160kbps', '96kbps', '48kbps', '12kbps'];
 
   /** Resolve the stream to use, and report which rung it actually is.
@@ -234,6 +302,7 @@
         // Adjustable from 1 to 12 seconds, or off, in Settings.
         crossfade: 6,      // seconds, 0 disables the second deck entirely
         visualizer: true,
+        equalizer: 'flat',
         sleepTimer: 0,     // minutes, 0 is off. Never persisted as active.
       },
       read(KEYS.prefs, {}),
@@ -372,7 +441,9 @@
       const res = await fetch(path, { headers: { Accept: 'application/json' } });
       const body = await res.json().catch(() => ({}));
       if (!res.ok || body.success === false) {
-        throw new Error(body.message || `Request failed (${res.status})`);
+        const error = new Error(body.message || `Request failed (${res.status})`);
+        error.status = res.status;
+        throw error;
       }
       return body.data;
     },
@@ -385,7 +456,9 @@
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok || body.success === false) {
-        throw new Error(body.message || `Request failed (${res.status})`);
+        const error = new Error(body.message || `Request failed (${res.status})`);
+        error.status = res.status;
+        throw error;
       }
       return body.data;
     },
@@ -1524,6 +1597,12 @@
       btn.setAttribute('aria-pressed', String(!!Store.prefs.shuffle));
     });
     $$('.js-repeat').forEach((btn) => { btn.dataset.mode = Store.prefs.repeat; });
+    $$('.js-eq').forEach((btn) => {
+      const active = Store.prefs.equalizer !== 'flat';
+      btn.classList.toggle('is-on', active);
+      btn.setAttribute('aria-pressed', String(active));
+      btn.title = `Equalizer: ${EQ_PRESETS[Store.prefs.equalizer]?.name || 'Flat'}`;
+    });
     const liked = Player.current ? Store.isLiked(Player.current.id) : false;
     $$('.js-like').forEach((btn) => btn.setAttribute('aria-pressed', String(liked)));
   }
@@ -1587,7 +1666,7 @@
     $('#npTitle').textContent = song.name || '';
     $('#npArtist').textContent = artistLine(song);
 
-    document.documentElement.style.setProperty('--hue', String(hueOf(song.id)));
+    applyTrackPalette(song);
     document.title = `${song.name} · ${artistLine(song)} | MusicArea`;
     showServedQuality(song, Player.servedQuality);
     if (!$('#np').hidden) renderNpPanel();
@@ -1692,6 +1771,41 @@
 
   let npTab = 'queue';
 
+  /** Lyrics results are short lived, including unavailable states. This avoids
+   *  refetching on each tab switch while allowing provider updates to appear. */
+  const Lyrics = {
+    cache: new Map(),
+    ttl: 10 * 60 * 1000,
+    missingTtl: 3 * 60 * 1000,
+
+    clear(songId) { this.cache.delete(songId); },
+
+    async get(song) {
+      const cached = this.cache.get(song.id);
+      if (cached && Date.now() - cached.at < cached.ttl) return cached;
+      if (song.hasLyrics === false) {
+        const entry = { kind: 'unavailable', at: Date.now(), ttl: this.missingTtl };
+        this.cache.set(song.id, entry);
+        return entry;
+      }
+      try {
+        const data = await API.lyrics(song.id);
+        const entry = { kind: 'ready', data, at: Date.now(), ttl: this.ttl };
+        this.cache.set(song.id, entry);
+        return entry;
+      } catch (error) {
+        const unavailable = error?.status === 404;
+        const entry = {
+          kind: unavailable ? 'unavailable' : 'temporary',
+          at: Date.now(),
+          ttl: unavailable ? this.missingTtl : 0,
+        };
+        this.cache.set(song.id, entry);
+        return entry;
+      }
+    },
+  };
+
   function openNp() {
     $('#np').hidden = false;
     document.body.style.overflow = 'hidden';
@@ -1742,24 +1856,33 @@
       return;
     }
     panel.innerHTML = '<div class="spinner-row"><span class="spinner"></span>Looking for lyrics</div>';
-    try {
-      const data = await API.lyrics(song.id);
-      if (Player.current?.id !== song.id) return;
+    const result = await Lyrics.get(song);
+    if (Player.current?.id !== song.id) return;
+    if (result.kind === 'ready') {
+      const data = result.data;
       const lyrics = esc(String(data.lyrics || '')
         .replace(/<br\s*\/?>/gi, '\n')
         .replace(/<[^>]+>/g, ''));
       panel.innerHTML = `
         <div class="lyrics">${lyrics}</div>
         ${data.copyright ? `<p class="lyrics__copy">${esc(data.copyright)}</p>` : ''}`;
-    } catch {
-      if (Player.current?.id !== song.id) return;
-      panel.innerHTML = '<p class="panel__note">No lyrics available for this track.</p>';
+      return;
     }
+    panel.innerHTML = result.kind === 'unavailable'
+      ? '<p class="panel__note">Lyrics are not available for this track yet.</p>'
+      : `<div class="lyrics-empty"><p class="panel__note">Lyrics could not be reached right now.</p><button class="btn btn--outline" data-lyrics-retry="${esc(song.id)}">Try again</button></div>`;
   }
 
   /* ====================================================================== */
-  /* Web Audio visualizer                                                   */
+  /* Web Audio visualizer and equalizer                                     */
   /* ====================================================================== */
+
+  const EQ_PRESETS = {
+    flat: { name: 'Flat', note: 'No frequency boost or cut', gains: [0, 0, 0] },
+    bass: { name: 'Bass boost', note: 'More weight in the low end', gains: [8, 1.5, 0] },
+    vocal: { name: 'Vocal', note: 'Clearer voices and dialogue', gains: [-1, 4, 1] },
+    treble: { name: 'Treble boost', note: 'More sparkle and detail', gains: [0, 1, 7] },
+  };
 
   const Viz = {
     ctx: null,
@@ -1768,6 +1891,7 @@
     raf: 0,
     failed: false,
     sources: new WeakMap(),
+    filters: new WeakMap(),
 
     ensure() {
       if (this.ctx || this.failed) return;
@@ -1790,15 +1914,49 @@
       }
     },
 
-    /** Route a deck into the analyser. A media element can only ever have one
-     *  source node, so the WeakMap guards against a second attempt. */
+    /** Route each deck through a real three band EQ, then the analyser. A media
+     *  element can only have one source node, so the WeakMap guards against a
+     *  second attempt. */
     attach(deck) {
       if (!this.ctx || !this.analyser || this.sources.has(deck)) return;
       try {
         const source = this.ctx.createMediaElementSource(deck);
-        source.connect(this.analyser);
+        const low = this.ctx.createBiquadFilter();
+        low.type = 'lowshelf';
+        low.frequency.value = 120;
+        const mid = this.ctx.createBiquadFilter();
+        mid.type = 'peaking';
+        mid.frequency.value = 1100;
+        mid.Q.value = 0.9;
+        const high = this.ctx.createBiquadFilter();
+        high.type = 'highshelf';
+        high.frequency.value = 5200;
+        source.connect(low);
+        low.connect(mid);
+        mid.connect(high);
+        high.connect(this.analyser);
         this.sources.set(deck, source);
+        this.filters.set(deck, [low, mid, high]);
+        this.applyPreset();
       } catch { /* already routed, or unsupported */ }
+    },
+
+    applyPreset() {
+      const gains = EQ_PRESETS[Store.prefs.equalizer]?.gains || EQ_PRESETS.flat.gains;
+      DECKS.forEach((deck) => {
+        const filters = this.filters.get(deck);
+        if (!filters) return;
+        filters.forEach((filter, index) => filter.gain.setTargetAtTime(gains[index], this.ctx.currentTime, 0.02));
+      });
+    },
+
+    setPreset(preset) {
+      if (!EQ_PRESETS[preset]) preset = 'flat';
+      Store.prefs.equalizer = preset;
+      Store.savePrefs();
+      this.ensure();
+      this.applyPreset();
+      return !this.failed;
     },
 
     start() {
@@ -1988,8 +2146,6 @@
       }
       const songRow = (data.rows || []).find((r) => r.kind === 'songs');
       const covers = (songRow?.items || []).slice(0, 3);
-      document.documentElement.style.setProperty('--hue',
-        String(catalogHue(id)));
       setView(`
         <section class="hero hero--mood" style="--hue:${catalogHue(id)}">
           <div class="hero__body">
@@ -2114,7 +2270,6 @@
       }
       const songs = album.songs || [];
       remember(songs);
-      document.documentElement.style.setProperty('--hue', String(hueOf(album.id)));
       const listKey = registerList(songs, album.name);
       setTitle([album.name, 'Album']);
       const total = songs.reduce((sum, s) => sum + (s.duration || 0), 0);
@@ -2155,7 +2310,6 @@
       }
       const songs = playlist.songs || [];
       remember(songs);
-      document.documentElement.style.setProperty('--hue', String(hueOf(playlist.id)));
       const listKey = registerList(songs, playlist.name);
       setTitle([playlist.name, 'Playlist']);
 
@@ -2191,7 +2345,6 @@
       }
       const songs = artist.topSongs || [];
       remember(songs);
-      document.documentElement.style.setProperty('--hue', String(hueOf(artist.id)));
       const listKey = registerList(songs, artist.name);
       setTitle([artist.name, 'Artist']);
       const bio = Array.isArray(artist.bio) ? artist.bio.map((b) => b.text).filter(Boolean).join('\n\n') : '';
@@ -2242,7 +2395,6 @@
       remember(mix.items);
       setTitle([mix.name, 'Mix']);
       const listKey = registerList(mix.items, mix.name);
-      document.documentElement.style.setProperty('--hue', String(hueOf(mix.id)));
       const total = mix.items.reduce((sum, s) => sum + (s.duration || 0), 0);
 
       setView(`
@@ -2283,7 +2435,6 @@
       }
       remember(data.items);
       const listKey = registerList(data.items, data.mood.name);
-      document.documentElement.style.setProperty('--hue', String(data.mood.hue));
       setTitle([data.mood.name, 'Mood']);
       const personalised = data.meta?.personalised;
       const blurb = personalised
@@ -2488,6 +2639,21 @@
             </div>
             <p class="panel__note" style="margin-top:14px">If a track is not available at your chosen rate, MusicArea steps down one rung for that track only rather than failing, and the badge next to the volume slider turns amber to tell you.</p>
             <p class="panel__note" style="margin-top:10px"><strong>On lossless:</strong> the catalogue this app streams from publishes five rungs, 12 to 320 kbps, all AAC. There is no FLAC or ALAC tier, so 320 kbps is a real ceiling and not a setting. Anything labelled "lossless" here would be a lie.</p>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section__head"><div><h2>Equalizer</h2><p>Shape the sound with a real three band audio filter</p></div></div>
+          <div class="panel">
+            <div class="opt-list">
+              ${Object.entries(EQ_PRESETS).map(([id, preset]) => `
+                <button class="opt ${p.equalizer === id ? 'is-active' : ''}" data-set-eq="${id}">
+                  <span class="opt__radio"></span>
+                  <span class="opt__body"><strong>${esc(preset.name)}</strong><small>${esc(preset.note)}</small></span>
+                  <span class="opt__tag">${id === 'flat' ? 'Off' : 'EQ'}</span>
+                </button>`).join('')}
+            </div>
+            <p class="panel__note" style="margin-top:14px">The equalizer applies to both player decks, so it stays active while tracks crossfade. ${Viz.failed ? 'This browser could not start Web Audio, so sound stays unmodified.' : 'Changes take effect immediately.'}</p>
           </div>
         </section>
 
@@ -3470,6 +3636,25 @@
 
       /* --- settings controls ----------------------------------------- */
 
+      const lyricsRetry = target.closest('[data-lyrics-retry]');
+      if (lyricsRetry) {
+        const song = Player.current;
+        if (song && song.id === lyricsRetry.dataset.lyricsRetry) {
+          Lyrics.clear(song.id);
+          renderNpPanel();
+        }
+        return;
+      }
+
+      const setEq = target.closest('[data-set-eq]');
+      if (setEq) {
+        const applied = Viz.setPreset(setEq.dataset.setEq);
+        syncTransport();
+        Views.settings();
+        toast(applied ? `${EQ_PRESETS[Store.prefs.equalizer].name} equalizer on` : 'Equalizer is not supported by this browser');
+        return;
+      }
+
       const setQuality = target.closest('[data-set-quality]');
       if (setQuality) {
         applyQuality(setQuality.dataset.setQuality);
@@ -3559,6 +3744,15 @@
           const drawer = $('#queueDrawer');
           drawer.hidden = !drawer.hidden;
           if (!drawer.hidden) renderQueue();
+          break;
+        }
+        case 'eq': {
+          const presets = Object.keys(EQ_PRESETS);
+          const current = presets.indexOf(Store.prefs.equalizer);
+          const next = presets[(current + 1) % presets.length];
+          const applied = Viz.setPreset(next);
+          syncTransport();
+          toast(applied ? `${EQ_PRESETS[next].name} equalizer` : 'Equalizer is not supported by this browser');
           break;
         }
         case 'lyrics':
