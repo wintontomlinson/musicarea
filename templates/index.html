@@ -163,7 +163,7 @@
     <!-- Tapping this whole region opens the full screen player on phones. -->
     <div class="player__now" data-pa="expand">
       <span class="player__art" id="playerArt">
-        <img id="playerImg" src="{{ url_for('static', filename='img/placeholder.svg') }}" alt="" width="56" height="56">
+        <img id="playerImg" src="{{ url_for('static', filename='img/cover-fallback.svg') }}" alt="" width="56" height="56">
         <span class="player__art-expand">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 14h2v4h4v2H4zm10-10h6v6h-2V6h-4z"/></svg>
         </span>
@@ -220,11 +220,11 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 14h2v4h4v2H4zm10-10h6v6h-2V6h-4V4z"/></svg>
       </button>
       <div class="volume">
-        <button class="icon-btn" id="muteBtn" title="Mute" aria-label="Mute">
+        <button class="icon-btn js-mute" id="muteBtn" title="Mute" aria-label="Mute" aria-pressed="false">
           <svg class="vol-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h3l4-4v14l-4-4H4zm11.5-1.3a5 5 0 0 1 0 8.6v-2A3 3 0 0 0 15.5 10zM17 4.4a8.5 8.5 0 0 1 0 15.2v-2a6.5 6.5 0 0 0 0-11.2z"/></svg>
           <svg class="vol-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h3l4-4v14l-4-4H4zm11 1.4 1.4-1.4L18.8 11l1.8-1.9 1.4 1.4-1.8 1.9 1.8 1.8-1.4 1.4-1.8-1.8-1.8 1.8-1.4-1.4 1.8-1.8z"/></svg>
         </button>
-        <input id="volume" class="volume__slider" type="range" min="0" max="100" value="85" aria-label="Volume">
+        <input id="volume" class="volume__slider js-volume" type="range" min="0" max="100" value="85" aria-label="Volume">
       </div>
       <button class="icon-btn" id="quality" title="Streaming quality" aria-label="Streaming quality">
         <span class="quality-tag" id="qualityTag">320</span>
@@ -249,7 +249,7 @@
 
   <div class="np__grid">
     <div class="np__left">
-      <div class="np__art"><img id="npImg" src="{{ url_for('static', filename='img/placeholder.svg') }}" alt=""></div>
+      <div class="np__art"><img id="npImg" src="{{ url_for('static', filename='img/cover-fallback.svg') }}" alt=""></div>
 
       <div class="np__info">
         <h1 id="npTitle">Nothing playing</h1>
@@ -277,6 +277,9 @@
           <button class="icon-btn js-shuffle" data-pa="shuffle" title="Shuffle" aria-label="Shuffle" aria-pressed="false">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 3h5v5h-2V6.4l-4.3 4.3-1.4-1.4L17.6 5H16zm-9.3 2.3 4 4-1.4 1.4-4-4zM19 15.6V14h2v5h-5v-2h1.6l-4.3-4.3 1.4-1.4zM8.7 13.3l1.4 1.4-4.4 4.4-1.4-1.4z"/></svg>
           </button>
+          <button class="icon-btn icon-btn--lg" data-pa="seek-back" title="Back 10 seconds" aria-label="Back 10 seconds">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5a7 7 0 1 1-6.2 3.7L4 7.8V13h5.2l-2-2A5 5 0 1 0 12 7zM11 10h2v5h-2zm3 0h2v5h-2z"/></svg>
+          </button>
           <button class="icon-btn icon-btn--lg" data-pa="prev" title="Previous" aria-label="Previous">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 6h2v12H7zm3.5 6L19 6v12z"/></svg>
           </button>
@@ -287,6 +290,9 @@
           </button>
           <button class="icon-btn icon-btn--lg" data-pa="next" title="Next" aria-label="Next">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6h2v12h-2zM5 6l8.5 6L5 18z"/></svg>
+          </button>
+          <button class="icon-btn icon-btn--lg" data-pa="seek-forward" title="Forward 10 seconds" aria-label="Forward 10 seconds">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5a7 7 0 1 0 6.2 3.7L20 7.8V13h-5.2l2 2a7 7 0 1 1 4.2-7.3L20 8.5A5 5 0 1 0 12 7zM9 10h2v5H9zm3 0h2v5h-2z"/></svg>
           </button>
           <button class="icon-btn js-repeat" data-pa="repeat" title="Repeat" aria-label="Repeat" data-mode="off">
             <svg class="repeat-all" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h9v2.5l4-3.5-4-3.5V5H5v7h2zm10 10H8v-2.5l-4 3.5 4 3.5V19h11v-7h-2z"/></svg>
@@ -308,9 +314,11 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6m-5.7-2.5 1.4 1.4a6 6 0 0 0 0 8.2l-1.4 1.4a8 8 0 0 1 0-11M17.7 6.5a8 8 0 0 1 0 11l-1.4-1.4a6 6 0 0 0 0-8.2z"/></svg>
           </button>
           <div class="volume np__volume">
-            <button class="icon-btn" data-pa="mute" aria-label="Mute">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h3l4-4v14l-4-4H4zm11.5-1.3a5 5 0 0 1 0 8.6v-2A3 3 0 0 0 15.5 10z"/></svg>
+            <button class="icon-btn js-mute" data-pa="mute" aria-label="Mute" aria-pressed="false">
+              <svg class="vol-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h3l4-4v14l-4-4H4zm11.5-1.3a5 5 0 0 1 0 8.6v-2A3 3 0 0 0 15.5 10z"/></svg>
+              <svg class="vol-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h3l4-4v14l-4-4H4zm11 1.4 1.4-1.4L18.8 11l1.8-1.9 1.4 1.4-1.8 1.9 1.8 1.8-1.4 1.4-1.8-1.8-1.8 1.8-1.4-1.4 1.8-1.8z"/></svg>
             </button>
+            <input class="volume__slider js-volume" data-volume-control type="range" min="0" max="100" value="85" aria-label="Volume">
           </div>
         </div>
       </div>
