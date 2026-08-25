@@ -3,6 +3,7 @@ import { Suspense } from 'react';
 import { api } from '@/lib/api';
 import type { Mood } from '@/lib/types';
 import { SearchExperience } from '@/components/search/SearchExperience';
+import { preferredLanguages } from '@/lib/languages';
 
 export const metadata: Metadata = {
   title: 'Search',
@@ -20,7 +21,7 @@ export default async function SearchPage({
   // Moods power the before-typing state; fetched on the server and cached.
   let moods: Mood[] = [];
   try {
-    const browse = await api.browse(['hindi']);
+    const browse = await api.browse(preferredLanguages());
     moods = browse.moods ?? [];
   } catch {
     moods = [];
