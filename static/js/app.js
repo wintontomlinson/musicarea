@@ -778,6 +778,7 @@
   const ICON_SEEK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h2v14H4zm4 7 11-7v14z"/></svg>';
   const ICON_REMOVE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l1 2h4v2H4V5h4zm-3 6h12l-1 12H7zm3 2v8h1.5v-8zm4 0v8H15v-8z"/></svg>';
   const ICON_CLOCK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9h-2a7 7 0 1 1-7-7v4l5-4-5-4zm-.9 5h1.6v4.6l3 1.8-.8 1.3-3.8-2.3z"/></svg>';
+  const ICON_REFRESH = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6V3L8 7l4 4V8a4 4 0 1 1-4 4H6a6 6 0 1 0 6-6"/></svg>';
   const ICON_EDIT = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17.2 16.4 4.8l2.8 2.8L6.8 20H4zM17.8 3.4 19.2 2 22 4.8l-1.4 1.4z"/></svg>';
   const ICON_VOLUME = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h3l4-4v14l-4-4H4zm11.5-1.3a5 5 0 0 1 0 8.6v-2A3 3 0 0 0 15.5 10z"/></svg>';
 
@@ -1977,9 +1978,178 @@
   }
 
   function closeNp() {
-    $('#np').hidden = true;
+    const np = $('#np');
+    np.hidden = true;
+    np.classList.remove('is-dragging', 'is-settling');
+    np.style.transform = '';
+    np.style.opacity = '';
     document.body.style.overflow = '';
     Viz.stop();
+  }
+
+  /* Swipe-down to dismiss the full-screen player on touch devices, the way a
+     native now-playing sheet behaves. The sheet follows the finger; past a
+     distance or velocity threshold it slides away and closes, otherwise it
+     snaps back. The drag only begins when the scrollable panel is at its top,
+     so it never steals a normal content scroll. */
+  function setupNpSwipe() {
+    const np = $('#np');
+    if (!np) return;
+    const scroller = () => np.querySelector('.np__grid');
+    let startY = 0, startX = 0, dy = 0, dragging = false, decided = false, startT = 0;
+
+    const clearTransition = () => np.classList.remove('is-settling');
+
+    np.addEventListener('touchstart', (e) => {
+      if (np.hidden || e.touches.length !== 1) return;
+      // Do not hijack a drag that begins on the seek slider or a control.
+      if (e.target.closest('.js-scrub, input[type="range"]')) return;
+      const grid = scroller();
+      // Only allow the dismiss drag from the top of the scroll area.
+      if (grid && grid.scrollTop > 0) return;
+      const t = e.touches[0];
+      startY = t.clientY; startX = t.clientX; dy = 0;
+      dragging = true; decided = false; startT = Date.now();
+      np.classList.remove('is-settling');
+    }, { passive: true });
+
+    np.addEventListener('touchmove', (e) => {
+      if (!dragging) return;
+      const t = e.touches[0];
+      const rawY = t.clientY - startY;
+      const rawX = t.clientX - startX;
+      if (!decided) {
+        // Ignore horizontal swipes and upward drags; only a downward drag arms.
+        if (Math.abs(rawX) > Math.abs(rawY)) { dragging = false; return; }
+        if (rawY < 6) { if (rawY < -6) dragging = false; return; }
+        decided = true;
+        np.classList.add('is-dragging');
+      }
+      dy = Math.max(0, rawY);
+      // A downward dismiss drag must win over scrolling the panel.
+      if (e.cancelable) e.preventDefault();
+      const fade = Math.max(0.35, 1 - dy / 900);
+      np.style.transform = `translateY(${dy}px)`;
+      np.style.opacity = String(fade);
+    }, { passive: false });
+
+    const end = () => {
+      if (!dragging) return;
+      dragging = false;
+      np.classList.remove('is-dragging');
+      if (!decided) return;
+      const elapsed = Date.now() - startT || 1;
+      const velocity = dy / elapsed; // px per ms
+      np.classList.add('is-settling');
+      // A flick can dismiss with less travel, but never a trivial one: a real
+      // downward intent moves the sheet at least a little.
+      if (dy > 120 || (velocity > 0.6 && dy > 60)) {
+        // Slide the rest of the way out, then close once the transition ends.
+        np.style.transform = `translateY(100%)`;
+        np.style.opacity = '0';
+        let done = false;
+        const finish = () => { if (done) return; done = true; np.removeEventListener('transitionend', finish); closeNp(); };
+        np.addEventListener('transitionend', finish, { once: true });
+        window.setTimeout(finish, 320);
+      } else {
+        // Snap back into place.
+        np.style.transform = '';
+        np.style.opacity = '';
+        np.addEventListener('transitionend', clearTransition, { once: true });
+      }
+    };
+    np.addEventListener('touchend', end, { passive: true });
+    np.addEventListener('touchcancel', end, { passive: true });
+  }
+
+  /* Pull to refresh on Home and Search. When the scroll view is already at the
+     top, a downward drag reveals a spinner; past a threshold it re-runs the
+     current route with fresh data. Only these two routes refresh, since the
+     rest are either static or their own detail fetch. */
+  function setupPullToRefresh() {
+    const scroller = $('#view');
+    if (!scroller) return;
+
+    const indicator = document.createElement('div');
+    indicator.className = 'ptr';
+    indicator.setAttribute('aria-hidden', 'true');
+    indicator.innerHTML = ICON_REFRESH;
+    document.body.appendChild(indicator);
+
+    const THRESHOLD = 72;   // px of pull needed to trigger
+    const MAX = 96;         // px the indicator travels at most
+    let startY = 0, dy = 0, dragging = false, decided = false, refreshing = false;
+
+    const canPull = () => {
+      const path = currentRoute().path;
+      return (path === 'home' || path === 'search') && scroller.scrollTop <= 0;
+    };
+
+    const place = (pull, settling) => {
+      indicator.classList.toggle('is-settling', !!settling);
+      if (pull <= 0) {
+        indicator.style.transform = 'translate(-50%, -120%)';
+        indicator.style.opacity = '0';
+        return;
+      }
+      const eased = Math.min(MAX, pull);
+      const y = 8 + eased;              // slide down from the top edge
+      const rot = (pull / THRESHOLD) * 300;
+      const op = Math.min(1, pull / (THRESHOLD * 0.6));
+      indicator.style.transform = `translate(-50%, ${y}px) rotate(${rot}deg)`;
+      indicator.style.opacity = String(op);
+    };
+
+    const reset = (settling) => {
+      place(0, settling);
+      indicator.classList.remove('is-refreshing');
+    };
+
+    async function doRefresh() {
+      refreshing = true;
+      indicator.classList.add('is-settling', 'is-refreshing');
+      // Park the spinner in a visible resting spot while data reloads.
+      indicator.style.transform = `translate(-50%, ${8 + THRESHOLD}px) rotate(0deg)`;
+      indicator.style.opacity = '1';
+      try {
+        // Force fresh data rather than the short-lived feed cache.
+        if (currentRoute().path === 'home') Feed.invalidate();
+        await route();
+      } catch { /* route() has its own error surface */ }
+      // A brief hold so the spin is perceptible even on a fast reload.
+      window.setTimeout(() => { refreshing = false; reset(true); }, 300);
+    }
+
+    scroller.addEventListener('touchstart', (e) => {
+      if (refreshing || e.touches.length !== 1 || !canPull()) return;
+      startY = e.touches[0].clientY; dy = 0; dragging = true; decided = false;
+      indicator.classList.remove('is-settling');
+    }, { passive: true });
+
+    scroller.addEventListener('touchmove', (e) => {
+      if (!dragging || refreshing) return;
+      const raw = e.touches[0].clientY - startY;
+      if (!decided) {
+        if (raw <= 4) { if (raw < -4 || scroller.scrollTop > 0) dragging = false; return; }
+        // Re-check: a drag that began at the top only counts while still at top.
+        if (scroller.scrollTop > 0) { dragging = false; return; }
+        decided = true;
+      }
+      // Rubber-band resistance so the pull feels weighted.
+      dy = Math.max(0, raw) * 0.5;
+      if (e.cancelable) e.preventDefault();
+      place(dy, false);
+    }, { passive: false });
+
+    const end = () => {
+      if (!dragging) return;
+      dragging = false;
+      if (!decided) return;
+      if (dy >= THRESHOLD) doRefresh();
+      else reset(true);
+    };
+    scroller.addEventListener('touchend', end, { passive: true });
+    scroller.addEventListener('touchcancel', end, { passive: true });
   }
 
   function renderNpViz() {
@@ -2407,7 +2577,7 @@
                 </button>`).join('')}
             </div>
           </section>` : ''}
-          <div id="moodHost">${moodStrip(moods)}</div>`);
+          <div id="moodHost">${moodStrip(moods, { grid: true, heading: 'Browse by mood' })}</div>`);
         renderEmptySearch(MOODS_FALLBACK);
         if (!isMobile()) $('#searchInput').focus();
         const moodData = await API.moods().catch(() => null);
@@ -3111,14 +3281,18 @@
   /** Mood tiles: real artwork under a tint in the mood's own hue, so they read
    *  as moods rather than as albums. Falls back to the plain tint when the
    *  catalogue gave us no image. */
-  function moodStrip(moods) {
+  function moodStrip(moods, { grid = false, heading = 'Moods' } = {}) {
     const list = moods?.length ? moods : MOODS_FALLBACK;
+    // On Search the tiles are the primary content, so they wrap into a full
+    // grid that shows every mood at once. On Home and Explore they stay a
+    // horizontal shelf alongside the other carousels.
+    const container = grid ? 'grid grid--moods' : 'shelf shelf--moods';
     return `
       <section class="section" data-section="moods">
         <div class="section__head">
-          <div><h2>Moods</h2><p>Ready made sets, reordered around what you play</p></div>
+          <div><h2>${esc(heading)}</h2><p>Ready made sets, reordered around what you play</p></div>
         </div>
-        <div class="shelf shelf--moods">
+        <div class="${container}">
           ${list.map((mood) => {
             const cover = mood.image ? art(mood, 500) : '';
             // Catalogue covers remain available when a mood visual is absent,
@@ -4240,6 +4414,8 @@
     $('#clearQueue').addEventListener('click', () => Player.clearUpcoming());
     $('#npClose').addEventListener('click', () => closeNp());
     $('#npBackdrop').addEventListener('click', () => closeNp());
+    setupNpSwipe();
+    setupPullToRefresh();
     $$('.np__tab').forEach((tab) => tab.addEventListener('click', () => {
       npTab = tab.dataset.tab;
       syncNpTabs();

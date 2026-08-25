@@ -488,6 +488,36 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
 }
 .view:focus { outline: none; }
 .view > * { animation: view-in 340ms var(--ease) both; }
+
+/* ── Pull to refresh (touch) ────────────────────────────────────────────── */
+.ptr {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  z-index: 58;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  color: #fff;
+  background: rgba(20, 18, 28, .96);
+  border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow-md);
+  /* Parked just above the viewport; the drag pushes it down. */
+  transform: translate(-50%, -120%);
+  opacity: 0;
+  pointer-events: none;
+}
+.ptr svg { width: 19px; height: 19px; display: block; }
+/* While dragging, the position and rotation are driven inline from JS, so no
+   transition. The release settle and hide do animate. */
+.ptr.is-settling { transition: transform 260ms var(--ease), opacity 200ms var(--ease); }
+.ptr.is-refreshing svg { animation: spin 700ms linear infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .ptr.is-settling { transition: opacity 200ms var(--ease); }
+  .ptr.is-refreshing svg { animation: none; }
+}
 @keyframes view-in {
   from { opacity: 0; transform: translateY(14px); }
   to { opacity: 1; transform: none; }
@@ -567,6 +597,7 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
   cursor: pointer;
   padding: 6px 8px;
   border-radius: 8px;
+  white-space: nowrap;
   transition: color var(--fast), background var(--fast);
 }
 .text-btn:hover { color: var(--text); background: var(--surface); }
@@ -890,6 +921,9 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
   gap: 14px;
   margin-bottom: 14px;
 }
+/* Let the title column shrink so a long title truncates rather than forcing
+   the action buttons onto a second line. */
+.section__head > div:first-child { min-width: 0; }
 .section__head h2 {
   position: relative;
   margin: 0;
@@ -897,6 +931,9 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
   font-size: 21px;
   font-weight: 800;
   letter-spacing: -.6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 /* A short gradient tab keys each shelf to the brand and gives the feed a more
    designed, editorial rhythm. */
@@ -915,7 +952,7 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
   font-size: 12.5px;
   color: var(--text-faint);
 }
-.section__head-actions { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+.section__head-actions { margin-left: auto; flex: none; display: flex; flex-wrap: nowrap; gap: 6px; align-items: center; }
 
 .shelf {
   display: grid;
@@ -1043,6 +1080,13 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
 
 .shelf--moods { grid-auto-columns: 208px; }
 
+/* Search lays the moods out as a full wrapping grid rather than a one-row
+   carousel, so every mood is visible without horizontal scrolling. */
+.grid--moods {
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+
 .mood-tile {
   position: relative;
   display: block;
@@ -1126,6 +1170,8 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
 
 @media (max-width: 760px) {
   .shelf--moods { grid-auto-columns: 168px; }
+  /* Two moods per row on a phone, all visible by scrolling down. */
+  .grid--moods { grid-template-columns: 1fr 1fr; gap: 12px; }
   .mood-tile__name { font-size: 15px; left: 12px; bottom: 11px; right: 50px; }
   .mood-tile__play { opacity: 1; transform: none; width: 34px; height: 34px; }
 }
@@ -1798,6 +1844,15 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
   z-index: 80;
   overflow: hidden;
   animation: np-in 320ms var(--ease);
+  will-change: transform;
+}
+/* While a swipe-to-dismiss drag is in progress the sheet follows the finger,
+   so its entry animation must not fight the inline transform. */
+.np.is-dragging { animation: none; }
+/* Snap-back and the dismiss slide are animated; the live drag is not. */
+.np.is-settling { transition: transform 260ms var(--ease), opacity 260ms var(--ease); }
+@media (prefers-reduced-motion: reduce) {
+  .np.is-settling { transition: none; }
 }
 @keyframes np-in {
   from { opacity: 0; transform: translateY(3%) scale(.99); }
@@ -2794,7 +2849,11 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
   /* Bigger touch targets across the board. */
   .icon-btn { width: 40px; height: 40px; }
   .chip { height: 38px; padding: 0 16px; }
+  .section__head { gap: 8px; }
   .section__head h2 { font-size: 19px; }
+  /* Keep both shelf actions on the header's single line on a phone. */
+  .section__head-actions { gap: 2px; }
+  .section__head-actions .text-btn { padding: 6px 6px; font-size: 12px; }
   .detail__actions .btn { flex: 1 1 auto; }
 
   .player {
