@@ -127,7 +127,7 @@ export function SearchExperience({ moods, initialQuery }: { moods: Mood[]; initi
             onFocus={() => suggest && setShowSuggest(true)}
             placeholder="Songs, artists, albums, playlists"
             aria-label="Search"
-            className="w-full rounded-full border border-subtle bg-surface py-3 pl-12 pr-4 text-base outline-none transition-colors placeholder:text-text-muted focus:border-white/25"
+            className="w-full rounded-full border border-subtle bg-surface-raised/90 py-3.5 pl-12 pr-4 text-base outline-none shadow-lift transition-colors placeholder:text-text-muted focus:border-accent/60"
           />
         </form>
 
@@ -162,7 +162,7 @@ function SuggestDropdown({ data, onPick }: { data: SearchAllData; onPick: () => 
   if (!top && !songs.length && !artists.length) return null;
 
   return (
-    <div className="surface-card absolute z-40 mt-2 w-full overflow-hidden p-2 shadow-lift">
+    <div className="glass-panel absolute z-40 mt-2 w-full overflow-hidden rounded-xl2 p-2 shadow-lift">
       {top && (
         <Link
           href={resultHref(top)}
@@ -230,7 +230,7 @@ function SearchResults({
             aria-selected={tab === t}
             onClick={() => setTab(t)}
             className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold capitalize transition-colors duration-150 ${
-              tab === t ? 'bg-white text-black' : 'border border-subtle bg-surface text-text-secondary hover:text-white'
+              tab === t ? 'bg-brand text-white shadow-glow' : 'border border-subtle bg-white/5 text-text-secondary hover:bg-white/10 hover:text-white'
             }`}
           >
             {t}
@@ -291,7 +291,7 @@ function TopResultCard({ result }: { result: SearchResult }) {
   return (
     <Link
       href={resultHref(result)}
-      className="surface-card group block p-5 transition-colors hover:bg-surface-raised"
+      className="premium-panel group block p-5 transition-colors hover:bg-surface-raised"
     >
       <span
         className={`relative mb-4 block h-24 w-24 overflow-hidden shadow-lift ${

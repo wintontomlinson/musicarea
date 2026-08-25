@@ -27,7 +27,7 @@ export function Carousel({ row }: { row: Row }) {
         )}
       </div>
 
-      <div className="no-scrollbar -mx-4 flex snap-x gap-2 overflow-x-auto px-4 pb-1 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+      <div className="no-scrollbar -mx-4 flex snap-x gap-2 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
         {row.items.map((item) => (
           <div key={item.id} className="w-36 shrink-0 snap-start sm:w-40 lg:w-44">
             <MediaCard item={item} context={songContext} />

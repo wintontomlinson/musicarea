@@ -30,7 +30,7 @@ export function TrackList({
   if (!songs.length) return null;
 
   return (
-    <div className="surface-card flex flex-col overflow-hidden p-1">
+    <div className="surface-card flex flex-col overflow-hidden p-1 shadow-lift">
       {songs.map((song, i) => {
         const isCurrent = currentId === song.id;
         const artist = primaryArtist(song);

@@ -7,26 +7,19 @@ import { Icon, type IconName } from '@/components/ui/Icon';
 const ITEMS: Array<{ href: string; label: string; icon: IconName; match: (path: string) => boolean }> = [
   { href: '/', label: 'Home', icon: 'home', match: (path) => path === '/' },
   { href: '/search', label: 'Search', icon: 'search', match: (path) => path.startsWith('/search') },
-  { href: '/charts', label: 'Charts', icon: 'chart', match: (path) => path.startsWith('/charts') },
+  { href: '/explore', label: 'Explore', icon: 'compass', match: (path) => path.startsWith('/explore') },
   { href: '/library', label: 'Library', icon: 'library', match: (path) => path.startsWith('/library') },
 ];
 
 export function MobileNav() {
   const pathname = usePathname();
   return (
-    <nav aria-label="Primary" className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t border-subtle bg-bg pb-[env(safe-area-inset-bottom)] lg:hidden">
+    <nav aria-label="Primary" className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t border-subtle bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden">
       {ITEMS.map((item) => {
         const active = item.match(pathname);
         return (
-          <Link
-            key={item.href}
-            href={item.href}
-            aria-current={active ? 'page' : undefined}
-            className={`flex min-h-[56px] flex-col items-center justify-center gap-1 text-[10px] font-semibold ${
-              active ? 'text-white' : 'text-text-secondary'
-            }`}
-          >
-            <Icon name={item.icon} size={18} />
+          <Link key={item.href} href={item.href} aria-current={active ? 'page' : undefined} className={`flex min-h-[58px] flex-col items-center justify-center gap-1 text-[10px] font-bold transition-colors ${active ? 'text-accent' : 'text-text-secondary'}`}>
+            <span className={active ? 'grid h-6 w-9 place-items-center rounded-full bg-accent/15' : ''}><Icon name={item.icon} size={19} /></span>
             {item.label}
           </Link>
         );
