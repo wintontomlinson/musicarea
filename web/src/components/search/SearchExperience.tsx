@@ -106,7 +106,7 @@ export function SearchExperience({ moods, initialQuery }: { moods: Mood[]; initi
   }
 
   return (
-    <div className="flex flex-col gap-8 px-4 py-6 sm:px-6">
+    <div className="app-page">
       {/* Search field with suggestions */}
       <div ref={boxRef} className="relative mx-auto w-full max-w-2xl">
         <form
@@ -127,7 +127,7 @@ export function SearchExperience({ moods, initialQuery }: { moods: Mood[]; initi
             onFocus={() => suggest && setShowSuggest(true)}
             placeholder="Songs, artists, albums, playlists"
             aria-label="Search"
-            className="w-full rounded-full border border-subtle bg-surface-raised/80 py-3.5 pl-12 pr-4 text-base outline-none transition-colors duration-150 placeholder:text-text-muted focus:border-accent/60"
+            className="w-full rounded-full border border-subtle bg-surface py-3 pl-12 pr-4 text-base outline-none transition-colors placeholder:text-text-muted focus:border-white/25"
           />
         </form>
 
@@ -162,7 +162,7 @@ function SuggestDropdown({ data, onPick }: { data: SearchAllData; onPick: () => 
   if (!top && !songs.length && !artists.length) return null;
 
   return (
-    <div className="absolute z-40 mt-2 w-full overflow-hidden rounded-xl2 border border-subtle bg-surface-raised/95 p-2 shadow-lift backdrop-blur-glass">
+    <div className="surface-card absolute z-40 mt-2 w-full overflow-hidden p-2 shadow-lift">
       {top && (
         <Link
           href={resultHref(top)}
@@ -230,7 +230,7 @@ function SearchResults({
             aria-selected={tab === t}
             onClick={() => setTab(t)}
             className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold capitalize transition-colors duration-150 ${
-              tab === t ? 'bg-white text-black' : 'bg-white/5 text-text-secondary hover:text-white'
+              tab === t ? 'bg-white text-black' : 'border border-subtle bg-surface text-text-secondary hover:text-white'
             }`}
           >
             {t}
@@ -291,7 +291,7 @@ function TopResultCard({ result }: { result: SearchResult }) {
   return (
     <Link
       href={resultHref(result)}
-      className="group block rounded-xl2 border border-subtle bg-surface p-5 transition-colors duration-150 hover:bg-surface-raised"
+      className="surface-card group block p-5 transition-colors hover:bg-surface-raised"
     >
       <span
         className={`relative mb-4 block h-24 w-24 overflow-hidden shadow-lift ${
@@ -320,7 +320,7 @@ function ResultGrid({
       <h2 className="mb-3 text-h5 font-bold">{title}</h2>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
         {items.map((r) => (
-          <Link key={r.id} href={resultHref(r)} className="group rounded-card p-2 hover:bg-white/5">
+          <Link key={r.id} href={resultHref(r)} className="group rounded-card p-2 transition-colors hover:bg-white/5">
             <span
               className={`relative mb-3 block aspect-square overflow-hidden ${
                 circular ? 'rounded-full' : 'rounded-card'

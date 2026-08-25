@@ -5,11 +5,6 @@ import { LANGUAGES } from '@/lib/config';
 import { OnboardingShell } from './ProfileStep';
 import { Icon } from '@/components/ui/Icon';
 
-/**
- * Third step: pick your languages, Spotify style. A grid of tinted language
- * cards, multi-select, at least one required to finish. The selection feeds the
- * home and search feeds.
- */
 export function LanguageStep({
   initial,
   onBack,
@@ -22,59 +17,51 @@ export function LanguageStep({
   const [selected, setSelected] = useState<string[]>(initial);
 
   function toggle(id: string) {
-    setSelected((prev) => (prev.includes(id) ? prev.filter((l) => l !== id) : [...prev, id]));
+    setSelected((current) => (current.includes(id) ? current.filter((language) => language !== id) : [...current, id]));
   }
-
-  const canFinish = selected.length > 0;
 
   return (
     <OnboardingShell
       step={3}
       title="What do you like to listen to?"
-      subtitle="Choose the languages you enjoy. You can change these anytime."
+      subtitle="Choose one or more languages. You can update this anytime."
       onBack={onBack}
     >
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        {LANGUAGES.map((lang) => {
-          const active = selected.includes(lang.id);
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {LANGUAGES.map((language) => {
+          const active = selected.includes(language.id);
           return (
             <button
-              key={lang.id}
+              key={language.id}
               type="button"
               aria-pressed={active}
-              onClick={() => toggle(lang.id)}
-              className={`group relative flex aspect-[16/10] flex-col justify-between overflow-hidden rounded-card bg-gradient-to-br p-3 text-left transition-transform duration-150 hover:scale-[1.02] ${lang.gradient} ${
-                active ? 'ring-2 ring-white ring-offset-2 ring-offset-bg' : ''
+              onClick={() => toggle(language.id)}
+              className={`relative flex aspect-[16/10] flex-col justify-between rounded-card border p-3 text-left transition-colors ${
+                active ? 'border-accent bg-accent/15' : 'border-subtle bg-surface-raised hover:bg-white/5'
               }`}
             >
-              <span className="text-lg font-extrabold leading-tight text-white drop-shadow">
-                {lang.label}
-              </span>
-              <span className="text-sm font-semibold text-white/85">{lang.native}</span>
-
+              <span className="text-lg font-bold leading-tight">{language.label}</span>
+              <span className="text-sm text-text-secondary">{language.native}</span>
               {active && (
-                <span className="absolute right-2 top-2 grid h-6 w-6 place-items-center rounded-full bg-white text-black">
-                  <Icon name="play" size={12} />
+                <span className="absolute right-2 top-2 grid h-5 w-5 place-items-center rounded-full bg-accent text-white">
+                  <Icon name="play" size={10} />
                 </span>
               )}
             </button>
           );
         })}
       </div>
-
-      <div className="sticky bottom-0 mt-8 flex flex-col items-center gap-2 bg-gradient-to-t from-bg to-transparent pb-2 pt-4">
+      <div className="mt-7 flex flex-col items-center gap-3">
         <p className="text-xs text-text-secondary" aria-live="polite">
-          {selected.length
-            ? `${selected.length} selected`
-            : 'Select at least one language to continue'}
+          {selected.length ? `${selected.length} selected` : 'Select at least one language to continue'}
         </p>
         <button
           type="button"
-          disabled={!canFinish}
+          disabled={!selected.length}
           onClick={() => onFinish(selected)}
-          className="w-full max-w-sm rounded-full bg-brand px-8 py-3.5 text-base font-bold text-white shadow-glow transition-transform duration-150 enabled:hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
+          className="button-primary w-full max-w-sm py-3 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          Start Listening
+          Start listening
         </button>
       </div>
     </OnboardingShell>

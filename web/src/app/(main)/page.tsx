@@ -59,7 +59,7 @@ export default async function HomePage() {
   }
 
   return (
-    <div className="flex flex-col gap-10 px-4 py-6 sm:px-6">
+    <div className="app-page">
       {hero && <Hero song={hero} greeting={greeting()} />}
       {rows.map((row) => (
         <Carousel key={`${row.id}-${row.title}`} row={row} />

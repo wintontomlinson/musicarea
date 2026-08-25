@@ -11,13 +11,12 @@ const ITEMS: Array<{ href: string; label: string; icon: IconName; match: (p: str
   { href: '/library', label: 'Library', icon: 'library', match: (p) => p.startsWith('/library') },
 ];
 
-/** Bottom tab bar for phones and small tablets. Hidden from lg up. */
 export function MobileNav() {
   const pathname = usePathname();
   return (
     <nav
       aria-label="Primary"
-      className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t border-subtle bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-glass lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t border-subtle bg-[#121212] pb-[env(safe-area-inset-bottom)] lg:hidden"
     >
       {ITEMS.map((item) => {
         const active = item.match(pathname);
@@ -27,11 +26,13 @@ export function MobileNav() {
             href={item.href}
             aria-current={active ? 'page' : undefined}
             className={[
-              'flex min-h-[56px] flex-col items-center justify-center gap-1 text-[10px] font-bold transition-colors duration-150',
-              active ? 'text-accent' : 'text-text-secondary',
+              'flex min-h-[58px] flex-col items-center justify-center gap-1 text-[10px] font-bold transition-colors',
+              active ? 'text-white' : 'text-text-secondary',
             ].join(' ')}
           >
-            <Icon name={item.icon} size={20} />
+            <span className={active ? 'grid h-6 w-9 place-items-center rounded-full bg-white/15' : ''}>
+              <Icon name={item.icon} size={19} />
+            </span>
             {item.label}
           </Link>
         );
