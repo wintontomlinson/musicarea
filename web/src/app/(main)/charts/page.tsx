@@ -59,7 +59,7 @@ export default async function ChartsPage({ searchParams }: { searchParams: { c?:
   const songs = playlist?.songs ?? [];
 
   return (
-    <div className="flex flex-col gap-8 px-4 py-6 sm:px-6">
+    <div className="app-page">
       <JsonLd
         data={breadcrumbLd([
           { name: 'Home', path: '/' },
@@ -82,7 +82,7 @@ export default async function ChartsPage({ searchParams }: { searchParams: { c?:
             href={`/charts?c=${c.id}`}
             scroll={false}
             className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-150 ${
-              c.id === selectedId ? 'bg-white text-black' : 'bg-white/5 text-text-secondary hover:text-white'
+              c.id === selectedId ? 'bg-white text-black' : 'border border-subtle bg-surface text-text-secondary hover:text-white'
             }`}
           >
             {chartLabel(c)}

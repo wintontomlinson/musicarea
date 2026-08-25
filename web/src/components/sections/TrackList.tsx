@@ -30,15 +30,15 @@ export function TrackList({
   if (!songs.length) return null;
 
   return (
-    <div className="flex flex-col">
+    <div className="surface-card flex flex-col overflow-hidden p-1">
       {songs.map((song, i) => {
         const isCurrent = currentId === song.id;
         const artist = primaryArtist(song);
         return (
           <div
             key={`${song.id}-${i}`}
-            className={`group grid grid-cols-[24px_1fr_auto] items-center gap-3 rounded-lg px-2 py-2 sm:grid-cols-[24px_1.6fr_1fr_auto] ${
-              isCurrent ? 'bg-brand-soft' : 'hover:bg-white/5'
+            className={`group grid grid-cols-[24px_1fr_auto] items-center gap-3 rounded-lg px-2 py-2.5 sm:grid-cols-[24px_1.6fr_1fr_auto] ${
+              isCurrent ? 'bg-accent/10' : 'hover:bg-white/5'
             }`}
           >
             {/* Index / equalizer / play */}

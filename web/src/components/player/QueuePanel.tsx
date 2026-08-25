@@ -54,7 +54,7 @@ export function QueuePanel() {
       />
       <aside
         aria-label="Play queue"
-        className="fixed right-0 top-0 z-[56] flex h-full w-full max-w-sm flex-col border-l border-subtle bg-surface/95 backdrop-blur-glass"
+        className="fixed right-0 top-0 z-[56] flex h-full w-full max-w-sm flex-col border-l border-subtle bg-[#181818]"
       >
         <header className="flex items-center justify-between border-b border-subtle p-4">
           <h2 className="text-h5 font-extrabold">Queue</h2>
@@ -144,7 +144,7 @@ function QueueRow({
   return (
     <div
       className={`group flex items-center gap-3 rounded-lg p-2 ${
-        active ? 'bg-brand-soft' : 'hover:bg-white/5'
+        active ? 'bg-accent/10' : 'hover:bg-white/5'
       }`}
     >
       {draggable && (

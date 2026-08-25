@@ -4,40 +4,32 @@ import { MediaCard } from '@/components/cards/MediaCard';
 import { Icon } from '@/components/ui/Icon';
 import { isSong } from '@/lib/utils';
 
-/**
- * A titled horizontal carousel of media cards. On desktop it scrolls sideways;
- * on mobile it stays swipeable. The header keeps its optional "See all" link on
- * one line beside a truncating title.
- */
 export function Carousel({ row }: { row: Row }) {
   if (!row.items?.length) return null;
-  // For song rows, the full list of songs becomes the play context so pressing
-  // play on any card queues the whole shelf from that point.
   const songContext: Song[] | undefined =
     row.kind === 'songs' ? (row.items.filter(isSong) as Song[]) : undefined;
+
   return (
-    <section className="animate-fade-up">
+    <section>
       <div className="mb-3 flex items-end gap-3">
         <div className="min-w-0">
-          <h2 className="truncate text-h4 font-extrabold tracking-tight">{row.title}</h2>
-          {row.subtitle && (
-            <p className="mt-0.5 truncate text-sm text-text-secondary">{row.subtitle}</p>
-          )}
+          <h2 className="truncate section-title">{row.title}</h2>
+          {row.subtitle && <p className="mt-1 truncate text-sm text-text-secondary">{row.subtitle}</p>}
         </div>
         {row.showAll && (
           <Link
             href={row.showAll}
-            className="ml-auto flex shrink-0 items-center gap-1 whitespace-nowrap text-sm font-semibold text-accent hover:text-accent-soft"
+            className="ml-auto flex shrink-0 items-center gap-0.5 text-sm font-semibold text-text-secondary transition-colors hover:text-white"
           >
-            See All
-            <Icon name="chevronRight" size={14} />
+            See all
+            <Icon name="chevronRight" size={15} />
           </Link>
         )}
       </div>
 
-      <div className="no-scrollbar -mx-2 flex snap-x gap-1 overflow-x-auto px-2 pb-2">
+      <div className="no-scrollbar -mx-4 flex snap-x gap-2 overflow-x-auto px-4 pb-1 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
         {row.items.map((item) => (
-          <div key={item.id} className="w-40 shrink-0 snap-start sm:w-44">
+          <div key={item.id} className="w-36 shrink-0 snap-start sm:w-40 lg:w-44">
             <MediaCard item={item} context={songContext} />
           </div>
         ))}

@@ -20,7 +20,7 @@ import { OnboardingGate } from '@/components/onboarding/OnboardingGate';
 export default function MainLayout({ children }: { children: React.ReactNode }) {
   return (
     <OnboardingGate>
-      <div className="flex min-h-screen">
+      <div className="flex min-h-screen bg-bg">
         <Sidebar />
         <div className="flex min-w-0 flex-1 flex-col">
           <Topbar />

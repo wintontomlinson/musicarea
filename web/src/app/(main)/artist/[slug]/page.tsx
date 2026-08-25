@@ -79,7 +79,7 @@ export default async function ArtistPage({ params }: { params: { slug: string } 
   });
 
   return (
-    <div className="flex flex-col gap-10 pb-6">
+    <div className="flex flex-col gap-8 pb-7">
       <JsonLd data={groupLd} />
       <JsonLd
         data={breadcrumbLd([
@@ -89,9 +89,9 @@ export default async function ArtistPage({ params }: { params: { slug: string } 
       />
 
       {/* Full-bleed banner */}
-      <header className="relative flex min-h-[280px] items-end overflow-hidden sm:min-h-[360px]">
+      <header className="relative flex min-h-[260px] items-end overflow-hidden border-b border-subtle sm:min-h-[340px]">
         <Image src={cover} alt="" fill priority sizes="100vw" className="object-cover" />
-        <div className="absolute inset-0 bg-gradient-to-t from-bg via-bg/60 to-bg/20" />
+        <div className="absolute inset-0 bg-black/55" />
         <div className="relative flex flex-col gap-3 p-6 sm:p-10">
           {artist.isVerified && (
             <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-accent">
@@ -112,10 +112,10 @@ export default async function ArtistPage({ params }: { params: { slug: string } 
         </div>
       </header>
 
-      <div className="flex flex-col gap-10 px-4 sm:px-6">
+      <div className="app-page pt-0">
         {topSongs.length > 0 && (
           <section>
-            <h2 className="mb-3 text-h4 font-extrabold tracking-tight">Popular</h2>
+            <h2 className="mb-3 section-title">Popular</h2>
             <TrackList songs={topSongs.slice(0, 10)} />
           </section>
         )}
@@ -132,7 +132,7 @@ export default async function ArtistPage({ params }: { params: { slug: string } 
 
         {related.length > 0 && (
           <section>
-            <h2 className="mb-3 text-h4 font-extrabold tracking-tight">Related Artists</h2>
+            <h2 className="mb-3 section-title">Related Artists</h2>
             <div className="no-scrollbar flex gap-4 overflow-x-auto pb-2">
               {related.map((r) => (
                 <Link key={r.id} href={entityHref('artist', r.name, r.id)} className="w-32 shrink-0 text-center">

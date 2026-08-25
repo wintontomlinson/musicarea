@@ -4,11 +4,6 @@ import { useState } from 'react';
 import { AVATARS } from '@/lib/config';
 import { Avatar } from '@/components/ui/Avatar';
 
-/**
- * Second step: create a local profile. Pick a display name and a gradient
- * avatar. No account, no upload; it lives in localStorage. Continue is disabled
- * until a non-empty name is entered.
- */
 export function ProfileStep({
   initialName,
   initialAvatar,
@@ -29,12 +24,11 @@ export function ProfileStep({
     <OnboardingShell
       step={2}
       title="Create your profile"
-      subtitle="This is just for you, stored on this device. No account needed."
+      subtitle="This stays on this device. No account needed."
       onBack={onBack}
     >
-      <div className="flex flex-col items-center gap-8">
-        <Avatar name={trimmed || 'M'} avatarId={avatar} size={96} className="shadow-lift" />
-
+      <div className="flex flex-col items-center gap-7">
+        <Avatar name={trimmed || 'M'} avatarId={avatar} size={88} className="shadow-lift" />
         <div className="w-full max-w-sm">
           <label htmlFor="profile-name" className="mb-2 block text-sm font-semibold text-text-secondary">
             What should we call you?
@@ -42,45 +36,40 @@ export function ProfileStep({
           <input
             id="profile-name"
             value={name}
-            onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && canContinue) onNext(trimmed, avatar);
+            onChange={(event) => setName(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && canContinue) onNext(trimmed, avatar);
             }}
             maxLength={30}
             autoFocus
             placeholder="Your name"
-            className="w-full rounded-full border border-subtle bg-surface-raised/80 px-5 py-3.5 text-center text-lg font-semibold outline-none transition-colors duration-150 placeholder:text-text-muted focus:border-accent/60"
+            className="w-full rounded-full border border-subtle bg-surface px-5 py-3 text-center text-lg font-semibold outline-none transition-colors placeholder:text-text-muted focus:border-white/25"
           />
         </div>
-
         <div className="w-full max-w-sm">
-          <p className="mb-3 text-center text-sm font-semibold text-text-secondary">Pick an avatar</p>
+          <p className="mb-3 text-center text-sm font-semibold text-text-secondary">Choose an avatar</p>
           <div className="flex flex-wrap justify-center gap-3">
-            {AVATARS.map((a) => (
+            {AVATARS.map((item) => (
               <button
-                key={a.id}
+                key={item.id}
                 type="button"
-                aria-label={`Avatar ${a.id}`}
-                aria-pressed={avatar === a.id}
-                onClick={() => setAvatar(a.id)}
-                className={`rounded-full transition-transform duration-150 hover:scale-105 ${
-                  avatar === a.id ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg' : ''
+                aria-label={`Avatar ${item.id}`}
+                aria-pressed={avatar === item.id}
+                onClick={() => setAvatar(item.id)}
+                className={`rounded-full transition-transform hover:scale-105 ${
+                  avatar === item.id ? 'ring-2 ring-white ring-offset-2 ring-offset-bg' : ''
                 }`}
               >
-                <span
-                  className={`block h-12 w-12 rounded-full bg-gradient-to-br ${a.gradient}`}
-                  aria-hidden="true"
-                />
+                <span className={`block h-11 w-11 rounded-full bg-gradient-to-br ${item.gradient}`} aria-hidden="true" />
               </button>
             ))}
           </div>
         </div>
-
         <button
           type="button"
           disabled={!canContinue}
           onClick={() => onNext(trimmed, avatar)}
-          className="mt-2 w-full max-w-sm rounded-full bg-brand px-8 py-3.5 text-base font-bold text-white shadow-glow transition-transform duration-150 enabled:hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
+          className="button-primary mt-1 w-full max-w-sm py-3 disabled:cursor-not-allowed disabled:opacity-40"
         >
           Continue
         </button>
@@ -89,7 +78,6 @@ export function ProfileStep({
   );
 }
 
-/** Shared frame for onboarding steps: progress dots, back link, title. */
 export function OnboardingShell({
   step,
   title,
@@ -104,47 +92,28 @@ export function OnboardingShell({
   children: React.ReactNode;
 }) {
   return (
-    <div className="relative flex min-h-[100dvh] flex-col px-6 py-8">
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 opacity-60"
-        style={{
-          background:
-            'radial-gradient(50% 45% at 20% 10%, rgba(255,77,109,0.2), transparent 60%), radial-gradient(50% 45% at 85% 90%, rgba(123,47,190,0.2), transparent 60%)',
-        }}
-      />
-      <div className="relative mx-auto flex w-full max-w-xl flex-1 flex-col">
-        <div className="mb-8 flex items-center justify-between">
+    <div className="flex min-h-[100dvh] bg-bg px-5 py-6 sm:items-center sm:justify-center">
+      <div className="w-full max-w-xl">
+        <div className="mb-6 flex items-center justify-between">
           {onBack ? (
-            <button
-              type="button"
-              onClick={onBack}
-              className="text-sm font-semibold text-text-secondary hover:text-white"
-            >
-              &larr; Back
+            <button type="button" onClick={onBack} className="text-sm font-semibold text-text-secondary hover:text-white">
+              ← Back
             </button>
-          ) : (
-            <span />
-          )}
+          ) : <span />}
           <div className="flex gap-1.5" aria-label={`Step ${step} of 3`}>
-            {[1, 2, 3].map((n) => (
-              <span
-                key={n}
-                className={`h-1.5 rounded-full transition-all duration-200 ${
-                  n === step ? 'w-6 bg-accent' : 'w-1.5 bg-white/20'
-                }`}
-              />
+            {[1, 2, 3].map((number) => (
+              <span key={number} className={`h-1.5 rounded-full ${number <= step ? 'w-6 bg-accent' : 'w-1.5 bg-white/20'}`} />
             ))}
           </div>
           <span className="w-10" />
         </div>
-
-        <div className="mb-8 text-center animate-fade-up">
-          <h1 className="text-h2 font-extrabold tracking-tight">{title}</h1>
-          {subtitle && <p className="mx-auto mt-2 max-w-md text-sm text-text-secondary">{subtitle}</p>}
+        <div className="surface-card p-6 sm:p-9">
+          <div className="mb-8 text-center">
+            <h1 className="text-h2 font-extrabold tracking-tight">{title}</h1>
+            {subtitle && <p className="mx-auto mt-2 max-w-md text-sm text-text-secondary">{subtitle}</p>}
+          </div>
+          {children}
         </div>
-
-        <div className="flex-1 animate-fade-up">{children}</div>
       </div>
     </div>
   );

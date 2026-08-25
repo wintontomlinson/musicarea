@@ -50,7 +50,7 @@ export default async function PlaylistPage({ params }: { params: { id: string } 
   const totalSecs = songs.reduce((sum, s) => sum + (s.duration || 0), 0);
 
   return (
-    <div className="flex flex-col gap-10 px-4 py-6 sm:px-6">
+    <div className="app-page">
       <JsonLd
         data={{
           '@context': 'https://schema.org',

@@ -83,7 +83,7 @@ export default async function SongPage({ params }: { params: { slug: string } })
   };
 
   return (
-    <div className="flex flex-col gap-10 px-4 py-6 sm:px-6">
+    <div className="app-page">
       <JsonLd data={recordingLd} />
       <JsonLd
         data={breadcrumbLd([
