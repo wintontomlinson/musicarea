@@ -57,7 +57,7 @@ export function SeekBar({ showTimes = false }: { showTimes?: boolean }) {
       className="group relative h-1.5 w-full cursor-pointer touch-none rounded-full bg-white/15"
     >
       <div
-        className="absolute inset-y-0 left-0 rounded-full bg-brand"
+        className="absolute inset-y-0 left-0 rounded-full bg-white"
         style={{ width: `${pct}%` }}
       />
       <div

@@ -65,16 +65,15 @@ export function FullPlayer() {
   }
   return (
     <section aria-label="Now playing" className="fixed inset-0 z-50 overflow-hidden bg-bg">
-      <div className="absolute inset-0"><Image src={cover} alt="" fill priority sizes="100vw" className="scale-125 object-cover opacity-30 blur-3xl" /><div className="absolute inset-0 bg-gradient-to-b from-black/35 via-bg/75 to-bg" /></div>
       <div ref={sheetRef} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onTouchCancel={onTouchEnd} className={`relative mx-auto flex h-full max-w-xl flex-col overflow-y-auto ${settling ? 'transition-[transform,opacity] duration-300 ease-smooth' : ''}`}>
         <header className="flex items-center justify-between p-4 sm:p-6">
           <button type="button" aria-label="Minimize player" onClick={() => setFullscreen(false)} className="grid h-10 w-10 place-items-center rounded-full text-white/80 hover:bg-white/10"><Icon name="collapse" size={22} /></button>
-          <span className="text-xs font-bold uppercase tracking-[0.18em] text-white/60">Now playing</span>
+          <span className="text-xs font-bold uppercase tracking-[0.16em] text-text-secondary">Now playing</span>
           <button type="button" aria-label="Show queue" onClick={() => setQueueOpen(true)} className="grid h-10 w-10 place-items-center rounded-full text-white/80 hover:bg-white/10"><Icon name="queue" size={20} /></button>
         </header>
         <div className="mx-auto flex w-full max-w-lg flex-1 flex-col justify-center gap-6 px-6 pb-10">
-          <div className="relative aspect-square w-full overflow-hidden rounded-xl2 shadow-lift"><Image src={cover} alt={track.name} fill priority sizes="512px" className="object-cover" /></div>
-          <div><h1 className="truncate text-h3 font-extrabold tracking-tight">{track.name}</h1><p className="mt-1 truncate text-base text-white/65">{artistLine(track)}</p></div>
+          <div className="relative aspect-square w-full overflow-hidden rounded-xl2 bg-surface"><Image src={cover} alt={track.name} fill priority sizes="512px" className="object-cover" /></div>
+          <div><h1 className="truncate text-h3 font-extrabold tracking-tight">{track.name}</h1><p className="mt-1 truncate text-base text-text-secondary">{artistLine(track)}</p></div>
           <SeekBar showTimes />
           <TransportControls size="full" />
         </div>

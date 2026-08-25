@@ -51,10 +51,9 @@ export function PlayButton({
     }
   }
 
-  const base =
-    variant === 'overlay'
-      ? 'grid place-items-center rounded-full bg-white text-black shadow-lift'
-      : 'grid place-items-center rounded-full bg-brand text-white shadow-glow';
+  // Both variants use the same white pill: it reads on artwork and on surfaces,
+  // and keeps the interface colourless.
+  const base = 'grid place-items-center rounded-full bg-white text-black shadow-lift';
 
   return (
     <button

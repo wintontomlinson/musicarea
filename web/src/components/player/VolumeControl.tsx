@@ -30,7 +30,7 @@ export function VolumeControl() {
         value={Math.round(shown * 100)}
         aria-label="Volume"
         onChange={(e) => setVolume(Number(e.target.value) / 100)}
-        className="h-1 w-24 cursor-pointer accent-accent"
+        className="h-1 w-24 cursor-pointer accent-white"
       />
     </div>
   );

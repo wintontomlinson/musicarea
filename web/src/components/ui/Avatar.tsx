@@ -1,9 +1,10 @@
 import { AVATARS } from '@/lib/config';
 
 /**
- * A gradient avatar showing the profile's initial. Uses one of the preset
- * gradients by id; falls back to the first preset. Reused in onboarding, the
- * sidebar and the top bar.
+ * Neutral avatar showing the profile's initial. Uses one of the preset grey
+ * tints by id; falls back to the first preset (which also covers profiles
+ * saved under an older preset id). Reused in onboarding, the sidebar and the
+ * top bar.
  */
 export function Avatar({
   name,
@@ -20,8 +21,13 @@ export function Avatar({
   const initial = (name.trim()[0] || 'M').toUpperCase();
   return (
     <span
-      className={`grid shrink-0 place-items-center rounded-full bg-gradient-to-br ${preset.gradient} font-bold text-white ${className}`}
-      style={{ width: size, height: size, fontSize: size * 0.42 }}
+      className={`grid shrink-0 place-items-center rounded-full font-bold text-white ${className}`}
+      style={{
+        width: size,
+        height: size,
+        fontSize: size * 0.42,
+        backgroundColor: preset.tint,
+      }}
       aria-hidden="true"
     >
       {initial}

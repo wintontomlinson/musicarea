@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Icon, type IconName } from '@/components/ui/Icon';
-import { SITE } from '@/lib/config';
+import { AVATARS, SITE } from '@/lib/config';
 import { useUser } from '@/stores/user';
 import { Avatar } from '@/components/ui/Avatar';
 
@@ -27,7 +27,7 @@ export function Sidebar() {
   return (
     <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-subtle bg-surface/70 p-4 lg:flex">
       <Link href="/" className="mb-7 flex items-center gap-2.5 px-2" aria-label={`${SITE.name} home`}>
-        <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand text-white shadow-glow"><Icon name="play" size={16} /></span>
+        <span className="grid h-8 w-8 place-items-center rounded-lg bg-white text-black"><Icon name="play" size={16} /></span>
         <span className="text-lg font-extrabold tracking-tight">{SITE.name}</span>
       </Link>
       <nav aria-label="Primary" className="flex flex-col gap-1">
@@ -47,7 +47,7 @@ function ProfileFooter() {
   const name = profile?.name || 'Listener';
   return (
     <Link href="/settings" className="mt-auto flex items-center gap-3 rounded-card border border-subtle bg-white/[0.03] p-2.5 transition-colors hover:bg-white/[0.07]">
-      <Avatar name={name} avatarId={profile?.avatar ?? 'coral'} size={32} />
+      <Avatar name={name} avatarId={profile?.avatar ?? AVATARS[0].id} size={32} />
       <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{name}</span><span className="block text-xs text-text-secondary">Your profile</span></span>
       <Icon name="gear" size={16} className="text-text-secondary" />
     </Link>

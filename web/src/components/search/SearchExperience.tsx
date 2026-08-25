@@ -127,7 +127,7 @@ export function SearchExperience({ moods, initialQuery }: { moods: Mood[]; initi
             onFocus={() => suggest && setShowSuggest(true)}
             placeholder="Songs, artists, albums, playlists"
             aria-label="Search"
-            className="w-full rounded-full border border-subtle bg-surface-raised/90 py-3.5 pl-12 pr-4 text-base outline-none shadow-lift transition-colors placeholder:text-text-muted focus:border-accent/60"
+            className="w-full rounded-full border border-subtle bg-surface py-3.5 pl-12 pr-4 text-base outline-none transition-colors placeholder:text-text-muted focus:border-white/35"
           />
         </form>
 
@@ -230,7 +230,7 @@ function SearchResults({
             aria-selected={tab === t}
             onClick={() => setTab(t)}
             className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold capitalize transition-colors duration-150 ${
-              tab === t ? 'bg-brand text-white shadow-glow' : 'border border-subtle bg-white/5 text-text-secondary hover:bg-white/10 hover:text-white'
+              tab === t ? 'bg-white text-black' : 'border border-subtle bg-transparent text-text-secondary hover:bg-white/10 hover:text-white'
             }`}
           >
             {t}

@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { Icon } from '@/components/ui/Icon';
 import { useUser } from '@/stores/user';
 import { Avatar } from '@/components/ui/Avatar';
+import { AVATARS } from '@/lib/config';
 
 export function Topbar() {
   const router = useRouter();
@@ -24,7 +25,7 @@ export function Topbar() {
         </div>
         <form role="search" onSubmit={submit} className="relative max-w-xl flex-1">
           <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary"><Icon name="search" size={18} /></span>
-          <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search songs, artists, albums" aria-label="Search" className="w-full rounded-full border border-subtle bg-surface/85 py-2.5 pl-10 pr-4 text-sm text-white outline-none transition-colors placeholder:text-text-muted focus:border-accent/60" />
+          <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search songs, artists, albums" aria-label="Search" className="w-full rounded-full border border-subtle bg-surface py-2.5 pl-10 pr-4 text-sm text-white outline-none transition-colors placeholder:text-text-muted focus:border-white/35" />
         </form>
         <Link href="/settings" aria-label="Open profile"><AvatarButton /></Link>
       </div>
@@ -34,7 +35,7 @@ export function Topbar() {
 
 function AvatarButton() {
   const profile = useUser((state) => state.profile);
-  return <Avatar name={profile?.name || 'Listener'} avatarId={profile?.avatar ?? 'coral'} size={34} />;
+  return <Avatar name={profile?.name || 'Listener'} avatarId={profile?.avatar ?? AVATARS[0].id} size={34} />;
 }
 
 function NavButton({ label, icon, onClick }: { label: string; icon: 'chevronLeft' | 'chevronRight'; onClick: () => void }) {

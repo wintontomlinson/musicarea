@@ -47,7 +47,7 @@ export function TransportControls({ size = 'mini' }: { size?: 'mini' | 'full' })
         type="button"
         aria-label={isPlaying ? 'Pause' : 'Play'}
         onClick={toggle}
-        className={`grid place-items-center rounded-full bg-accent text-white shadow-lift transition-transform duration-150 hover:scale-105 ${playSize}`}
+        className={`grid place-items-center rounded-full bg-white text-black shadow-lift transition-transform duration-150 hover:scale-105 ${playSize}`}
       >
         {isLoading ? (
           <span

@@ -19,7 +19,7 @@ export function MobileNav() {
         const active = item.match(pathname);
         return (
           <Link key={item.href} href={item.href} aria-current={active ? 'page' : undefined} className={`flex min-h-[58px] flex-col items-center justify-center gap-1 text-[10px] font-bold transition-colors ${active ? 'text-accent' : 'text-text-secondary'}`}>
-            <span className={active ? 'grid h-6 w-9 place-items-center rounded-full bg-accent/15' : ''}><Icon name={item.icon} size={19} /></span>
+            <span className={active ? 'grid h-6 w-9 place-items-center rounded-full bg-white/10' : ''}><Icon name={item.icon} size={19} /></span>
             {item.label}
           </Link>
         );

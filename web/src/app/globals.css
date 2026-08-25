@@ -3,19 +3,20 @@
 @tailwind utilities;
 
 :root {
-  --bg: #090909;
-  --surface: #121212;
-  --surface-raised: #1c1c1e;
-  --accent: #ff4d6d;
-  --secondary: #8b5cf6;
-  --line: rgba(255, 255, 255, 0.09);
-  --glass: rgba(18, 18, 18, 0.78);
+  --bg: #0f0f0f;
+  --surface: #181818;
+  --surface-raised: #242424;
+  --line: rgba(255, 255, 255, 0.1);
 }
 
 @layer base {
-  * { border-color: var(--line); }
+  * {
+    border-color: var(--line);
+  }
 
-  html { color-scheme: dark; }
+  html {
+    color-scheme: dark;
+  }
 
   body {
     background: var(--bg);
@@ -24,69 +25,95 @@
     text-rendering: optimizeLegibility;
   }
 
-  ::selection { background: rgba(255, 77, 109, 0.38); color: #fff; }
+  ::selection {
+    background: rgba(255, 255, 255, 0.22);
+    color: #fff;
+  }
 
   :focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 3px;
-    border-radius: 6px;
+    outline: 2px solid #fff;
+    outline-offset: 2px;
+    border-radius: 4px;
   }
 }
 
 @layer components {
   .app-page {
-    @apply mx-auto flex w-full max-w-[1440px] flex-col gap-10 px-4 py-6 sm:px-6 sm:py-8 lg:px-8;
+    @apply mx-auto flex w-full max-w-[1440px] flex-col gap-9 px-4 py-6 sm:px-6 sm:py-8 lg:px-8;
   }
 
+  /* One flat surface treatment, used everywhere a container is needed. */
   .surface-card {
     @apply rounded-card border border-subtle bg-surface;
   }
 
   .premium-panel {
-    background: linear-gradient(145deg, rgba(255,255,255,0.09), rgba(255,255,255,0.025));
-    border: 1px solid var(--line);
-    border-radius: 20px;
-    box-shadow: 0 20px 50px -35px rgba(0, 0, 0, 0.9);
+    @apply rounded-xl2 border border-subtle bg-surface;
   }
 
   .glass-panel {
-    background: var(--glass);
-    border: 1px solid var(--line);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
+    @apply border border-subtle bg-surface;
   }
 
-  .section-title { @apply text-h4 font-extrabold tracking-tight; }
+  .section-title {
+    @apply text-h4 font-bold tracking-tight;
+  }
 
-  .eyebrow { @apply text-[11px] font-bold uppercase tracking-[0.18em] text-accent; }
+  .eyebrow {
+    @apply text-[11px] font-bold uppercase tracking-[0.16em] text-text-secondary;
+  }
 
   .button-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm font-bold text-white shadow-glow transition-all hover:scale-[1.02] hover:bg-accent-soft;
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-bold text-black transition-colors hover:bg-accent-soft;
   }
 
   .button-secondary {
-    @apply inline-flex items-center justify-center gap-2 rounded-full border border-subtle bg-white/5 px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-white/10;
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-subtle bg-transparent px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-white/10;
   }
 
   .control-pill {
-    @apply rounded-full border border-subtle bg-white/5 px-4 py-2 text-sm font-semibold text-text-secondary transition-colors hover:bg-white/10 hover:text-white;
+    @apply rounded-full border border-subtle bg-transparent px-4 py-2 text-sm font-semibold text-text-secondary transition-colors hover:bg-white/10 hover:text-white;
   }
 }
 
-* { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.26) transparent; }
-*::-webkit-scrollbar { width: 8px; height: 8px; }
-*::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.25); border-radius: 99px; }
-*::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.4); }
-.no-scrollbar::-webkit-scrollbar { display: none; }
-.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.24) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.24);
+  border-radius: 99px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
 
 @keyframes eqbar {
-  0%, 100% { transform: scaleY(0.35); }
-  50% { transform: scaleY(1); }
+  0%,
+  100% {
+    transform: scaleY(0.35);
+  }
+  50% {
+    transform: scaleY(1);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+  *,
+  *::before,
+  *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;

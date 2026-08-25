@@ -94,15 +94,17 @@ export function TrackList({
             {/* Album (desktop) */}
             {showAlbum && (
               <div className="hidden min-w-0 sm:block">
+                {/* `block` is required: truncate cannot clip an inline element,
+                    so without it long album names overflow into the duration. */}
                 {song.album?.id ? (
                   <Link
                     href={entityHref('album', song.album.name || '', song.album.id)}
-                    className="truncate text-xs text-text-secondary hover:text-white hover:underline"
+                    className="block truncate text-xs text-text-secondary hover:text-white hover:underline"
                   >
                     {song.album.name}
                   </Link>
                 ) : (
-                  <span className="truncate text-xs text-text-secondary">{song.album?.name}</span>
+                  <span className="block truncate text-xs text-text-secondary">{song.album?.name}</span>
                 )}
               </div>
             )}
