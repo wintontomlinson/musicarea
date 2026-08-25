@@ -9,11 +9,10 @@ import { TransportControls } from './PlayerControls';
 import { SeekBar } from './SeekBar';
 
 export function FullPlayer() {
-  const open = usePlayer((s) => s.fullscreen);
-  const track = usePlayer((s) => s.currentTrack());
-  const setFullscreen = usePlayer((s) => s.setFullscreen);
-  const setQueueOpen = usePlayer((s) => s.setQueueOpen);
-
+  const open = usePlayer((state) => state.fullscreen);
+  const track = usePlayer((state) => state.currentTrack());
+  const setFullscreen = usePlayer((state) => state.setFullscreen);
+  const setQueueOpen = usePlayer((state) => state.setQueueOpen);
   const sheetRef = useRef<HTMLDivElement>(null);
   const drag = useRef({ startY: 0, dy: 0, active: false, decided: false, startT: 0 });
   const [settling, setSettling] = useState(false);
@@ -84,40 +83,27 @@ export function FullPlayer() {
   }
 
   return (
-    <section aria-label="Now playing" className="fixed inset-0 z-50 overflow-hidden bg-bg">
-      <div className="absolute inset-0 bg-gradient-to-b from-white/[0.07] to-transparent" />
+    <section aria-label="Now playing" className="fixed inset-0 z-50 overflow-hidden bg-black">
       <div
         ref={sheetRef}
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
         onTouchCancel={onTouchEnd}
-        className={`relative mx-auto flex h-full max-w-2xl flex-col overflow-y-auto ${
-          settling ? 'transition-[transform,opacity] duration-300 ease-smooth' : ''
-        }`}
+        className={`relative mx-auto flex h-full max-w-xl flex-col overflow-y-auto ${settling ? 'transition-[transform,opacity] duration-300 ease-smooth' : ''}`}
       >
         <header className="flex items-center justify-between p-4 sm:p-6">
-          <button
-            type="button"
-            aria-label="Minimize player"
-            onClick={() => setFullscreen(false)}
-            className="grid h-10 w-10 place-items-center rounded-full text-text-secondary transition-colors hover:bg-white/10 hover:text-white"
-          >
+          <button type="button" aria-label="Minimize player" onClick={() => setFullscreen(false)} className="text-text-secondary hover:text-white">
             <Icon name="collapse" size={22} />
           </button>
-          <span className="text-xs font-bold uppercase tracking-[0.16em] text-text-secondary">Now playing</span>
-          <button
-            type="button"
-            aria-label="Show queue"
-            onClick={() => setQueueOpen(true)}
-            className="grid h-10 w-10 place-items-center rounded-full text-text-secondary transition-colors hover:bg-white/10 hover:text-white"
-          >
+          <span className="text-xs font-bold uppercase tracking-[0.14em] text-text-secondary">Now playing</span>
+          <button type="button" aria-label="Show queue" onClick={() => setQueueOpen(true)} className="text-text-secondary hover:text-white">
             <Icon name="queue" size={20} />
           </button>
         </header>
 
-        <div className="mx-auto flex w-full max-w-lg flex-1 flex-col justify-center gap-6 px-6 pb-10">
-          <div className="relative aspect-square w-full overflow-hidden rounded-xl2 bg-surface shadow-lift">
+        <div className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-6 px-6 pb-10">
+          <div className="relative aspect-square w-full overflow-hidden bg-surface">
             <Image src={cover} alt={track.name} fill priority sizes="512px" className="object-cover" />
           </div>
           <div>

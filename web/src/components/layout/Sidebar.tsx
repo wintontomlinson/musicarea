@@ -15,41 +15,24 @@ interface NavItem {
 }
 
 const NAV: NavItem[] = [
-  { href: '/', label: 'Home', icon: 'home', match: (p) => p === '/' },
-  { href: '/search', label: 'Search', icon: 'search', match: (p) => p.startsWith('/search') },
-  { href: '/explore', label: 'Explore', icon: 'compass', match: (p) => p.startsWith('/explore') },
-  { href: '/library', label: 'Your Library', icon: 'library', match: (p) => p.startsWith('/library') },
-];
-
-const COLLECTIONS: NavItem[] = [
-  { href: '/liked', label: 'Liked Songs', icon: 'heart', match: (p) => p.startsWith('/liked') },
-  { href: '/recent', label: 'Recently Played', icon: 'clock', match: (p) => p.startsWith('/recent') },
-  { href: '/charts', label: 'Charts', icon: 'chart', match: (p) => p.startsWith('/charts') },
+  { href: '/', label: 'Home', icon: 'home', match: (path) => path === '/' },
+  { href: '/search', label: 'Search', icon: 'search', match: (path) => path.startsWith('/search') },
+  { href: '/charts', label: 'Charts', icon: 'chart', match: (path) => path.startsWith('/charts') },
+  { href: '/library', label: 'Library', icon: 'library', match: (path) => path.startsWith('/library') },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-subtle bg-bg px-3 py-5 lg:flex">
-      <Link href="/" className="mb-7 flex items-center gap-2.5 px-2" aria-label={`${SITE.name} home`}>
-        <span className="grid h-8 w-8 place-items-center rounded-lg bg-accent text-white">
-          <Icon name="play" size={16} />
-        </span>
+    <aside className="sticky top-0 hidden h-screen w-56 shrink-0 flex-col px-5 py-6 lg:flex">
+      <Link href="/" className="mb-8 flex items-center gap-2" aria-label={`${SITE.name} home`}>
+        <Icon name="play" size={17} className="text-accent" />
         <span className="text-lg font-extrabold tracking-tight">{SITE.name}</span>
       </Link>
 
       <nav aria-label="Primary" className="flex flex-col gap-1">
         {NAV.map((item) => (
-          <NavLink key={item.href} item={item} active={item.match(pathname)} />
-        ))}
-      </nav>
-
-      <p className="mb-2 mt-8 px-3 text-[11px] font-bold uppercase tracking-[0.13em] text-text-muted">
-        Collection
-      </p>
-      <nav aria-label="Collection" className="flex flex-col gap-1">
-        {COLLECTIONS.map((item) => (
           <NavLink key={item.href} item={item} active={item.match(pathname)} />
         ))}
       </nav>
@@ -60,19 +43,12 @@ export function Sidebar() {
 }
 
 function ProfileFooter() {
-  const profile = useUser((s) => s.profile);
+  const profile = useUser((state) => state.profile);
   const name = profile?.name || 'Listener';
   return (
-    <Link
-      href="/settings"
-      className="mt-auto flex items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-white/5"
-    >
-      <Avatar name={name} avatarId={profile?.avatar ?? 'coral'} size={32} />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-semibold">{name}</span>
-        <span className="block text-xs text-text-secondary">Settings</span>
-      </span>
-      <Icon name="gear" size={17} className="text-text-secondary" />
+    <Link href="/settings" className="mt-auto flex items-center gap-2 py-2 text-text-secondary hover:text-white">
+      <Avatar name={name} avatarId={profile?.avatar ?? 'coral'} size={28} />
+      <span className="truncate text-sm font-semibold">{name}</span>
     </Link>
   );
 }
@@ -83,11 +59,11 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
       href={item.href}
       aria-current={active ? 'page' : undefined}
       className={[
-        'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors',
-        active ? 'bg-white text-black' : 'text-text-secondary hover:bg-white/5 hover:text-white',
+        'flex items-center gap-3 py-2 text-sm font-semibold transition-colors',
+        active ? 'text-white' : 'text-text-secondary hover:text-white',
       ].join(' ')}
     >
-      <Icon name={item.icon} size={19} />
+      <Icon name={item.icon} size={18} />
       {item.label}
     </Link>
   );

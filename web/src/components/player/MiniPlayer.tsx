@@ -18,8 +18,8 @@ export function MiniPlayer() {
   const cover = pickImage(track.image, '150x150');
 
   return (
-    <div className="fixed inset-x-0 bottom-16 z-40 lg:bottom-0 lg:left-60">
-      <div className="border-t border-subtle bg-[#181818]">
+    <div className="fixed inset-x-0 bottom-16 z-40 lg:bottom-0 lg:left-56">
+      <div className="border-t border-subtle bg-bg">
         <div className="flex items-center gap-3 px-3 py-2.5 sm:px-4">
           <button
             type="button"
@@ -27,7 +27,7 @@ export function MiniPlayer() {
             className="flex min-w-0 flex-1 items-center gap-3 text-left lg:flex-none lg:w-72"
             aria-label="Open full screen player"
           >
-            <span className="relative h-11 w-11 shrink-0 overflow-hidden rounded">
+            <span className="relative h-10 w-10 shrink-0 overflow-hidden">
               <Image src={cover} alt="" fill sizes="44px" className="object-cover" />
             </span>
             <span className="min-w-0">
@@ -48,7 +48,7 @@ export function MiniPlayer() {
                 aria-label="Queue"
                 aria-pressed={queueOpen}
                 onClick={() => setQueueOpen(!queueOpen)}
-                className={queueOpen ? 'text-accent' : 'text-text-secondary transition-colors hover:text-white'}
+                className={queueOpen ? 'text-white' : 'text-text-secondary transition-colors hover:text-white'}
               >
                 <Icon name="queue" size={20} />
               </button>

@@ -28,7 +28,7 @@ export function ProfileStep({
       onBack={onBack}
     >
       <div className="flex flex-col items-center gap-7">
-        <Avatar name={trimmed || 'M'} avatarId={avatar} size={88} className="shadow-lift" />
+        <Avatar name={trimmed || 'M'} avatarId={avatar} size={72} />
         <div className="w-full max-w-sm">
           <label htmlFor="profile-name" className="mb-2 block text-sm font-semibold text-text-secondary">
             What should we call you?
@@ -43,7 +43,7 @@ export function ProfileStep({
             maxLength={30}
             autoFocus
             placeholder="Your name"
-            className="w-full rounded-full border border-subtle bg-surface px-5 py-3 text-center text-lg font-semibold outline-none transition-colors placeholder:text-text-muted focus:border-white/25"
+            className="w-full border-b border-subtle bg-transparent px-2 py-3 text-center text-lg font-semibold outline-none transition-colors placeholder:text-text-muted focus:border-white"
           />
         </div>
         <div className="w-full max-w-sm">
@@ -56,11 +56,9 @@ export function ProfileStep({
                 aria-label={`Avatar ${item.id}`}
                 aria-pressed={avatar === item.id}
                 onClick={() => setAvatar(item.id)}
-                className={`rounded-full transition-transform hover:scale-105 ${
-                  avatar === item.id ? 'ring-2 ring-white ring-offset-2 ring-offset-bg' : ''
-                }`}
+                className={avatar === item.id ? 'rounded-full ring-1 ring-white ring-offset-2 ring-offset-bg' : 'rounded-full'}
               >
-                <span className={`block h-11 w-11 rounded-full bg-gradient-to-br ${item.gradient}`} aria-hidden="true" />
+                <span className={`block h-9 w-9 rounded-full bg-gradient-to-br ${item.gradient}`} aria-hidden="true" />
               </button>
             ))}
           </div>
@@ -107,7 +105,7 @@ export function OnboardingShell({
           </div>
           <span className="w-10" />
         </div>
-        <div className="surface-card p-6 sm:p-9">
+        <div className="px-1 py-6 sm:py-9">
           <div className="mb-8 text-center">
             <h1 className="text-h2 font-extrabold tracking-tight">{title}</h1>
             {subtitle && <p className="mx-auto mt-2 max-w-md text-sm text-text-secondary">{subtitle}</p>}

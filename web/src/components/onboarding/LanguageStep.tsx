@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { LANGUAGES } from '@/lib/config';
 import { OnboardingShell } from './ProfileStep';
-import { Icon } from '@/components/ui/Icon';
 
 export function LanguageStep({
   initial,
@@ -27,7 +26,7 @@ export function LanguageStep({
       subtitle="Choose one or more languages. You can update this anytime."
       onBack={onBack}
     >
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-x-6 sm:grid-cols-3">
         {LANGUAGES.map((language) => {
           const active = selected.includes(language.id);
           return (
@@ -36,17 +35,12 @@ export function LanguageStep({
               type="button"
               aria-pressed={active}
               onClick={() => toggle(language.id)}
-              className={`relative flex aspect-[16/10] flex-col justify-between rounded-card border p-3 text-left transition-colors ${
-                active ? 'border-accent bg-accent/15' : 'border-subtle bg-surface-raised hover:bg-white/5'
+              className={`border-b py-4 text-left text-base font-semibold transition-colors ${
+                active ? 'border-white text-white' : 'border-subtle text-text-secondary hover:text-white'
               }`}
             >
-              <span className="text-lg font-bold leading-tight">{language.label}</span>
-              <span className="text-sm text-text-secondary">{language.native}</span>
-              {active && (
-                <span className="absolute right-2 top-2 grid h-5 w-5 place-items-center rounded-full bg-accent text-white">
-                  <Icon name="play" size={10} />
-                </span>
-              )}
+              <span className="block">{language.label}</span>
+              <span className="mt-1 block text-sm font-normal text-text-secondary">{language.native}</span>
             </button>
           );
         })}
