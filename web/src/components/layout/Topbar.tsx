@@ -4,6 +4,8 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import Link from 'next/link';
 import { Icon } from '@/components/ui/Icon';
+import { useUser } from '@/stores/user';
+import { Avatar } from '@/components/ui/Avatar';
 
 /**
  * Top bar for the main content area: history navigation, a search field that
@@ -43,15 +45,19 @@ export function Topbar() {
 
       <div className="ml-auto flex items-center gap-2">
         <IconButton label="Notifications" icon="bell" />
-        <Link
-          href="/settings"
-          aria-label="Account"
-          className="grid h-9 w-9 place-items-center rounded-full bg-brand text-sm font-bold text-white"
-        >
-          M
-        </Link>
+        <AccountButton />
       </div>
     </header>
+  );
+}
+
+function AccountButton() {
+  const profile = useUser((s) => s.profile);
+  const name = profile?.name || 'Listener';
+  return (
+    <Link href="/settings" aria-label={`Account: ${name}`} className="rounded-full">
+      <Avatar name={name} avatarId={profile?.avatar ?? 'coral'} size={36} />
+    </Link>
   );
 }
 

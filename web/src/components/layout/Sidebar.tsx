@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Icon, type IconName } from '@/components/ui/Icon';
 import { SITE } from '@/lib/config';
+import { useUser } from '@/stores/user';
+import { Avatar } from '@/components/ui/Avatar';
 
 interface NavItem {
   href: string;
@@ -62,16 +64,22 @@ export function Sidebar() {
         ))}
       </nav>
 
-      <div className="mt-auto flex items-center gap-3 rounded-xl border border-subtle p-2.5">
-        <span className="grid h-8 w-8 place-items-center rounded-full bg-secondary/40 text-sm font-bold">
-          M
-        </span>
-        <span className="flex-1 text-sm font-semibold">Listener</span>
-        <Link href="/settings" aria-label="Settings" className="text-text-secondary hover:text-white">
-          <Icon name="gear" size={18} />
-        </Link>
-      </div>
+      <ProfileFooter />
     </aside>
+  );
+}
+
+function ProfileFooter() {
+  const profile = useUser((s) => s.profile);
+  const name = profile?.name || 'Listener';
+  return (
+    <div className="mt-auto flex items-center gap-3 rounded-xl border border-subtle p-2.5">
+      <Avatar name={name} avatarId={profile?.avatar ?? 'coral'} size={32} />
+      <span className="flex-1 truncate text-sm font-semibold">{name}</span>
+      <Link href="/settings" aria-label="Settings" className="text-text-secondary hover:text-white">
+        <Icon name="gear" size={18} />
+      </Link>
+    </div>
   );
 }
 

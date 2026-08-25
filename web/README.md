@@ -18,6 +18,23 @@ Result card), and song / album / artist / playlist / charts pages, each with
 per-page metadata, Open Graph, Twitter cards, and JSON-LD (MusicRecording,
 MusicAlbum, MusicGroup, MusicPlaylist) plus BreadcrumbList structured data.
 
+**Phase 4** adds a Spotify-style first-run flow: Welcome, then create a local
+profile (name + gradient avatar, stored in localStorage, no account), then a
+language-preference grid. The choice is persisted and mirrored to a cookie so
+server components render the home and search feeds for the chosen languages. An
+onboarding gate keeps returning users out of the flow with no flash.
+
+### Onboarding + profile
+
+- `src/stores/user.ts` holds the profile, chosen languages and an
+  `onboardingComplete` flag, persisted to localStorage and mirrored to the
+  `ma_langs` cookie. A `hydrated` flag prevents a flash of the flow on reload.
+- `src/lib/languages.ts` reads that cookie on the server (`preferredLanguages()`)
+  so the SSR feed matches the listener's languages.
+- The flow lives in `src/components/onboarding/*` and is mounted via
+  `OnboardingGate` in the main layout. The profile shows in the sidebar and top
+  bar via the shared `Avatar`.
+
 ## Player architecture
 
 - `src/stores/player.ts` holds all playback state (queue, play order, current

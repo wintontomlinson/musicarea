@@ -7,6 +7,7 @@ import { Carousel } from '@/components/sections/Carousel';
 import { MoodGrid } from '@/components/sections/MoodGrid';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { SITE } from '@/lib/config';
+import { preferredLanguages } from '@/lib/languages';
 
 export const metadata: Metadata = {
   title: `${SITE.name} · Discover and stream music`,
@@ -19,11 +20,12 @@ export const metadata: Metadata = {
 export const revalidate = 300;
 
 export default async function HomePage() {
+  const languages = preferredLanguages();
   // Fetch editorial browse and a cold-start feed in parallel. Either can fail
   // independently (the API may be unreachable); we render whatever we get.
   const [browseRes, feedRes] = await Promise.allSettled([
-    api.browse(['hindi']),
-    api.feed({ history: [], languages: ['hindi'], limit: 12 }),
+    api.browse(languages),
+    api.feed({ history: [], languages, limit: 12 }),
   ]);
 
   const browse: BrowseData | null =

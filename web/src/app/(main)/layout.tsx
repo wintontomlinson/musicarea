@@ -7,6 +7,7 @@ import { FullPlayer } from '@/components/player/FullPlayer';
 import { QueuePanel } from '@/components/player/QueuePanel';
 import { KeyboardShortcuts } from '@/components/player/KeyboardShortcuts';
 import { MediaSession } from '@/components/player/MediaSession';
+import { OnboardingGate } from '@/components/onboarding/OnboardingGate';
 
 /**
  * Shared chrome for the primary app views: a fixed sidebar on desktop, a top
@@ -18,21 +19,23 @@ import { MediaSession } from '@/components/player/MediaSession';
  */
 export default function MainLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen">
-      <Sidebar />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar />
-        <main className="flex-1 pb-40 lg:pb-28">{children}</main>
-      </div>
-      <MobileNav />
+    <OnboardingGate>
+      <div className="flex min-h-screen">
+        <Sidebar />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <Topbar />
+          <main className="flex-1 pb-40 lg:pb-28">{children}</main>
+        </div>
+        <MobileNav />
 
-      {/* Player: engine + surfaces, always mounted. */}
-      <AudioEngine />
-      <MiniPlayer />
-      <FullPlayer />
-      <QueuePanel />
-      <KeyboardShortcuts />
-      <MediaSession />
-    </div>
+        {/* Player: engine + surfaces, always mounted. */}
+        <AudioEngine />
+        <MiniPlayer />
+        <FullPlayer />
+        <QueuePanel />
+        <KeyboardShortcuts />
+        <MediaSession />
+      </div>
+    </OnboardingGate>
   );
 }
