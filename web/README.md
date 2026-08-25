@@ -12,7 +12,11 @@ player/queue store, a persistent mini player, a full-screen player with a
 swipe-down dismiss gesture, a queue panel with drag-to-reorder, keyboard
 shortcuts, and MediaSession integration for OS/lock-screen controls.
 
-Search and catalogue detail pages arrive in later phases.
+**Phase 3** adds the search experience and all catalogue pages, fully server
+rendered with SEO: search (mood grid, instant suggestions, tabbed results, Top
+Result card), and song / album / artist / playlist / charts pages, each with
+per-page metadata, Open Graph, Twitter cards, and JSON-LD (MusicRecording,
+MusicAlbum, MusicGroup, MusicPlaylist) plus BreadcrumbList structured data.
 
 ## Player architecture
 

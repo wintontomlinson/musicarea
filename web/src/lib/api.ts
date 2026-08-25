@@ -1,8 +1,12 @@
 import type {
+  Album,
   ApiEnvelope,
+  Artist,
   BrowseData,
+  ChartCard,
   FeedData,
   HistoryEntry,
+  Playlist,
   SearchAllData,
   Song,
 } from './types';
@@ -93,15 +97,47 @@ export const api = {
     });
   },
 
-  searchSongs(query: string, limit = 30): Promise<Song[]> {
-    return call<Song[]>(
+  async searchSongs(query: string, limit = 30): Promise<Song[]> {
+    // This endpoint wraps its list in { results, start, total }.
+    const data = await call<{ results: Song[] } | Song[]>(
       `/api/search/songs?query=${encodeURIComponent(query)}&limit=${limit}`,
       { revalidate: 120 },
     );
+    return Array.isArray(data) ? data : data.results ?? [];
   },
 
   song(id: string): Promise<Song[]> {
     return call<Song[]>(`/api/songs/${encodeURIComponent(id)}`, { revalidate: 600 });
+  },
+
+  album(id: string): Promise<Album> {
+    return call<Album>(`/api/albums?id=${encodeURIComponent(id)}`, { revalidate: 600 });
+  },
+
+  artist(id: string): Promise<Artist> {
+    return call<Artist>(
+      `/api/artists/${encodeURIComponent(id)}?songCount=10&albumCount=20`,
+      { revalidate: 600 },
+    );
+  },
+
+  artistSongs(id: string, page = 0): Promise<{ total?: number; songs: Song[] }> {
+    return call<{ total?: number; songs: Song[] }>(
+      `/api/artists/${encodeURIComponent(id)}/songs?page=${page}`,
+      { revalidate: 600 },
+    );
+  },
+
+  playlist(id: string, limit = 100): Promise<Playlist> {
+    return call<Playlist>(
+      `/api/playlists?id=${encodeURIComponent(id)}&limit=${limit}`,
+      { revalidate: 600 },
+    );
+  },
+
+  /** Editorial chart playlists (each opens to a ranked song list). */
+  charts(): Promise<{ items: ChartCard[] }> {
+    return call<{ items: ChartCard[] }>('/api/charts', { revalidate: 600 });
   },
 };
 
