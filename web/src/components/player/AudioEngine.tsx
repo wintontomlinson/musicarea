@@ -10,13 +10,13 @@ import { pickStreamUrl } from '@/lib/utils';
  * The audio engine. A single always-mounted component that owns the Howl
  * instance and keeps it in sync with the player store: it loads whatever the
  * store says is current, honors play/pause, volume and mute, reports progress
- * on a rAF loop, and advances the queue when a track ends.
+ * on a timer, and advances the queue when a track ends.
  *
  * Rendering nothing, it exists purely for its effects.
  */
 export function AudioEngine() {
   const howlRef = useRef<Howl | null>(null);
-  const rafRef = useRef<number | null>(null);
+  const tickRef = useRef<number | null>(null);
   // The song id currently loaded into Howler, to detect real track changes.
   const loadedIdRef = useRef<string | null>(null);
 
@@ -58,16 +58,17 @@ export function AudioEngine() {
         Howler.volume(state.muted ? 0 : state.volume);
       }
 
-      // Seek requested from UI: currentTime jumped while the same track plays
-      // and the delta is larger than the rAF tick would produce.
-      if (
-        howlRef.current &&
-        track &&
-        track.id === prevTrack?.id &&
-        Math.abs(state.currentTime - prev.currentTime) > 1.2 &&
-        state.currentTime > 0
-      ) {
-        howlRef.current.seek(state.currentTime);
+      // Seek requested from the UI. This compares the store against where the
+      // audio actually is, not against the previous store value: a background
+      // tab throttles the progress timer, so a resumed tick can legitimately
+      // jump several seconds, and comparing store-to-store would misread that
+      // as a seek and force a needless re-buffer of the stream.
+      if (howlRef.current && track && track.id === prevTrack?.id && state.currentTime > 0) {
+        const raw = howlRef.current.seek();
+        const actual = typeof raw === 'number' ? raw : 0;
+        if (Math.abs(state.currentTime - actual) > 1.2) {
+          howlRef.current.seek(state.currentTime);
+        }
       }
     });
 
@@ -80,7 +81,7 @@ export function AudioEngine() {
 
     return () => {
       unsub();
-      stopRaf();
+      stopTicker();
       howlRef.current?.unload();
       howlRef.current = null;
     };
@@ -104,7 +105,7 @@ export function AudioEngine() {
 
   async function loadAndPlay(song: Song | null) {
     // Tear down any existing sound.
-    stopRaf();
+    stopTicker();
     if (howlRef.current) {
       howlRef.current.unload();
       howlRef.current = null;
@@ -126,7 +127,10 @@ export function AudioEngine() {
 
     const howl = new Howl({
       src: [url],
-      html5: true, // stream rather than fully buffer; required for long AAC files
+      // Stream through an HTML5 audio element rather than the Web Audio graph.
+      // Required for long AAC files, and it is what lets playback continue when
+      // the tab is backgrounded or the phone screen locks.
+      html5: true,
       format: ['mp4', 'aac', 'm4a'],
       volume: usePlayer.getState().muted ? 0 : usePlayer.getState().volume,
       onload: () => {
@@ -135,14 +139,14 @@ export function AudioEngine() {
       },
       onplay: () => {
         usePlayer.getState().setPlaying(true);
-        startRaf();
+        startTicker();
       },
       onpause: () => {
         usePlayer.getState().setPlaying(false);
-        stopRaf();
+        stopTicker();
       },
       onend: () => {
-        stopRaf();
+        stopTicker();
         usePlayer.getState().next(true);
       },
       onloaderror: () => {
@@ -161,29 +165,36 @@ export function AudioEngine() {
     if (usePlayer.getState().isPlaying) howl.play();
   }
 
-  function startRaf() {
-    stopRaf();
-    const tick = () => {
+  /**
+   * Report playback position on an interval rather than requestAnimationFrame.
+   * rAF is suspended entirely while a tab is backgrounded or the screen is
+   * locked, which would freeze the progress bar and the OS lock-screen scrubber
+   * even though the audio keeps playing. Timers keep firing (throttled to about
+   * a second in the background), so the position stays truthful.
+   *
+   * 250ms is no coarser than the old loop in practice: setProgress ignores
+   * moves under 0.25s, so rAF was already collapsing to roughly this rate.
+   */
+  function startTicker() {
+    stopTicker();
+    tickRef.current = window.setInterval(() => {
       const howl = howlRef.current;
-      if (howl && howl.playing()) {
-        const t = howl.seek();
-        const time = typeof t === 'number' ? t : 0;
-        const dur = howl.duration() || 0;
-        const { currentTime } = usePlayer.getState();
-        // Only write when it actually moved, to avoid needless renders.
-        if (Math.abs(time - currentTime) >= 0.25) {
-          usePlayer.getState().setProgress(time, dur);
-        }
+      if (!howl || !howl.playing()) return;
+      const raw = howl.seek();
+      const time = typeof raw === 'number' ? raw : 0;
+      const dur = howl.duration() || 0;
+      const { currentTime } = usePlayer.getState();
+      // Only write when it actually moved, to avoid needless renders.
+      if (Math.abs(time - currentTime) >= 0.25) {
+        usePlayer.getState().setProgress(time, dur);
       }
-      rafRef.current = requestAnimationFrame(tick);
-    };
-    rafRef.current = requestAnimationFrame(tick);
+    }, 250);
   }
 
-  function stopRaf() {
-    if (rafRef.current !== null) {
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
+  function stopTicker() {
+    if (tickRef.current !== null) {
+      window.clearInterval(tickRef.current);
+      tickRef.current = null;
     }
   }
 
