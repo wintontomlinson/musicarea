@@ -1,7 +1,8 @@
 import Link from 'next/link';
-import type { Row } from '@/lib/types';
+import type { Row, Song } from '@/lib/types';
 import { MediaCard } from '@/components/cards/MediaCard';
 import { Icon } from '@/components/ui/Icon';
+import { isSong } from '@/lib/utils';
 
 /**
  * A titled horizontal carousel of media cards. On desktop it scrolls sideways;
@@ -10,6 +11,10 @@ import { Icon } from '@/components/ui/Icon';
  */
 export function Carousel({ row }: { row: Row }) {
   if (!row.items?.length) return null;
+  // For song rows, the full list of songs becomes the play context so pressing
+  // play on any card queues the whole shelf from that point.
+  const songContext: Song[] | undefined =
+    row.kind === 'songs' ? (row.items.filter(isSong) as Song[]) : undefined;
   return (
     <section className="animate-fade-up">
       <div className="mb-3 flex items-end gap-3">
@@ -33,7 +38,7 @@ export function Carousel({ row }: { row: Row }) {
       <div className="no-scrollbar -mx-2 flex snap-x gap-1 overflow-x-auto px-2 pb-2">
         {row.items.map((item) => (
           <div key={item.id} className="w-40 shrink-0 snap-start sm:w-44">
-            <MediaCard item={item} />
+            <MediaCard item={item} context={songContext} />
           </div>
         ))}
       </div>

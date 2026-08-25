@@ -4,9 +4,35 @@ A Next.js 14 (App Router) + TypeScript + Tailwind frontend for MusicArea. It
 renders on the server against the existing Flask API, so catalogue pages are
 SSR/SEO friendly while personalised state stays client side.
 
-This is **Phase 1**: scaffold, design system, app shell (sidebar, top bar,
-mobile nav), an SSR home page with real data, and the SEO baseline. The player,
-search, and catalogue detail pages arrive in later phases.
+**Phase 1** delivered the scaffold, design system, app shell (sidebar, top bar,
+mobile nav), an SSR home page with real data, and the SEO baseline.
+
+**Phase 2** adds the full music player: a Howler.js audio engine, a Zustand
+player/queue store, a persistent mini player, a full-screen player with a
+swipe-down dismiss gesture, a queue panel with drag-to-reorder, keyboard
+shortcuts, and MediaSession integration for OS/lock-screen controls.
+
+Search and catalogue detail pages arrive in later phases.
+
+## Player architecture
+
+- `src/stores/player.ts` holds all playback state (queue, play order, current
+  position, volume, shuffle, repeat) and persists volume/shuffle/repeat to
+  localStorage. Shuffle keeps a separate play `order` over the natural queue so
+  toggling it never loses your place.
+- `src/components/player/AudioEngine.tsx` owns the single Howl instance and
+  subscribes to the store: it loads the current track, honors play/pause,
+  volume and seeks, reports progress, and advances the queue on end. It renders
+  nothing.
+- The surfaces (`MiniPlayer`, `FullPlayer`, `QueuePanel`) and the effect-only
+  helpers (`KeyboardShortcuts`, `MediaSession`) are mounted once in the main
+  layout so playback survives route changes.
+- Stream URLs come from each song's `downloadUrl` (320kbps AAC preferred). When
+  a queued track lacks them, the engine resolves full details via the
+  `/api/song/[id]` route handler, which proxies Flask.
+
+Keyboard: Space/k play-pause, Left/Right seek 5s (Shift = prev/next track),
+Up/Down volume, m mute, s shuffle, r repeat.
 
 ## Architecture
 

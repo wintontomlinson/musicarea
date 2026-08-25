@@ -88,6 +88,22 @@ export function isSong(item: Song | CollectionCard): item is Song {
   return item.type === 'song';
 }
 
+/**
+ * Pick the best stream URL from a song's downloadUrl array. Prefers the highest
+ * quality the source offers (320kbps AAC), stepping down when it is missing.
+ */
+export function pickStreamUrl(song: Song): string | null {
+  const urls = song.downloadUrl;
+  if (!urls || urls.length === 0) return null;
+  const order = ['320kbps', '160kbps', '96kbps', '48kbps', '12kbps'];
+  for (const q of order) {
+    const found = urls.find((u) => u.quality === q);
+    if (found?.url) return found.url;
+  }
+  // Fallback: the last entry, which the API orders highest-last.
+  return urls[urls.length - 1]?.url || null;
+}
+
 /** Time-based greeting for the home hero. */
 export function greeting(date = new Date()): string {
   const h = date.getHours();
