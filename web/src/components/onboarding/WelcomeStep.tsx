@@ -3,23 +3,21 @@
 import { SITE } from '@/lib/config';
 import { Icon } from '@/components/ui/Icon';
 
-/** First onboarding screen: a plain neutral intro with a single action. */
+/** First onboarding screen: Apple's centred intro with a single tinted action. */
 export function WelcomeStep({ onNext }: { onNext: () => void }) {
   return (
     <div className="flex min-h-[100dvh] items-center justify-center bg-bg px-6 text-center">
-      <div className="surface-card w-full max-w-lg p-8 sm:p-12">
-        <span className="mx-auto grid h-14 w-14 place-items-center rounded-xl bg-white text-black">
-          <Icon name="play" size={26} />
+      <div className="w-full max-w-md">
+        <span className="mx-auto grid h-16 w-16 place-items-center rounded-xl2 bg-accent text-white shadow-lift">
+          <Icon name="play" size={30} />
         </span>
-        <p className="eyebrow mt-7">Your music, your way</p>
-        <h1 className="mt-2 text-h2 font-extrabold tracking-tight sm:text-h1">
-          Welcome to {SITE.name}
-        </h1>
-        <p className="mx-auto mt-3 max-w-md text-base text-text-secondary">
-          Create a local profile, choose your languages, then dive into music picked for you.
+        <h1 className="mt-7 text-h2 font-bold tracking-tight sm:text-h1">Welcome to {SITE.name}</h1>
+        <p className="mx-auto mt-3 max-w-sm text-[15px] leading-relaxed text-text-secondary">
+          Create a profile on this device and choose the languages you listen to. Your Listen Now
+          feed builds itself around them.
         </p>
-        <button type="button" onClick={onNext} className="button-primary mt-8 px-9 py-3.5">
-          Get started
+        <button type="button" onClick={onNext} className="button-primary mt-8 w-full py-3">
+          Get Started
         </button>
       </div>
     </div>

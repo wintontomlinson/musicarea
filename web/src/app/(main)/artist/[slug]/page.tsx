@@ -79,7 +79,7 @@ export default async function ArtistPage({ params }: { params: { slug: string } 
   });
 
   return (
-    <div className="flex flex-col gap-8 pb-7">
+    <div className="flex flex-col gap-9 pb-8">
       <JsonLd data={groupLd} />
       <JsonLd
         data={breadcrumbLd([
@@ -88,19 +88,21 @@ export default async function ArtistPage({ params }: { params: { slug: string } 
         ])}
       />
 
-      {/* Full-bleed banner */}
-      <header className="relative flex min-h-[260px] items-end overflow-hidden border-b border-subtle sm:min-h-[340px]">
+      {/* Full-bleed banner, as Apple Music heads an artist page. */}
+      <header className="relative flex min-h-[300px] items-end overflow-hidden sm:min-h-[400px]">
         <Image src={cover} alt="" fill priority sizes="100vw" className="object-cover" />
-        <div className="absolute inset-0 bg-black/55" />
-        <div className="relative flex flex-col gap-3 p-6 sm:p-10">
+        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/55 to-black/20" />
+        <div className="relative mx-auto flex w-full max-w-[1600px] flex-col gap-3 px-4 pb-7 sm:px-8 lg:px-10">
           {artist.isVerified && (
-            <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-accent">
-              <Icon name="heart" size={14} /> Verified Artist
+            <span className="flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-[0.06em] text-accent">
+              <Icon name="heart" size={13} /> Verified Artist
             </span>
           )}
-          <h1 className="text-h1 font-extrabold tracking-tight sm:text-[64px]">{artist.name}</h1>
+          <h1 className="text-h2 font-bold tracking-tight sm:text-[56px] sm:leading-[1.05]">
+            {artist.name}
+          </h1>
           {artist.followerCount ? (
-            <p className="text-sm text-text-secondary">
+            <p className="text-[13px] text-white/70">
               {formatCount(artist.followerCount)} followers
             </p>
           ) : null}
@@ -135,11 +137,11 @@ export default async function ArtistPage({ params }: { params: { slug: string } 
             <h2 className="mb-3 section-title">Related Artists</h2>
             <div className="no-scrollbar flex gap-4 overflow-x-auto pb-2">
               {related.map((r) => (
-                <Link key={r.id} href={entityHref('artist', r.name, r.id)} className="w-32 shrink-0 text-center">
-                  <span className="relative mx-auto mb-2 block h-28 w-28 overflow-hidden rounded-full">
+                <Link key={r.id} href={entityHref('artist', r.name, r.id)} className="w-28 shrink-0 text-center">
+                  <span className="relative mx-auto mb-2 block h-28 w-28 overflow-hidden rounded-full shadow-lift">
                     <Image src={pickImage(r.image, '150x150')} alt="" fill sizes="112px" className="object-cover" />
                   </span>
-                  <span className="block truncate text-sm font-semibold">{r.name}</span>
+                  <span className="block truncate text-[14px] font-medium">{r.name}</span>
                 </Link>
               ))}
             </div>

@@ -1,9 +1,9 @@
 import type { Config } from 'tailwindcss';
 
 /**
- * Neutral dark design tokens, in the spirit of YouTube Music, Spotify and
- * Apple Music: layered greys, white as the only accent, and no coloured
- * gradients or glows. Colour in the interface comes from album artwork alone.
+ * Apple Music design tokens. Apple's system greys for surfaces, the Apple Music
+ * red as the single accent, SF Pro typography (falling back to Inter on
+ * non-Apple platforms), small radii and soft artwork shadows.
  */
 const config: Config = {
   content: [
@@ -14,44 +14,51 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        bg: '#0F0F0F',
+        bg: '#000000',
         surface: {
-          DEFAULT: '#181818',
-          raised: '#242424',
+          DEFAULT: '#1C1C1E', // Apple systemGray6 (dark)
+          raised: '#2C2C2E', // Apple systemGray5 (dark)
         },
-        // White is the accent. Kept as a token so existing active/selected
-        // states stay in one place.
         accent: {
-          DEFAULT: '#FFFFFF',
-          soft: '#E6E6E6',
+          DEFAULT: '#FA243C', // Apple Music red
+          soft: '#FF375F', // Apple systemPink (dark), used for hover
         },
         secondary: {
-          DEFAULT: '#B3B3B3',
+          DEFAULT: '#8E8E93', // Apple systemGray
         },
         text: {
           DEFAULT: '#FFFFFF',
-          secondary: '#AAAAAA',
-          muted: '#717171',
+          secondary: '#8E8E93',
+          muted: '#636366', // Apple systemGray2 (dark)
         },
       },
       borderColor: {
-        subtle: 'rgba(255,255,255,0.1)',
+        subtle: 'rgba(255,255,255,0.13)', // Apple separator (dark)
       },
       backgroundImage: {
-        // Flat neutral fills, so nothing renders a coloured gradient.
-        brand: 'linear-gradient(0deg, #FFFFFF, #FFFFFF)',
-        'brand-soft': 'linear-gradient(0deg, rgba(255,255,255,0.1), rgba(255,255,255,0.1))',
+        brand: 'linear-gradient(0deg, #FA243C, #FA243C)',
+        'brand-soft': 'linear-gradient(0deg, rgba(250,36,60,0.12), rgba(250,36,60,0.12))',
       },
       fontFamily: {
-        sans: ['var(--font-inter)', 'system-ui', 'sans-serif'],
+        // Real SF Pro on Apple devices, Inter everywhere else.
+        sans: [
+          '-apple-system',
+          'BlinkMacSystemFont',
+          'SF Pro Display',
+          'SF Pro Text',
+          'var(--font-inter)',
+          'system-ui',
+          'sans-serif',
+        ],
       },
       fontSize: {
-        h1: ['48px', { lineHeight: '1.2', letterSpacing: '-0.02em' }],
-        h2: ['36px', { lineHeight: '1.2', letterSpacing: '-0.02em' }],
-        h3: ['28px', { lineHeight: '1.2', letterSpacing: '-0.01em' }],
-        h4: ['22px', { lineHeight: '1.25' }],
-        h5: ['18px', { lineHeight: '1.3' }],
-        h6: ['14px', { lineHeight: '1.4' }],
+        // Apple's large-title down to footnote scale.
+        h1: ['40px', { lineHeight: '1.1', letterSpacing: '-0.025em' }],
+        h2: ['30px', { lineHeight: '1.15', letterSpacing: '-0.022em' }],
+        h3: ['24px', { lineHeight: '1.2', letterSpacing: '-0.02em' }],
+        h4: ['21px', { lineHeight: '1.25', letterSpacing: '-0.015em' }],
+        h5: ['17px', { lineHeight: '1.3', letterSpacing: '-0.01em' }],
+        h6: ['13px', { lineHeight: '1.4' }],
       },
       spacing: {
         18: '72px',
@@ -59,19 +66,19 @@ const config: Config = {
         30: '120px',
       },
       borderRadius: {
-        card: '8px',
-        xl2: '12px',
+        card: '8px', // Apple Music artwork corner
+        xl2: '14px',
       },
       boxShadow: {
-        lift: '0 10px 30px -18px rgba(0,0,0,0.8)',
-        // Neutral, so any remaining use stays colourless.
-        glow: '0 8px 24px -14px rgba(0,0,0,0.85)',
+        // Soft artwork shadow, as Apple Music uses under album covers.
+        lift: '0 4px 14px -4px rgba(0,0,0,0.65)',
+        glow: '0 6px 20px -8px rgba(0,0,0,0.7)',
       },
       transitionTimingFunction: {
         smooth: 'cubic-bezier(0.4, 0, 0.2, 1)',
       },
       backdropBlur: {
-        glass: '20px',
+        glass: '30px',
       },
       keyframes: {
         'fade-up': {

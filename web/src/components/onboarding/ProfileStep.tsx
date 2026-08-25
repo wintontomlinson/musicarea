@@ -5,8 +5,8 @@ import { AVATARS } from '@/lib/config';
 import { Avatar } from '@/components/ui/Avatar';
 
 /**
- * Second step: create a local profile. Name plus a neutral avatar tint. No
- * account, no upload; it lives in localStorage.
+ * Second step: create a local profile. Name plus an avatar tint. No account, no
+ * upload; it lives in localStorage.
  */
 export function ProfileStep({
   initialName,
@@ -27,15 +27,18 @@ export function ProfileStep({
   return (
     <OnboardingShell
       step={2}
-      title="Create your profile"
-      subtitle="This is private to this device. No login needed."
+      title="Create Your Profile"
+      subtitle="This stays on this device. No account needed."
       onBack={onBack}
     >
       <div className="flex flex-col items-center gap-7">
-        <Avatar name={trimmed || 'M'} avatarId={avatar} size={96} />
+        <Avatar name={trimmed || 'M'} avatarId={avatar} size={96} className="shadow-lift" />
 
         <div className="w-full max-w-sm">
-          <label htmlFor="profile-name" className="mb-2 block text-sm font-semibold text-text-secondary">
+          <label
+            htmlFor="profile-name"
+            className="mb-2 block text-[13px] font-medium text-text-secondary"
+          >
             What should we call you?
           </label>
           <input
@@ -48,12 +51,14 @@ export function ProfileStep({
             maxLength={30}
             autoFocus
             placeholder="Your name"
-            className="w-full rounded-full border border-subtle bg-surface-raised px-5 py-3.5 text-center text-lg font-semibold outline-none transition-colors placeholder:text-text-muted focus:border-white/35"
+            className="w-full rounded-lg bg-white/[0.09] px-4 py-3 text-center text-[17px] font-medium outline-none transition-colors placeholder:text-text-muted focus:bg-white/[0.14]"
           />
         </div>
 
         <div className="w-full max-w-sm">
-          <p className="mb-3 text-center text-sm font-semibold text-text-secondary">Choose an avatar</p>
+          <p className="mb-3 text-center text-[13px] font-medium text-text-secondary">
+            Choose an avatar
+          </p>
           <div className="flex flex-wrap justify-center gap-3">
             {AVATARS.map((item) => (
               <button
@@ -63,7 +68,7 @@ export function ProfileStep({
                 aria-pressed={avatar === item.id}
                 onClick={() => setAvatar(item.id)}
                 className={`rounded-full transition-transform hover:scale-105 ${
-                  avatar === item.id ? 'ring-2 ring-white ring-offset-2 ring-offset-bg' : ''
+                  avatar === item.id ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg' : ''
                 }`}
               >
                 <span
@@ -80,7 +85,7 @@ export function ProfileStep({
           type="button"
           disabled={!canContinue}
           onClick={() => onNext(trimmed, avatar)}
-          className="button-primary mt-1 w-full max-w-sm py-3.5 disabled:cursor-not-allowed disabled:opacity-40"
+          className="button-primary w-full max-w-sm py-3 disabled:cursor-not-allowed disabled:opacity-40"
         >
           Continue
         </button>
@@ -89,7 +94,7 @@ export function ProfileStep({
   );
 }
 
-/** Shared frame for onboarding steps: progress dots, back link, title. */
+/** Shared frame for onboarding steps: back link, progress dots, title. */
 export function OnboardingShell({
   step,
   title,
@@ -106,14 +111,14 @@ export function OnboardingShell({
   return (
     <div className="flex min-h-[100dvh] bg-bg px-5 py-8 sm:items-center sm:justify-center">
       <div className="w-full max-w-xl">
-        <div className="mb-6 flex items-center justify-between">
+        <div className="mb-8 flex items-center justify-between">
           {onBack ? (
             <button
               type="button"
               onClick={onBack}
-              className="text-sm font-semibold text-text-secondary hover:text-white"
+              className="text-[15px] font-medium text-accent transition-colors hover:text-accent-soft"
             >
-              &larr; Back
+              Back
             </button>
           ) : (
             <span />
@@ -123,7 +128,7 @@ export function OnboardingShell({
               <span
                 key={number}
                 className={`h-1.5 rounded-full transition-all ${
-                  number <= step ? 'w-6 bg-white' : 'w-1.5 bg-white/20'
+                  number <= step ? 'w-6 bg-accent' : 'w-1.5 bg-white/25'
                 }`}
               />
             ))}
@@ -131,13 +136,14 @@ export function OnboardingShell({
           <span className="w-10" />
         </div>
 
-        <div className="surface-card p-6 sm:p-9">
-          <div className="mb-8 text-center">
-            <h1 className="text-h2 font-extrabold tracking-tight">{title}</h1>
-            {subtitle && <p className="mx-auto mt-2 max-w-md text-sm text-text-secondary">{subtitle}</p>}
-          </div>
-          {children}
+        <div className="mb-8 text-center">
+          <h1 className="text-h3 font-bold tracking-tight sm:text-h2">{title}</h1>
+          {subtitle && (
+            <p className="mx-auto mt-2 max-w-md text-[15px] text-text-secondary">{subtitle}</p>
+          )}
         </div>
+
+        {children}
       </div>
     </div>
   );

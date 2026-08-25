@@ -87,18 +87,20 @@ export default async function AlbumPage({ params }: { params: { slug: string } }
 
       <DetailHeader
         cover={cover}
-        eyebrow="Album"
         title={album.name}
         description={album.description}
+        eyebrow={
+          artist.id ? (
+            <Link href={entityHref('artist', artist.name, artist.id)} className="hover:underline">
+              {artist.name}
+            </Link>
+          ) : (
+            artist.name
+          )
+        }
         meta={
           <span>
-            {artist.id ? (
-              <Link href={entityHref('artist', artist.name, artist.id)} className="font-semibold text-white hover:underline">
-                {artist.name}
-              </Link>
-            ) : (
-              <span className="font-semibold text-white">{artist.name}</span>
-            )}
+            Album
             {album.year ? ` · ${album.year}` : ''}
             {songs.length ? ` · ${songs.length} songs` : ''}
             {totalSecs ? ` · ${formatDuration(totalSecs)}` : ''}
@@ -110,7 +112,7 @@ export default async function AlbumPage({ params }: { params: { slug: string } }
       {songs.length ? (
         <TrackList songs={songs} showArt={false} showAlbum={false} />
       ) : (
-        <p className="text-sm text-text-secondary">This album has no playable tracks.</p>
+        <p className="text-[13px] text-text-secondary">This album has no playable tracks.</p>
       )}
     </div>
   );

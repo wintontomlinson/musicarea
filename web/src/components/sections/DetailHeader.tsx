@@ -1,8 +1,9 @@
 import Image from 'next/image';
 
 /**
- * Shared header for song, album, artist and playlist pages. Flat neutral
- * surface, artwork on the left, metadata and actions on the right.
+ * Apple Music's album/playlist header: large artwork on the left, then the
+ * title, a red artist/eyebrow line, metadata, and the action pills beneath.
+ * Centred on phones, left-aligned from small up, as Apple does.
  */
 export function DetailHeader({
   cover,
@@ -14,7 +15,8 @@ export function DetailHeader({
   description,
 }: {
   cover: string;
-  eyebrow: string;
+  /** The red line under the title. Albums and songs pass a linked artist name. */
+  eyebrow: React.ReactNode;
   title: string;
   meta?: React.ReactNode;
   circular?: boolean;
@@ -22,22 +24,25 @@ export function DetailHeader({
   description?: string;
 }) {
   return (
-    <header className="surface-card flex flex-col items-center gap-5 p-5 text-center sm:flex-row sm:items-end sm:p-7 sm:text-left">
+    <header className="flex flex-col items-center gap-6 text-center sm:flex-row sm:items-start sm:text-left">
       <div
-        className={`relative aspect-square w-36 shrink-0 overflow-hidden sm:w-48 ${
+        className={`relative aspect-square w-44 shrink-0 overflow-hidden shadow-lift sm:w-56 lg:w-64 ${
           circular ? 'rounded-full' : 'rounded-card'
         }`}
       >
-        <Image src={cover} alt={title} fill priority sizes="192px" className="object-cover" />
+        <Image src={cover} alt={title} fill priority sizes="256px" className="object-cover" />
       </div>
-      <div className="min-w-0 flex-1">
-        <p className="eyebrow">{eyebrow}</p>
-        <h1 className="mt-2 text-h2 font-extrabold tracking-tight sm:text-h1">{title}</h1>
+
+      <div className="min-w-0 flex-1 sm:pt-2">
+        <h1 className="text-h3 font-bold tracking-tight sm:text-h2">{title}</h1>
+        <p className="mt-1 text-[15px] font-medium text-accent sm:text-h5">{eyebrow}</p>
+        {meta && <div className="mt-2 text-[13px] uppercase tracking-wide text-text-secondary">{meta}</div>}
+        {actions && <div className="mt-5 flex justify-center gap-3 sm:justify-start">{actions}</div>}
         {description && (
-          <p className="mt-2 line-clamp-2 text-sm text-text-secondary">{description}</p>
+          <p className="mt-4 line-clamp-3 text-[13px] leading-relaxed text-text-secondary">
+            {description}
+          </p>
         )}
-        {meta && <div className="mt-2 text-sm text-text-secondary">{meta}</div>}
-        {actions && <div className="mt-5 flex justify-center sm:justify-start">{actions}</div>}
       </div>
     </header>
   );

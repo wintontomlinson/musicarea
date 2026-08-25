@@ -3,10 +3,11 @@
 @tailwind utilities;
 
 :root {
-  --bg: #0f0f0f;
-  --surface: #181818;
-  --surface-raised: #242424;
-  --line: rgba(255, 255, 255, 0.1);
+  --bg: #000000;
+  --surface: #1c1c1e;
+  --surface-raised: #2c2c2e;
+  --accent: #fa243c;
+  --line: rgba(255, 255, 255, 0.13);
 }
 
 @layer base {
@@ -26,23 +27,23 @@
   }
 
   ::selection {
-    background: rgba(255, 255, 255, 0.22);
+    background: rgba(250, 36, 60, 0.35);
     color: #fff;
   }
 
   :focus-visible {
-    outline: 2px solid #fff;
+    outline: 2px solid var(--accent);
     outline-offset: 2px;
-    border-radius: 4px;
+    border-radius: 6px;
   }
 }
 
 @layer components {
+  /* Apple Music keeps generous side gutters and tall section spacing. */
   .app-page {
-    @apply mx-auto flex w-full max-w-[1440px] flex-col gap-9 px-4 py-6 sm:px-6 sm:py-8 lg:px-8;
+    @apply mx-auto flex w-full max-w-[1600px] flex-col gap-10 px-4 py-6 sm:px-8 sm:py-8 lg:px-10;
   }
 
-  /* One flat surface treatment, used everywhere a container is needed. */
   .surface-card {
     @apply rounded-card border border-subtle bg-surface;
   }
@@ -52,44 +53,68 @@
   }
 
   .glass-panel {
-    @apply border border-subtle bg-surface;
+    background: rgba(28, 28, 30, 0.72);
+    border: 1px solid var(--line);
+    backdrop-filter: saturate(180%) blur(30px);
+    -webkit-backdrop-filter: saturate(180%) blur(30px);
   }
 
+  /* Bold section header, Apple's shelf title. */
   .section-title {
     @apply text-h4 font-bold tracking-tight;
   }
 
+  /* Small red editorial label above a title. */
   .eyebrow {
-    @apply text-[11px] font-bold uppercase tracking-[0.16em] text-text-secondary;
+    @apply text-[12px] font-semibold uppercase tracking-[0.06em] text-accent;
   }
 
+  /* Apple's tinted pill: red text on a translucent red fill. */
   .button-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-bold text-black transition-colors hover:bg-accent-soft;
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg bg-accent/[0.14] px-5 py-2 text-[15px] font-semibold text-accent transition-colors hover:bg-accent/25;
   }
 
   .button-secondary {
-    @apply inline-flex items-center justify-center gap-2 rounded-full border border-subtle bg-transparent px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-white/10;
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg bg-white/[0.09] px-5 py-2 text-[15px] font-semibold text-white transition-colors hover:bg-white/[0.16];
+  }
+
+  /* Apple's segmented control. */
+  .segmented {
+    @apply inline-flex gap-1 rounded-lg bg-white/[0.08] p-1;
+  }
+
+  .segmented-item {
+    @apply rounded-md px-3.5 py-1.5 text-[13px] font-medium capitalize text-text-secondary transition-colors hover:text-white;
+  }
+
+  .segmented-item-active {
+    @apply bg-surface-raised text-white shadow-lift;
   }
 
   .control-pill {
-    @apply rounded-full border border-subtle bg-transparent px-4 py-2 text-sm font-semibold text-text-secondary transition-colors hover:bg-white/10 hover:text-white;
+    @apply rounded-lg bg-white/[0.08] px-4 py-1.5 text-[13px] font-medium text-text-secondary transition-colors hover:bg-white/[0.14] hover:text-white;
+  }
+
+  /* Hairline divider between list rows, indented past artwork like Apple. */
+  .hairline {
+    @apply border-t border-subtle;
   }
 }
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.24) transparent;
+  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
 }
 *::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 *::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.22);
   border-radius: 99px;
 }
 *::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.36);
 }
 
 .no-scrollbar::-webkit-scrollbar {

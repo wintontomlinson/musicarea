@@ -57,12 +57,12 @@ export function QueuePanel() {
         className="glass-panel fixed right-0 top-0 z-[56] flex h-full w-full max-w-sm flex-col border-l border-subtle"
       >
         <header className="flex items-center justify-between border-b border-subtle p-4">
-          <h2 className="text-h5 font-extrabold">Queue</h2>
-          <div className="flex items-center gap-2">
+          <h2 className="text-h5 font-bold tracking-tight">Playing Next</h2>
+          <div className="flex items-center gap-1">
             <button
               type="button"
               onClick={clearQueue}
-              className="rounded-full px-3 py-1.5 text-xs font-semibold text-text-secondary hover:bg-white/5 hover:text-white"
+              className="rounded-md px-2.5 py-1.5 text-[13px] font-medium text-accent transition-colors hover:bg-white/[0.08]"
             >
               Clear
             </button>
@@ -70,9 +70,9 @@ export function QueuePanel() {
               type="button"
               aria-label="Close queue"
               onClick={() => setQueueOpen(false)}
-              className="grid h-9 w-9 place-items-center rounded-full text-text-secondary hover:bg-white/5 hover:text-white"
+              className="grid h-8 w-8 place-items-center rounded-md text-text-secondary transition-colors hover:bg-white/[0.08] hover:text-white"
             >
-              <Icon name="close" size={18} />
+              <Icon name="close" size={17} />
             </button>
           </div>
         </header>
@@ -80,7 +80,7 @@ export function QueuePanel() {
         <div className="flex-1 overflow-y-auto p-3">
           {current && (
             <>
-              <p className="px-1 pb-2 text-xs font-bold uppercase tracking-wider text-text-secondary">
+              <p className="px-2 pb-2 text-[12px] font-semibold uppercase tracking-[0.06em] text-text-secondary">
                 Now Playing
               </p>
               <QueueRow song={current} active onClick={() => undefined} />
@@ -88,7 +88,7 @@ export function QueuePanel() {
           )}
 
           {upcoming.length > 0 && (
-            <p className="px-1 pb-2 pt-4 text-xs font-bold uppercase tracking-wider text-text-secondary">
+            <p className="px-2 pb-2 pt-5 text-[12px] font-semibold uppercase tracking-[0.06em] text-text-secondary">
               Next Up
             </p>
           )}
@@ -107,7 +107,7 @@ export function QueuePanel() {
                 setDragFrom(null);
                 setDragOver(null);
               }}
-              className={dragOver === queueIndex ? 'rounded-lg ring-1 ring-accent/60' : ''}
+              className={dragOver === queueIndex ? 'rounded-md ring-1 ring-accent' : ''}
             >
               <QueueRow
                 song={song}
@@ -119,7 +119,7 @@ export function QueuePanel() {
           ))}
 
           {!current && (
-            <p className="p-6 text-center text-sm text-text-secondary">The queue is empty.</p>
+            <p className="p-6 text-center text-[13px] text-text-secondary">The queue is empty.</p>
           )}
         </div>
       </aside>
@@ -143,24 +143,30 @@ function QueueRow({
   const cover = pickImage(song.image, '150x150');
   return (
     <div
-      className={`group flex items-center gap-3 rounded-lg p-2 ${
-        active ? 'bg-accent/10' : 'hover:bg-white/5'
+      className={`group flex items-center gap-2.5 rounded-md p-2 transition-colors ${
+        active ? 'bg-white/[0.07]' : 'hover:bg-white/[0.07]'
       }`}
     >
       {draggable && (
         <span className="cursor-grab text-text-muted" aria-hidden="true">
-          <Icon name="drag" size={18} />
+          <Icon name="drag" size={17} />
         </span>
       )}
       <button type="button" onClick={onClick} className="flex min-w-0 flex-1 items-center gap-3 text-left">
-        <span className="relative h-10 w-10 shrink-0 overflow-hidden rounded">
-          <Image src={cover} alt="" fill sizes="40px" className="object-cover" />
+        <span className="relative h-11 w-11 shrink-0 overflow-hidden rounded">
+          <Image src={cover} alt="" fill sizes="44px" className="object-cover" />
         </span>
         <span className="min-w-0">
-          <span className={`block truncate text-sm font-semibold ${active ? 'text-accent' : ''}`}>
+          <span
+            className={`block truncate text-[14px] font-medium leading-tight ${
+              active ? 'text-accent' : ''
+            }`}
+          >
             {song.name}
           </span>
-          <span className="block truncate text-xs text-text-secondary">{artistLine(song)}</span>
+          <span className="mt-0.5 block truncate text-[13px] leading-tight text-text-secondary">
+            {artistLine(song)}
+          </span>
         </span>
       </button>
       {onRemove && (

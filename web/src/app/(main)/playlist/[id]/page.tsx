@@ -70,12 +70,13 @@ export default async function PlaylistPage({ params }: { params: { id: string } 
 
       <DetailHeader
         cover={cover}
-        eyebrow="Playlist"
+        eyebrow={SITE.name}
         title={pl.name}
         description={pl.description}
         meta={
           <span>
-            {songs.length ? `${songs.length} songs` : ''}
+            Playlist
+            {songs.length ? ` · ${songs.length} songs` : ''}
             {totalSecs ? ` · ${formatDuration(totalSecs)}` : ''}
             {pl.followerCount ? ` · ${formatCount(pl.followerCount)} followers` : ''}
           </span>
@@ -86,7 +87,7 @@ export default async function PlaylistPage({ params }: { params: { id: string } 
       {songs.length ? (
         <TrackList songs={songs} />
       ) : (
-        <p className="text-sm text-text-secondary">This playlist has no playable tracks.</p>
+        <p className="text-[13px] text-text-secondary">This playlist has no playable tracks.</p>
       )}
     </div>
   );

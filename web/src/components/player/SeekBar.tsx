@@ -5,9 +5,10 @@ import { usePlayer } from '@/stores/player';
 import { formatDuration } from '@/lib/utils';
 
 /**
- * Clickable/draggable progress bar. Writes the new time into the store, which
- * the audio engine picks up and seeks to. `showTimes` renders the elapsed and
- * total labels for the full player.
+ * Apple Music's slim seek rail: a thin grey track with a white fill and a small
+ * knob that appears on hover. Writes the new time into the store, which the
+ * audio engine picks up and seeks to. `showTimes` renders elapsed and remaining
+ * labels either side, as Apple does.
  */
 export function SeekBar({ showTimes = false }: { showTimes?: boolean }) {
   const currentTime = usePlayer((s) => s.currentTime);
@@ -54,14 +55,11 @@ export function SeekBar({ showTimes = false }: { showTimes?: boolean }) {
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onKeyDown={onKeyDown}
-      className="group relative h-1.5 w-full cursor-pointer touch-none rounded-full bg-white/15"
+      className="group relative h-1 w-full cursor-pointer touch-none rounded-full bg-white/20"
     >
+      <div className="absolute inset-y-0 left-0 rounded-full bg-white/70" style={{ width: `${pct}%` }} />
       <div
-        className="absolute inset-y-0 left-0 rounded-full bg-white"
-        style={{ width: `${pct}%` }}
-      />
-      <div
-        className="absolute top-1/2 h-3 w-3 -translate-y-1/2 -translate-x-1/2 rounded-full bg-white opacity-0 shadow transition-opacity duration-150 group-hover:opacity-100"
+        className="absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white opacity-0 shadow transition-opacity group-hover:opacity-100"
         style={{ left: `${pct}%` }}
       />
     </div>
@@ -69,14 +67,16 @@ export function SeekBar({ showTimes = false }: { showTimes?: boolean }) {
 
   if (!showTimes) return bar;
 
+  const remaining = duration > 0 ? Math.max(0, duration - currentTime) : 0;
+
   return (
-    <div className="flex items-center gap-3">
-      <span className="w-10 text-right text-xs tabular-nums text-text-secondary">
+    <div className="flex items-center gap-2">
+      <span className="w-8 text-right text-[11px] tabular-nums text-text-secondary">
         {formatDuration(currentTime)}
       </span>
       {bar}
-      <span className="w-10 text-xs tabular-nums text-text-secondary">
-        {formatDuration(duration)}
+      <span className="w-9 text-[11px] tabular-nums text-text-secondary">
+        {duration > 0 ? `-${formatDuration(remaining)}` : formatDuration(0)}
       </span>
     </div>
   );

@@ -60,7 +60,9 @@ export default async function HomePage() {
 
   return (
     <div className="app-page">
-      {hero && <Hero song={hero} greeting={greeting()} />}
+      {/* Apple Music titles Listen Now with the time-of-day greeting. */}
+      <h1 className="text-h2 font-bold tracking-tight sm:text-h1">{greeting()}</h1>
+      {hero && <Hero song={hero} />}
       {rows.map((row) => (
         <Carousel key={`${row.id}-${row.title}`} row={row} />
       ))}

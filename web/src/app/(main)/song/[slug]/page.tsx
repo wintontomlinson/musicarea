@@ -7,7 +7,7 @@ import { artistLine, entityHref, idFromSlug, pickImage, pickStreamUrl, primaryAr
 import { SITE } from '@/lib/config';
 import { DetailHeader } from '@/components/sections/DetailHeader';
 import { TrackList } from '@/components/sections/TrackList';
-import { PlayButton } from '@/components/player/PlayButton';
+import { PlayPill } from '@/components/player/PlayPill';
 import { JsonLd, breadcrumbLd } from '@/components/seo/JsonLd';
 
 export const revalidate = 600;
@@ -95,21 +95,23 @@ export default async function SongPage({ params }: { params: { slug: string } })
 
       <DetailHeader
         cover={cover}
-        eyebrow="Song"
         title={song.name}
+        eyebrow={
+          artist?.id ? (
+            <Link href={entityHref('artist', artist.name, artist.id)} className="hover:underline">
+              {artistLine(song)}
+            </Link>
+          ) : (
+            artistLine(song)
+          )
+        }
         meta={
           <span>
-            {artist?.id ? (
-              <Link href={entityHref('artist', artist.name, artist.id)} className="font-semibold text-white hover:underline">
-                {artistLine(song)}
-              </Link>
-            ) : (
-              <span className="font-semibold text-white">{artistLine(song)}</span>
-            )}
+            Song
             {song.album?.name && song.album.id && (
               <>
                 {' · '}
-                <Link href={entityHref('album', song.album.name, song.album.id)} className="hover:underline">
+                <Link href={entityHref('album', song.album.name, song.album.id)} className="hover:text-white">
                   {song.album.name}
                 </Link>
               </>
@@ -117,22 +119,12 @@ export default async function SongPage({ params }: { params: { slug: string } })
             {song.year ? ` · ${song.year}` : ''}
           </span>
         }
-        actions={
-          <PlayButton
-            song={song}
-            variant="solid"
-            size={22}
-            className="h-12 w-12"
-            label={`Play ${song.name}`}
-          />
-        }
+        actions={<PlayPill song={song} />}
       />
 
       {moreFromArtist.length > 0 && (
         <section>
-          <h2 className="mb-3 text-h4 font-extrabold tracking-tight">
-            More by {artist?.name}
-          </h2>
+          <h2 className="mb-3 section-title">More by {artist?.name}</h2>
           <TrackList songs={moreFromArtist} />
         </section>
       )}

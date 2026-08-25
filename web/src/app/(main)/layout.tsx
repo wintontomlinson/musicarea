@@ -10,12 +10,14 @@ import { MediaSession } from '@/components/player/MediaSession';
 import { OnboardingGate } from '@/components/onboarding/OnboardingGate';
 
 /**
- * Shared chrome for the primary app views: a fixed sidebar on desktop, a top
- * bar with search, and a bottom tab bar on mobile. The audio engine and player
- * surfaces are mounted here so playback persists across route changes.
+ * Shared chrome for the primary app views, arranged the way Apple Music does:
+ * a grouped sidebar on desktop, a toolbar that also carries playback on
+ * desktop, and a tab bar with a floating mini player on mobile. The audio
+ * engine and player surfaces are mounted here so playback persists across route
+ * changes.
  *
- * Bottom padding clears the mini player (and, on mobile, the tab bar beneath
- * it), so the last row of content is never hidden.
+ * Bottom padding only needs to clear the mobile mini player and tab bar; on
+ * desktop the player sits in the toolbar, so the page just gets normal spacing.
  */
 export default function MainLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -24,7 +26,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         <Sidebar />
         <div className="flex min-w-0 flex-1 flex-col">
           <Topbar />
-          <main className="flex-1 pb-40 lg:pb-28">{children}</main>
+          <main className="flex-1 pb-40 lg:pb-10">{children}</main>
         </div>
         <MobileNav />
 

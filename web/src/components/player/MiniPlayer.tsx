@@ -4,36 +4,83 @@ import Image from 'next/image';
 import { usePlayer } from '@/stores/player';
 import { artistLine, pickImage } from '@/lib/utils';
 import { Icon } from '@/components/ui/Icon';
-import { TransportControls } from './PlayerControls';
-import { SeekBar } from './SeekBar';
-import { VolumeControl } from './VolumeControl';
 
+/**
+ * The iOS Apple Music mini player: a translucent bar that floats directly above
+ * the tab bar with artwork, title and just play/pause plus next. Tapping the
+ * artwork or title opens the full-screen player.
+ *
+ * Mobile only. On desktop the transport, volume and now-playing LCD live in the
+ * top toolbar instead, the way the Mac app arranges them.
+ */
 export function MiniPlayer() {
   const track = usePlayer((state) => state.currentTrack());
+  const isPlaying = usePlayer((state) => state.isPlaying);
+  const isLoading = usePlayer((state) => state.isLoading);
+  const toggle = usePlayer((state) => state.toggle);
+  const next = usePlayer((state) => state.next);
   const setFullscreen = usePlayer((state) => state.setFullscreen);
-  const setQueueOpen = usePlayer((state) => state.setQueueOpen);
-  const queueOpen = usePlayer((state) => state.queueOpen);
+  const currentTime = usePlayer((state) => state.currentTime);
+  const duration = usePlayer((state) => state.duration);
+
   if (!track) return null;
+
   const cover = pickImage(track.image, '150x150');
+  const progress = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0;
+
   return (
-    <div className="fixed inset-x-0 bottom-16 z-40 lg:bottom-0 lg:left-64">
-      <div className="glass-panel border-x-0 border-b-0">
-        <div className="flex items-center gap-3 px-3 py-2.5 sm:px-4">
-          <button type="button" onClick={() => setFullscreen(true)} className="flex min-w-0 flex-1 items-center gap-3 text-left lg:flex-none lg:w-72" aria-label="Open full screen player">
-            <span className="relative h-11 w-11 shrink-0 overflow-hidden rounded"><Image src={cover} alt="" fill sizes="44px" className="object-cover" /></span>
-            <span className="min-w-0"><span className="block truncate text-sm font-semibold">{track.name}</span><span className="block truncate text-xs text-text-secondary">{artistLine(track)}</span></span>
+    <div className="fixed inset-x-0 bottom-[calc(50px+env(safe-area-inset-bottom))] z-40 px-2 lg:hidden">
+      <div className="glass-panel relative overflow-hidden rounded-xl2">
+        <div className="flex items-center gap-3 p-2">
+          <button
+            type="button"
+            onClick={() => setFullscreen(true)}
+            className="flex min-w-0 flex-1 items-center gap-3 text-left"
+            aria-label="Open full screen player"
+          >
+            <span className="relative h-11 w-11 shrink-0 overflow-hidden rounded shadow-lift">
+              <Image src={cover} alt="" fill sizes="44px" className="object-cover" />
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate text-[14px] font-semibold leading-tight">
+                {track.name}
+              </span>
+              <span className="block truncate text-[12px] leading-tight text-text-secondary">
+                {artistLine(track)}
+              </span>
+            </span>
           </button>
-          <div className="hidden flex-1 flex-col items-center gap-1.5 lg:flex"><TransportControls size="mini" /><div className="w-full max-w-xl"><SeekBar showTimes /></div></div>
-          <div className="flex items-center gap-2 lg:w-72 lg:justify-end">
-            <div className="hidden lg:flex lg:items-center lg:gap-3">
-              <button type="button" aria-label="Queue" aria-pressed={queueOpen} onClick={() => setQueueOpen(!queueOpen)} className={queueOpen ? 'text-accent' : 'text-text-secondary transition-colors hover:text-white'}><Icon name="queue" size={20} /></button>
-              <button type="button" aria-label="Full screen player" onClick={() => setFullscreen(true)} className="text-text-secondary transition-colors hover:text-white"><Icon name="expand" size={20} /></button>
-              <VolumeControl />
-            </div>
-            <div className="flex items-center lg:hidden"><TransportControls size="mini" /></div>
-          </div>
+
+          <button
+            type="button"
+            aria-label={isPlaying ? 'Pause' : 'Play'}
+            onClick={toggle}
+            className="grid h-10 w-10 shrink-0 place-items-center text-white"
+          >
+            {isLoading ? (
+              <span
+                className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"
+                aria-hidden="true"
+              />
+            ) : (
+              <Icon name={isPlaying ? 'pause' : 'play'} size={24} />
+            )}
+          </button>
+
+          <button
+            type="button"
+            aria-label="Next"
+            onClick={() => next(false)}
+            className="grid h-10 w-10 shrink-0 place-items-center text-white"
+          >
+            <Icon name="next" size={22} />
+          </button>
         </div>
-        <div className="px-3 pb-2 lg:hidden"><SeekBar /></div>
+
+        {/* Hairline progress along the bottom edge, as iOS shows it. */}
+        <div className="absolute inset-x-0 bottom-0 h-[2px] bg-white/10">
+          <div className="h-full bg-white/60" style={{ width: `${progress}%` }} />
+        </div>
       </div>
     </div>
   );

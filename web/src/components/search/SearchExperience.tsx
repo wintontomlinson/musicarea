@@ -15,10 +15,10 @@ type Tab = 'all' | 'songs' | 'artists' | 'albums' | 'playlists';
 const TABS: Tab[] = ['all', 'songs', 'artists', 'albums', 'playlists'];
 
 /**
- * The full search experience. Before typing it shows the mood grid. While
- * typing it shows an instant suggestions dropdown. On submit it shows tabbed
- * results with a Spotify-style Top Result card. The query is mirrored to the
- * URL (?q=) so results are shareable and the browser history works.
+ * Search, arranged the way Apple Music does it: a rounded search field, category
+ * tiles before you type, an instant suggestion sheet while typing, then results
+ * behind a segmented control. The query is mirrored to the URL (?q=) so results
+ * are shareable and browser history works.
  */
 export function SearchExperience({ moods, initialQuery }: { moods: Mood[]; initialQuery: string }) {
   const router = useRouter();
@@ -34,7 +34,7 @@ export function SearchExperience({ moods, initialQuery }: { moods: Mood[]; initi
   const [loading, setLoading] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
 
-  // Keep local state in sync when the URL query changes (e.g. via top bar).
+  // Keep local state in sync when the URL query changes (e.g. via the top bar).
   useEffect(() => {
     const q = params.get('q') ?? '';
     setInput(q);
@@ -89,7 +89,7 @@ export function SearchExperience({ moods, initialQuery }: { moods: Mood[]; initi
     void loadResults(committed);
   }, [committed, loadResults]);
 
-  // Close the suggestions dropdown on outside click.
+  // Close the suggestion sheet on outside click.
   useEffect(() => {
     function onClick(e: MouseEvent) {
       if (boxRef.current && !boxRef.current.contains(e.target as Node)) setShowSuggest(false);
@@ -107,8 +107,9 @@ export function SearchExperience({ moods, initialQuery }: { moods: Mood[]; initi
 
   return (
     <div className="app-page">
-      {/* Search field with suggestions */}
-      <div ref={boxRef} className="relative mx-auto w-full max-w-2xl">
+      <h1 className="text-h2 font-bold tracking-tight sm:text-h1">Search</h1>
+
+      <div ref={boxRef} className="relative w-full max-w-2xl">
         <form
           role="search"
           onSubmit={(e) => {
@@ -117,28 +118,28 @@ export function SearchExperience({ moods, initialQuery }: { moods: Mood[]; initi
           }}
           className="relative"
         >
-          <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary">
-            <Icon name="search" size={20} />
+          <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-text-secondary">
+            <Icon name="search" size={18} />
           </span>
           <input
             autoFocus
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onFocus={() => suggest && setShowSuggest(true)}
-            placeholder="Songs, artists, albums, playlists"
+            placeholder="Artists, Songs, Lyrics, and More"
             aria-label="Search"
-            className="w-full rounded-full border border-subtle bg-surface py-3.5 pl-12 pr-4 text-base outline-none transition-colors placeholder:text-text-muted focus:border-white/35"
+            className="w-full rounded-lg bg-white/[0.09] py-2.5 pl-11 pr-4 text-[15px] outline-none transition-colors placeholder:text-text-muted focus:bg-white/[0.14]"
           />
         </form>
 
         {showSuggest && suggest && input.trim() && (
-          <SuggestDropdown data={suggest} onPick={() => setShowSuggest(false)} />
+          <SuggestSheet data={suggest} onPick={() => setShowSuggest(false)} />
         )}
       </div>
 
-      {/* Before typing: mood grid. After: results. */}
+      {/* Before typing: category tiles. After: results. */}
       {!committed ? (
-        <MoodGrid moods={moods} heading="Browse by mood" />
+        <MoodGrid moods={moods} heading="Browse Categories" />
       ) : (
         <SearchResults
           query={committed}
@@ -153,44 +154,39 @@ export function SearchExperience({ moods, initialQuery }: { moods: Mood[]; initi
   );
 }
 
-/** Instant suggestions grouped by type, with a highlighted top result. */
-function SuggestDropdown({ data, onPick }: { data: SearchAllData; onPick: () => void }) {
+/** Instant suggestions in a translucent sheet under the field. */
+function SuggestSheet({ data, onPick }: { data: SearchAllData; onPick: () => void }) {
   const top = data.topQuery?.results?.[0];
   const songs = data.songs?.results?.slice(0, 4) ?? [];
   const artists = data.artists?.results?.slice(0, 3) ?? [];
 
   if (!top && !songs.length && !artists.length) return null;
 
+  const rows = top ? [top, ...songs, ...artists] : [...songs, ...artists];
+
   return (
-    <div className="glass-panel absolute z-40 mt-2 w-full overflow-hidden rounded-xl2 p-2 shadow-lift">
-      {top && (
-        <Link
-          href={resultHref(top)}
-          onClick={onPick}
-          className="flex items-center gap-3 rounded-lg p-2 hover:bg-white/5"
-        >
-          <span className="relative h-11 w-11 overflow-hidden rounded">
-            <Image src={resultImage(top)} alt="" fill sizes="44px" className="object-cover" />
-          </span>
-          <span className="min-w-0">
-            <span className="block truncate text-sm font-semibold">{decodeEntities(top.title)}</span>
-            <span className="block truncate text-xs text-text-secondary">{resultSubtitle(top)}</span>
-          </span>
-        </Link>
-      )}
-      {[...songs, ...artists].map((r) => (
+    <div className="glass-panel absolute z-40 mt-2 w-full overflow-hidden rounded-xl2 p-1.5 shadow-lift">
+      {rows.map((r) => (
         <Link
           key={`${r.type}-${r.id}`}
           href={resultHref(r)}
           onClick={onPick}
-          className="flex items-center gap-3 rounded-lg p-2 hover:bg-white/5"
+          className="flex items-center gap-3 rounded-md p-2 transition-colors hover:bg-white/[0.08]"
         >
-          <span className={`relative h-9 w-9 overflow-hidden ${r.type === 'artist' ? 'rounded-full' : 'rounded'}`}>
-            <Image src={resultImage(r)} alt="" fill sizes="36px" className="object-cover" />
+          <span
+            className={`relative h-10 w-10 shrink-0 overflow-hidden ${
+              r.type === 'artist' ? 'rounded-full' : 'rounded'
+            }`}
+          >
+            <Image src={resultImage(r)} alt="" fill sizes="40px" className="object-cover" />
           </span>
           <span className="min-w-0">
-            <span className="block truncate text-sm">{decodeEntities(r.title)}</span>
-            <span className="block truncate text-xs text-text-secondary">{resultSubtitle(r)}</span>
+            <span className="block truncate text-[14px] font-medium leading-tight">
+              {decodeEntities(r.title)}
+            </span>
+            <span className="block truncate text-[13px] leading-tight text-text-secondary">
+              {resultSubtitle(r)}
+            </span>
           </span>
         </Link>
       ))}
@@ -221,43 +217,43 @@ function SearchResults({
 
   return (
     <div>
-      {/* Tabs */}
-      <div role="tablist" className="mb-6 flex gap-2 overflow-x-auto">
-        {TABS.map((t) => (
-          <button
-            key={t}
-            role="tab"
-            aria-selected={tab === t}
-            onClick={() => setTab(t)}
-            className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold capitalize transition-colors duration-150 ${
-              tab === t ? 'bg-white text-black' : 'border border-subtle bg-transparent text-text-secondary hover:bg-white/10 hover:text-white'
-            }`}
-          >
-            {t}
-          </button>
-        ))}
+      {/* Apple's segmented control. */}
+      <div role="tablist" className="no-scrollbar mb-7 flex overflow-x-auto">
+        <div className="segmented">
+          {TABS.map((t) => (
+            <button
+              key={t}
+              role="tab"
+              aria-selected={tab === t}
+              onClick={() => setTab(t)}
+              className={`segmented-item shrink-0 ${tab === t ? 'segmented-item-active' : ''}`}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {loading && <p className="text-sm text-text-secondary">Searching for “{query}”…</p>}
+      {loading && <p className="text-[13px] text-text-secondary">Searching for “{query}”…</p>}
 
       {!loading && (
         <div className="flex flex-col gap-10">
           {(tab === 'all' || tab === 'songs') && (
-            <div className="grid gap-6 lg:grid-cols-[minmax(0,320px)_1fr]">
+            <div className="grid gap-8 lg:grid-cols-[minmax(0,300px)_1fr]">
               {tab === 'all' && top && (
                 <div>
-                  <h2 className="mb-3 text-h5 font-bold">Top Result</h2>
+                  <h2 className="mb-3 section-title">Top Result</h2>
                   <TopResultCard result={top} />
                 </div>
               )}
               <div className={tab === 'all' ? '' : 'lg:col-span-2'}>
-                <div className="mb-3 flex items-center justify-between">
-                  <h2 className="text-h5 font-bold">Songs</h2>
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h2 className="section-title">Songs</h2>
                   {songResults.length > 0 && (
                     <button
                       type="button"
                       onClick={() => playQueue(songResults, 0)}
-                      className="text-sm font-semibold text-accent hover:text-accent-soft"
+                      className="text-[13px] font-medium text-accent transition-colors hover:text-accent-soft"
                     >
                       Play all
                     </button>
@@ -266,7 +262,7 @@ function SearchResults({
                 {songResults.length ? (
                   <TrackList songs={songResults.slice(0, tab === 'all' ? 6 : 30)} />
                 ) : (
-                  <p className="text-sm text-text-secondary">No songs found.</p>
+                  <p className="text-[13px] text-text-secondary">No songs found.</p>
                 )}
               </div>
             </div>
@@ -291,17 +287,23 @@ function TopResultCard({ result }: { result: SearchResult }) {
   return (
     <Link
       href={resultHref(result)}
-      className="premium-panel group block p-5 transition-colors hover:bg-surface-raised"
+      className="surface-card group flex flex-col items-center gap-4 p-6 text-center transition-colors hover:bg-surface-raised"
     >
       <span
-        className={`relative mb-4 block h-24 w-24 overflow-hidden shadow-lift ${
+        className={`relative block h-28 w-28 overflow-hidden shadow-lift ${
           result.type === 'artist' ? 'rounded-full' : 'rounded-card'
         }`}
       >
-        <Image src={resultImage(result)} alt="" fill sizes="96px" className="object-cover" />
+        <Image src={resultImage(result)} alt="" fill sizes="112px" className="object-cover" />
       </span>
-      <p className="truncate text-h4 font-extrabold">{decodeEntities(result.title)}</p>
-      <p className="mt-1 text-sm text-text-secondary">{resultSubtitle(result)}</p>
+      <span className="min-w-0">
+        <span className="block truncate text-[17px] font-semibold">
+          {decodeEntities(result.title)}
+        </span>
+        <span className="mt-0.5 block truncate text-[13px] text-text-secondary">
+          {resultSubtitle(result)}
+        </span>
+      </span>
     </Link>
   );
 }
@@ -317,12 +319,12 @@ function ResultGrid({
 }) {
   return (
     <section>
-      <h2 className="mb-3 text-h5 font-bold">{title}</h2>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+      <h2 className="mb-3 section-title">{title}</h2>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-5">
         {items.map((r) => (
-          <Link key={r.id} href={resultHref(r)} className="group rounded-card p-2 transition-colors hover:bg-white/5">
+          <Link key={r.id} href={resultHref(r)} className="group block">
             <span
-              className={`relative mb-3 block aspect-square overflow-hidden ${
+              className={`relative mb-2 block aspect-square overflow-hidden shadow-lift ${
                 circular ? 'rounded-full' : 'rounded-card'
               }`}
             >
@@ -331,13 +333,21 @@ function ResultGrid({
                 alt=""
                 fill
                 sizes="200px"
-                className="object-cover transition-transform duration-300 group-hover:scale-105"
+                className="object-cover"
               />
             </span>
-            <p className={`truncate text-sm font-semibold ${circular ? 'text-center' : ''}`}>
+            <p
+              className={`truncate text-[14px] font-medium leading-tight ${
+                circular ? 'text-center' : ''
+              }`}
+            >
               {decodeEntities(r.title)}
             </p>
-            <p className={`truncate text-xs text-text-secondary ${circular ? 'text-center' : ''}`}>
+            <p
+              className={`mt-0.5 truncate text-[13px] leading-tight text-text-secondary ${
+                circular ? 'text-center' : ''
+              }`}
+            >
               {resultSubtitle(r)}
             </p>
           </Link>

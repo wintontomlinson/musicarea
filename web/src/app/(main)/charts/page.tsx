@@ -35,7 +35,7 @@ export default async function ChartsPage({ searchParams }: { searchParams: { c?:
 
   if (!charts.length) {
     return (
-      <div className="px-4 sm:px-6">
+      <div className="app-page">
         <EmptyState
           title="Charts are unavailable"
           message="The chart service could not be reached. Please try again shortly."
@@ -68,21 +68,24 @@ export default async function ChartsPage({ searchParams }: { searchParams: { c?:
       />
 
       <div>
-        <h1 className="text-h2 font-extrabold tracking-tight">Charts</h1>
-        <p className="mt-1 text-sm text-text-secondary">
+        <h1 className="text-h2 font-bold tracking-tight sm:text-h1">Charts</h1>
+        <p className="mt-1 text-[15px] text-text-secondary">
           The biggest songs right now, by language and genre.
         </p>
       </div>
 
       {/* Chart selector doubles as the language/genre filter. */}
-      <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
+      <div className="no-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
         {charts.map((c) => (
           <Link
             key={c.id}
             href={`/charts?c=${c.id}`}
             scroll={false}
-            className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-150 ${
-              c.id === selectedId ? 'bg-white text-black' : 'border border-subtle bg-surface text-text-secondary hover:text-white'
+            aria-current={c.id === selectedId ? 'page' : undefined}
+            className={`shrink-0 rounded-lg px-3.5 py-1.5 text-[13px] font-medium transition-colors ${
+              c.id === selectedId
+                ? 'bg-accent/[0.16] text-accent'
+                : 'bg-white/[0.08] text-text-secondary hover:bg-white/[0.14] hover:text-white'
             }`}
           >
             {chartLabel(c)}
@@ -95,21 +98,21 @@ export default async function ChartsPage({ searchParams }: { searchParams: { c?:
         <>
           <div className="flex flex-wrap items-center gap-4">
             <div className="min-w-0">
-              <h2 className="truncate text-h4 font-extrabold tracking-tight">{chartLabel(selected)}</h2>
-              <p className="text-sm text-text-secondary">{songs.length} songs</p>
+              <h2 className="truncate section-title">{chartLabel(selected)}</h2>
+              <p className="mt-0.5 text-[13px] text-text-secondary">{songs.length} songs</p>
             </div>
             <div className="ml-auto">
               <CollectionActions songs={songs} />
             </div>
           </div>
           <ChartList songs={songs} />
-          <p className="text-xs text-text-muted">
+          <p className="text-[12px] text-text-muted">
             Ranked by the chart&rsquo;s own order. Position-change indicators need historical data the
             catalogue does not publish, so movement is not shown.
           </p>
         </>
       ) : (
-        <p className="text-sm text-text-secondary">This chart has no playable tracks right now.</p>
+        <p className="text-[13px] text-text-secondary">This chart has no playable tracks right now.</p>
       )}
     </div>
   );
