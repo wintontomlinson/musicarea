@@ -1,7 +1,7 @@
 import Image from 'next/image';
 import type { Song } from '@/lib/types';
-import { Icon } from '@/components/ui/Icon';
 import { artistLine, pickImage } from '@/lib/utils';
+import { HeroActions } from './HeroActions';
 
 /**
  * Full-width featured banner. The dynamic color wash is derived from the track
@@ -44,22 +44,7 @@ export function Hero({ song, greeting }: { song: Song; greeting: string }) {
           </h1>
           <p className="mt-2 text-h5 text-text-secondary">{artistLine(song)}</p>
 
-          <div className="mt-6 flex flex-wrap gap-3">
-            <button
-              type="button"
-              className="flex items-center gap-2 rounded-full bg-brand px-6 py-3 text-sm font-bold text-white shadow-glow transition-transform duration-150 hover:scale-[1.03]"
-            >
-              <Icon name="play" size={18} />
-              Play Now
-            </button>
-            <button
-              type="button"
-              className="flex items-center gap-2 rounded-full border border-subtle bg-white/5 px-6 py-3 text-sm font-bold text-white transition-colors duration-150 hover:bg-white/10"
-            >
-              <Icon name="plus" size={18} />
-              Add to Library
-            </button>
-          </div>
+          <HeroActions song={song} />
         </div>
       </div>
     </section>

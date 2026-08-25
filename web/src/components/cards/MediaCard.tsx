@@ -3,6 +3,7 @@ import Link from 'next/link';
 import type { CollectionCard, Song } from '@/lib/types';
 import { Icon } from '@/components/ui/Icon';
 import { artistLine, entityHref, isSong, pickImage, primaryArtist } from '@/lib/utils';
+import { PlayButton } from '@/components/player/PlayButton';
 
 /**
  * A single grid/carousel card for a song, album or playlist. Rounded 12px,
@@ -11,7 +12,14 @@ import { artistLine, entityHref, isSong, pickImage, primaryArtist } from '@/lib/
  * arrive in later phases), so a song card links to its primary artist when one
  * exists and is otherwise a static tile; albums and playlists deep-link now.
  */
-export function MediaCard({ item }: { item: Song | CollectionCard }) {
+export function MediaCard({
+  item,
+  context,
+}: {
+  item: Song | CollectionCard;
+  /** Sibling songs from the same shelf, so pressing play queues the row. */
+  context?: Song[];
+}) {
   const cover = pickImage(item.image);
   const song = isSong(item);
   const subtitle = song ? artistLine(item) : subtitleFor(item);
@@ -27,13 +35,20 @@ export function MediaCard({ item }: { item: Song | CollectionCard }) {
           sizes="(max-width: 640px) 45vw, (max-width: 1024px) 30vw, 200px"
           className="object-cover transition-transform duration-300 group-hover:scale-105"
         />
-        <button
-          type="button"
-          aria-label={`Play ${item.name}`}
-          className="absolute bottom-2 right-2 grid h-11 w-11 translate-y-2 place-items-center rounded-full bg-white text-black opacity-0 shadow-lift transition-all duration-150 group-hover:translate-y-0 group-hover:opacity-100"
-        >
-          <Icon name="play" size={18} />
-        </button>
+        {song ? (
+          <PlayButton
+            song={item}
+            list={context}
+            className="absolute bottom-2 right-2 h-11 w-11 translate-y-2 opacity-0 transition-all duration-150 group-hover:translate-y-0 group-hover:opacity-100"
+          />
+        ) : (
+          <span
+            aria-hidden="true"
+            className="absolute bottom-2 right-2 grid h-11 w-11 translate-y-2 place-items-center rounded-full bg-white text-black opacity-0 shadow-lift transition-all duration-150 group-hover:translate-y-0 group-hover:opacity-100"
+          >
+            <Icon name="play" size={18} />
+          </span>
+        )}
       </div>
       <div className="mt-3">
         <p className="truncate text-sm font-semibold">{item.name}</p>
