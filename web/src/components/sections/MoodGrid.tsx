@@ -7,11 +7,11 @@ import type { Mood } from '@/lib/types';
  * the catalogue provided cover art, layers a softened collage beneath the label
  * so the tile reads as a mood rather than a single album.
  */
-export function MoodGrid({ moods }: { moods: Mood[] }) {
+export function MoodGrid({ moods, heading = 'Moods & Genres' }: { moods: Mood[]; heading?: string }) {
   if (!moods?.length) return null;
   return (
     <section className="animate-fade-up">
-      <h2 className="mb-3 text-h4 font-extrabold tracking-tight">Moods &amp; Genres</h2>
+      <h2 className="mb-3 text-h4 font-extrabold tracking-tight">{heading}</h2>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         {moods.map((mood) => (
           <Link
