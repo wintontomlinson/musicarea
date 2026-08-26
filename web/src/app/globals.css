@@ -33,32 +33,32 @@
  * A browser without `@property` support ignores these blocks, keeps the `:root`
  * values below, and simply changes palette instantly.
  */
-@property --accent-rgb { syntax: '<number>+'; inherits: true; initial-value: 255 59 191; }
-@property --accent-soft-rgb { syntax: '<number>+'; inherits: true; initial-value: 255 120 215; }
-@property --accent-mid-rgb { syntax: '<number>+'; inherits: true; initial-value: 168 85 247; }
-@property --accent-alt-rgb { syntax: '<number>+'; inherits: true; initial-value: 77 231 255; }
-@property --on-accent-rgb { syntax: '<number>+'; inherits: true; initial-value: 255 255 255; }
-@property --bg-rgb { syntax: '<number>+'; inherits: true; initial-value: 9 6 19; }
-@property --surface-rgb { syntax: '<number>+'; inherits: true; initial-value: 21 16 38; }
-@property --surface-raised-rgb { syntax: '<number>+'; inherits: true; initial-value: 32 24 58; }
-@property --scrim-rgb { syntax: '<number>+'; inherits: true; initial-value: 8 4 17; }
-@property --text-rgb { syntax: '<number>+'; inherits: true; initial-value: 255 250 255; }
-@property --text-secondary-rgb { syntax: '<number>+'; inherits: true; initial-value: 184 173 210; }
-@property --text-muted-rgb { syntax: '<number>+'; inherits: true; initial-value: 120 109 150; }
+@property --accent-rgb { syntax: '<number>+'; inherits: true; initial-value: 200 200 200; }
+@property --accent-soft-rgb { syntax: '<number>+'; inherits: true; initial-value: 220 220 220; }
+@property --accent-mid-rgb { syntax: '<number>+'; inherits: true; initial-value: 160 160 160; }
+@property --accent-alt-rgb { syntax: '<number>+'; inherits: true; initial-value: 180 180 180; }
+@property --on-accent-rgb { syntax: '<number>+'; inherits: true; initial-value: 10 10 10; }
+@property --bg-rgb { syntax: '<number>+'; inherits: true; initial-value: 10 10 12; }
+@property --surface-rgb { syntax: '<number>+'; inherits: true; initial-value: 20 20 23; }
+@property --surface-raised-rgb { syntax: '<number>+'; inherits: true; initial-value: 30 30 34; }
+@property --scrim-rgb { syntax: '<number>+'; inherits: true; initial-value: 6 6 8; }
+@property --text-rgb { syntax: '<number>+'; inherits: true; initial-value: 245 245 245; }
+@property --text-secondary-rgb { syntax: '<number>+'; inherits: true; initial-value: 160 160 165; }
+@property --text-muted-rgb { syntax: '<number>+'; inherits: true; initial-value: 100 100 105; }
 
 :root {
-  --accent-rgb: 255 59 191;
-  --accent-soft-rgb: 255 120 215;
-  --accent-mid-rgb: 168 85 247;
-  --accent-alt-rgb: 77 231 255;
-  --on-accent-rgb: 255 255 255;
-  --bg-rgb: 9 6 19;
-  --surface-rgb: 21 16 38;
-  --surface-raised-rgb: 32 24 58;
-  --scrim-rgb: 8 4 17;
-  --text-rgb: 255 250 255;
-  --text-secondary-rgb: 184 173 210;
-  --text-muted-rgb: 120 109 150;
+  --accent-rgb: 200 200 200;
+  --accent-soft-rgb: 220 220 220;
+  --accent-mid-rgb: 160 160 160;
+  --accent-alt-rgb: 180 180 180;
+  --on-accent-rgb: 10 10 10;
+  --bg-rgb: 10 10 12;
+  --surface-rgb: 20 20 23;
+  --surface-raised-rgb: 30 30 34;
+  --scrim-rgb: 6 6 8;
+  --text-rgb: 245 245 245;
+  --text-secondary-rgb: 160 160 165;
+  --text-muted-rgb: 100 100 105;
 
   /* Hairlines carry a trace of the palette, so borders read as part of the
      artwork's colour instead of a grey grid laid over it. */

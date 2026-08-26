@@ -40,7 +40,7 @@ export const viewport: Viewport = {
   // visible seam between the browser chrome and the page on mobile. This is only
   // the starting value: `applyPalette` in src/lib/color.ts rewrites this meta tag
   // whenever the artwork palette changes, so the chrome follows the album too.
-  themeColor: '#090613',
+  themeColor: '#0a0a0c',
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',

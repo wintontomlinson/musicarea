@@ -57,24 +57,24 @@ export interface Palette {
 }
 
 /**
- * The static brand palette, and the value every `:root` token starts at. Server
- * rendering and the first paint use these, so the adaptive palette is a fade
- * rather than a flash. Kept as literals rather than generated so the shipped
- * design is exactly reproducible.
+ * Neutral palette used when nothing is playing or the artwork cannot be sampled.
+ * No pink, no purple, no cyan: just a clean monochrome dark surface so the site
+ * looks premium without imposing any colour of its own. Once a track plays, the
+ * album's extracted palette replaces this.
  */
 export const DEFAULT_PALETTE: Palette = {
-  accent: { r: 255, g: 59, b: 191 },
-  accentSoft: { r: 255, g: 120, b: 215 },
-  accentMid: { r: 168, g: 85, b: 247 },
-  accentAlt: { r: 77, g: 231, b: 255 },
-  onAccent: { r: 255, g: 255, b: 255 },
-  bg: { r: 9, g: 6, b: 19 },
-  surface: { r: 21, g: 16, b: 38 },
-  surfaceRaised: { r: 32, g: 24, b: 58 },
-  scrim: { r: 8, g: 4, b: 17 },
-  text: { r: 255, g: 250, b: 255 },
-  textSecondary: { r: 184, g: 173, b: 210 },
-  textMuted: { r: 120, g: 109, b: 150 },
+  accent: { r: 200, g: 200, b: 200 },
+  accentSoft: { r: 220, g: 220, b: 220 },
+  accentMid: { r: 160, g: 160, b: 160 },
+  accentAlt: { r: 180, g: 180, b: 180 },
+  onAccent: { r: 10, g: 10, b: 10 },
+  bg: { r: 10, g: 10, b: 12 },
+  surface: { r: 20, g: 20, b: 23 },
+  surfaceRaised: { r: 30, g: 30, b: 34 },
+  scrim: { r: 6, g: 6, b: 8 },
+  text: { r: 245, g: 245, b: 245 },
+  textSecondary: { r: 160, g: 160, b: 165 },
+  textMuted: { r: 100, g: 100, b: 105 },
 };
 
 /* -------------------------------------------------------------------------- */
