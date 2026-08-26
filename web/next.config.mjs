@@ -11,11 +11,11 @@ const nextConfig = {
       { protocol: 'https', hostname: 'images.unsplash.com' },
     ],
   },
-  // The Flask API base is read at build and request time. Kept here so a single
-  // env var drives every fetch and the value is obvious in one place.
-  env: {
-    NEXT_PUBLIC_APP_NAME: 'MusicArea',
-  },
+  // Note: the Flask API base is NOT configured here. It is read from
+  // `FLASK_API_BASE` inside `src/lib/api.ts` at request time, deliberately
+  // without a `NEXT_PUBLIC_` prefix so the internal service URL never reaches
+  // the browser bundle. Client-side calls go through the route handlers under
+  // `src/app/api/` instead.
 };
 
 export default nextConfig;

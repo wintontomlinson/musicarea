@@ -1,11 +1,7 @@
 import type { Config } from 'tailwindcss';
 
 const config: Config = {
-  content: [
-    './src/app/**/*.{ts,tsx}',
-    './src/components/**/*.{ts,tsx}',
-    './src/lib/**/*.{ts,tsx}',
-  ],
+  content: ['./src/app/**/*.{ts,tsx}', './src/components/**/*.{ts,tsx}'],
   theme: {
     extend: {
       colors: {
@@ -36,12 +32,16 @@ const config: Config = {
         disco: 'radial-gradient(circle at 12% 8%, rgba(255,59,191,0.25), transparent 29%), radial-gradient(circle at 87% 13%, rgba(77,231,255,0.20), transparent 28%), linear-gradient(130deg, #160b2a 0%, #0b0718 50%, #081421 100%)',
       },
       fontFamily: {
+        // Inter first. It used to sit behind -apple-system and SF Pro, which
+        // resolve on every Apple device, so the font `next/font` downloads was
+        // paid for on load and then never rendered for a large share of users.
+        // The system stack stays as the fallback while Inter loads and for the
+        // rare case where it fails.
         sans: [
+          'var(--font-inter)',
           '-apple-system',
           'BlinkMacSystemFont',
-          'SF Pro Display',
           'SF Pro Text',
-          'var(--font-inter)',
           'system-ui',
           'sans-serif',
         ],
@@ -73,20 +73,6 @@ const config: Config = {
       },
       backdropBlur: {
         glass: '24px',
-      },
-      keyframes: {
-        'fade-up': {
-          '0%': { opacity: '0', transform: 'translateY(12px)' },
-          '100%': { opacity: '1', transform: 'translateY(0)' },
-        },
-        float: {
-          '0%, 100%': { transform: 'translate3d(0, 0, 0)' },
-          '50%': { transform: 'translate3d(0, -10px, 0)' },
-        },
-      },
-      animation: {
-        'fade-up': 'fade-up 420ms cubic-bezier(0.22,1,0.36,1) both',
-        float: 'float 5s ease-in-out infinite',
       },
     },
   },

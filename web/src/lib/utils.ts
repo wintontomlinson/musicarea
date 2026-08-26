@@ -68,20 +68,38 @@ export function slugify(text: string): string {
     .slice(0, 60);
 }
 
+/**
+ * The slug and the id are joined with a *double* hyphen.
+ *
+ * `slugify` collapses every run of non-alphanumerics into a single `-` and trims
+ * the ends, so a slug can never contain `--`. That makes the first `--` in the
+ * path segment an unambiguous boundary. A single hyphen would not be: catalogue
+ * ids come straight from upstream and are base64url-style tokens that can
+ * themselves contain `-`, so splitting on the last hyphen silently truncated
+ * those ids and the detail page 404'd.
+ */
+const SLUG_ID_SEPARATOR = '--';
+
 export function entityHref(
   kind: 'song' | 'album' | 'artist' | 'playlist',
   name: string,
   id: string,
 ): string {
+  if (kind === 'playlist') return `/playlist/${encodeURIComponent(id)}`;
   const slug = slugify(name);
-  if (kind === 'playlist') return `/playlist/${id}`;
-  return `/${kind}/${slug ? `${slug}-${id}` : id}`;
+  const segment = slug ? `${slug}${SLUG_ID_SEPARATOR}${id}` : id;
+  return `/${kind}/${encodeURIComponent(segment)}`;
 }
 
-/** Extract the trailing id from a `slug-id` param. */
+/**
+ * Recover the id from a `slug--id` param. Splits on the *first* separator, so an
+ * id containing `--` survives intact. A param with no separator is treated as a
+ * bare id, which is what an entity with no name produces.
+ */
 export function idFromSlug(param: string): string {
-  const match = param.match(/([^-]+)$/);
-  return match ? match[1] : param;
+  const at = param.indexOf(SLUG_ID_SEPARATOR);
+  if (at === -1) return param;
+  return param.slice(at + SLUG_ID_SEPARATOR.length);
 }
 
 export function isSong(item: Song | CollectionCard): item is Song {

@@ -11,10 +11,9 @@ import { preferredLanguages } from '@/lib/languages';
 import { Icon } from '@/components/ui/Icon';
 
 export const metadata: Metadata = { title: `${SITE.name} · Discover and stream music`, description: SITE.description, alternates: { canonical: '/' } };
-export const revalidate = 300;
 
 export default async function HomePage() {
-  const languages = preferredLanguages();
+  const languages = await preferredLanguages();
   const [browseRes, feedRes] = await Promise.allSettled([api.browse(languages), api.feed({ history: [], languages, limit: 12 })]);
   const browse: BrowseData | null = browseRes.status === 'fulfilled' ? browseRes.value : null;
   const feed: FeedData | null = feedRes.status === 'fulfilled' ? feedRes.value : null;

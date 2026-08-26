@@ -20,6 +20,9 @@ const DEFAULT_PREFS: PersistedPrefs = {
   repeat: 'off',
 };
 
+/** Volume restored when unmuting from a slider that was dragged to zero. */
+const FALLBACK_UNMUTE_VOLUME = 0.5;
+
 function loadPrefs(): PersistedPrefs {
   if (typeof window === 'undefined') return DEFAULT_PREFS;
   try {
@@ -64,8 +67,21 @@ export interface PlayerState {
   muted: boolean;
   shuffle: boolean;
   repeat: RepeatMode;
+  /**
+   * Last reported playback position, in seconds. This is a *report* from the
+   * audio engine, never an instruction to it. Ask for a new position with
+   * `seekTo`.
+   */
   currentTime: number;
   duration: number;
+  /**
+   * Incremented on every explicit seek request. The audio engine watches this
+   * counter rather than comparing `currentTime` values, which is what makes a
+   * seek to 0:00 possible and lets a seek land while paused.
+   */
+  seekSeq: number;
+  /** Set when playback gives up, e.g. no track in the queue could be streamed. */
+  playbackError: string | null;
 
   /** True when the full-screen player is open. */
   fullscreen: boolean;
@@ -88,10 +104,13 @@ export interface PlayerState {
   toggleMute: () => void;
   toggleShuffle: () => void;
   cycleRepeat: () => void;
+  /** Engine to store: report where playback actually is. */
   setProgress: (currentTime: number, duration: number) => void;
+  /** UI to engine: ask for a new playback position. */
+  seekTo: (time: number) => void;
+  setPlaybackError: (message: string | null) => void;
   reorderQueue: (fromQueueIndex: number, toQueueIndex: number) => void;
   addToQueue: (song: Song) => void;
-  playNext: (song: Song) => void;
   removeFromQueue: (queueIndex: number) => void;
   clearQueue: () => void;
   setFullscreen: (open: boolean) => void;
@@ -112,6 +131,8 @@ export const usePlayer = create<PlayerState>((set, get) => ({
   repeat: initialPrefs.repeat,
   currentTime: 0,
   duration: 0,
+  seekSeq: 0,
+  playbackError: null,
   fullscreen: false,
   queueOpen: false,
 
@@ -129,7 +150,18 @@ export const usePlayer = create<PlayerState>((set, get) => ({
       ? shuffledOrder(songs.length, start)
       : songs.map((_, i) => i);
     const orderPos = shuffle ? 0 : start;
-    set({ queue: songs, order, orderPos, isPlaying: true, currentTime: 0, duration: 0 });
+    set({
+      queue: songs,
+      order,
+      orderPos,
+      isPlaying: true,
+      currentTime: 0,
+      duration: 0,
+      // Starting a fresh queue clears any previous failure, and clears a stale
+      // spinner left behind by a load that errored mid-flight.
+      isLoading: false,
+      playbackError: null,
+    });
   },
 
   playNow: (song) => {
@@ -142,11 +174,14 @@ export const usePlayer = create<PlayerState>((set, get) => ({
   setLoading: (loading) => set({ isLoading: loading }),
 
   next: (auto = false) => {
-    const { order, orderPos, repeat } = get();
+    const { order, orderPos, repeat, seekSeq } = get();
     if (!order.length) return;
     if (repeat === 'one' && auto) {
-      // Re-trigger the same track by nudging currentTime; engine handles replay.
-      set({ currentTime: 0 });
+      // Replay the same track. This goes through the seek counter rather than
+      // just writing currentTime: a track that ended with its position already
+      // at (or near) zero, such as a very short one or one that failed to
+      // report progress, used to leave the player stuck with nothing playing.
+      set({ currentTime: 0, seekSeq: seekSeq + 1, isPlaying: true });
       return;
     }
     if (orderPos < order.length - 1) {
@@ -160,16 +195,18 @@ export const usePlayer = create<PlayerState>((set, get) => ({
   },
 
   prev: () => {
-    const { orderPos, currentTime } = get();
-    // If more than 3s in, restart the current track (standard behavior).
+    const { orderPos, currentTime, seekSeq } = get();
+    // If more than 3s in, restart the current track (standard behavior). Routed
+    // through the seek counter so it also rewinds the audio while paused,
+    // instead of only moving the label and resuming from the old offset.
     if (currentTime > 3) {
-      set({ currentTime: 0 });
+      set({ currentTime: 0, seekSeq: seekSeq + 1 });
       return;
     }
     if (orderPos > 0) {
       set({ orderPos: orderPos - 1, currentTime: 0, duration: 0, isPlaying: true });
     } else {
-      set({ currentTime: 0 });
+      set({ currentTime: 0, seekSeq: seekSeq + 1 });
     }
   },
 
@@ -181,17 +218,24 @@ export const usePlayer = create<PlayerState>((set, get) => ({
 
   setVolume: (v) => {
     const volume = Math.max(0, Math.min(1, v));
-    const muted = volume === 0 ? get().muted : false;
+    // Dragging the slider to zero is a mute, so the glyph agrees with the
+    // silence. Previously `muted` was left alone at zero, which showed a
+    // "sound on" speaker over a track no one could hear.
+    const muted = volume === 0;
     set({ volume, muted });
     const s = get();
-    savePrefs({ volume, muted: s.muted, shuffle: s.shuffle, repeat: s.repeat });
+    savePrefs({ volume, muted, shuffle: s.shuffle, repeat: s.repeat });
   },
 
   toggleMute: () => {
-    const muted = !get().muted;
-    set({ muted });
+    const { muted: wasMuted, volume } = get();
+    const muted = !wasMuted;
+    // Unmuting a slider sitting at zero has to restore some level, otherwise
+    // the button reports sound is on and nothing is audible.
+    const nextVolume = !muted && volume === 0 ? FALLBACK_UNMUTE_VOLUME : volume;
+    set({ muted, volume: nextVolume });
     const s = get();
-    savePrefs({ volume: s.volume, muted, shuffle: s.shuffle, repeat: s.repeat });
+    savePrefs({ volume: nextVolume, muted, shuffle: s.shuffle, repeat: s.repeat });
   },
 
   toggleShuffle: () => {
@@ -223,6 +267,16 @@ export const usePlayer = create<PlayerState>((set, get) => ({
   },
 
   setProgress: (currentTime, duration) => set({ currentTime, duration }),
+
+  seekTo: (time) => {
+    const { duration, seekSeq } = get();
+    // Clamp into the track. `duration` is 0 until the stream reports it, in
+    // which case only a rewind to the start is meaningful.
+    const target = duration > 0 ? Math.max(0, Math.min(time, duration)) : 0;
+    set({ currentTime: target, seekSeq: seekSeq + 1 });
+  },
+
+  setPlaybackError: (message) => set({ playbackError: message }),
 
   reorderQueue: (fromQueueIndex, toQueueIndex) => {
     const { queue, order, orderPos } = get();
@@ -277,15 +331,6 @@ export const usePlayer = create<PlayerState>((set, get) => ({
     set({ queue: nextQueue, order: [...order, nextQueue.length - 1] });
   },
 
-  playNext: (song) => {
-    const { queue, order, orderPos } = get();
-    const nextQueue = [...queue, song];
-    const newQueueIndex = nextQueue.length - 1;
-    const newOrder = [...order];
-    newOrder.splice(orderPos + 1, 0, newQueueIndex);
-    set({ queue: nextQueue, order: newOrder });
-  },
-
   removeFromQueue: (queueIndex) => {
     const { queue, order, orderPos } = get();
     if (queueIndex < 0 || queueIndex >= queue.length) return;
@@ -298,7 +343,13 @@ export const usePlayer = create<PlayerState>((set, get) => ({
     const newCurrentQueueIndex =
       currentQueueIndex > queueIndex ? currentQueueIndex - 1 : currentQueueIndex;
     const newOrderPos = newOrder.indexOf(newCurrentQueueIndex);
-    set({ queue: nextQueue, order: newOrder, orderPos: Math.max(0, newOrderPos) });
+    // If the playing track somehow fell out of the order, stay where we are
+    // rather than silently jumping the listener back to the first track.
+    set({
+      queue: nextQueue,
+      order: newOrder,
+      orderPos: newOrderPos === -1 ? orderPos : newOrderPos,
+    });
   },
 
   clearQueue: () => {

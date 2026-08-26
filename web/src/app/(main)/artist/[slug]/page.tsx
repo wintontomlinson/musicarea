@@ -3,7 +3,9 @@ import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { api } from '@/lib/api';
+import { loadEntity } from '@/lib/entity';
 import type { Artist, CollectionCard } from '@/lib/types';
+import { EntityUnavailable, unavailableMetadata } from '@/components/ui/EntityUnavailable';
 import { entityHref, formatCount, idFromSlug, pickImage } from '@/lib/utils';
 import { SITE } from '@/lib/config';
 import { TrackList } from '@/components/sections/TrackList';
@@ -14,28 +16,39 @@ import { Icon } from '@/components/ui/Icon';
 
 export const revalidate = 600;
 
-async function getArtist(slug: string): Promise<Artist | null> {
-  try {
-    const artist = await api.artist(idFromSlug(slug));
-    return artist?.id ? artist : null;
-  } catch {
-    return null;
-  }
+function getArtist(slug: string) {
+  return loadEntity(
+    () => api.artist(idFromSlug(slug)),
+    (artist): artist is Artist => !!artist?.id,
+  );
 }
 
+/**
+ * The bio arrives either as a plain string or as an array of sections, and is
+ * often absent. Flattened to a single line and trimmed to a length a search
+ * result will actually display.
+ */
 function bioText(bio: Artist['bio']): string | undefined {
   if (!bio) return undefined;
-  if (typeof bio === 'string') return bio;
-  return bio.map((b) => b.text).filter(Boolean).join(' ');
+  const raw = typeof bio === 'string' ? bio : bio.map((b) => b.text).filter(Boolean).join(' ');
+  const text = raw.replace(/\s+/g, ' ').trim();
+  if (!text) return undefined;
+  return text.length > 200 ? `${text.slice(0, 197).trimEnd()}…` : text;
 }
 
-export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
-  const artist = await getArtist(params.slug);
-  if (!artist) return { title: 'Artist not found' };
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const result = await getArtist((await params).slug);
+  if (result.status === 'unavailable') return unavailableMetadata('artist');
+  if (result.status === 'missing') return { title: 'Artist not found', robots: { index: false } };
+  const artist = result.data;
   const cover = pickImage(artist.image, '500x500');
   const title = artist.name;
   const listeners = artist.followerCount ? `${formatCount(artist.followerCount)} followers. ` : '';
-  const description = `${title} on ${SITE.name}. ${listeners}Listen to top songs, albums and singles.`;
+  // Prefer the catalogue's own biography: it describes the artist, where the
+  // generic line only describes the page. Falls back when there is no bio.
+  const description =
+    bioText(artist.bio) ??
+    `${title} on ${SITE.name}. ${listeners}Listen to top songs, albums and singles.`;
   return {
     title,
     description,
@@ -50,9 +63,11 @@ export async function generateMetadata({ params }: { params: { slug: string } })
   };
 }
 
-export default async function ArtistPage({ params }: { params: { slug: string } }) {
-  const artist = await getArtist(params.slug);
-  if (!artist) notFound();
+export default async function ArtistPage({ params }: { params: Promise<{ slug: string }> }) {
+  const result = await getArtist((await params).slug);
+  if (result.status === 'unavailable') return <EntityUnavailable kind="artist" />;
+  if (result.status === 'missing') notFound();
+  const artist = result.data;
 
   const cover = pickImage(artist.image, '500x500');
   const topSongs = artist.topSongs ?? [];

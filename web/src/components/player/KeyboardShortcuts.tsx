@@ -32,7 +32,11 @@ export function KeyboardShortcuts() {
       }
 
       const s = usePlayer.getState();
-      if (!s.currentTrack() && e.key !== ' ') return;
+      // With nothing queued there is nothing to control, so leave every key to
+      // the browser. Space in particular must keep scrolling the page: it used
+      // to be let through and flipped the store into a "playing" state with an
+      // empty queue, which left a pause glyph on screen with no audio.
+      if (!s.currentTrack()) return;
 
       const key = e.key.toLowerCase();
       switch (e.key) {
@@ -43,12 +47,12 @@ export function KeyboardShortcuts() {
         case 'ArrowRight':
           e.preventDefault();
           if (e.shiftKey) s.next(false);
-          else s.setProgress(Math.min(s.duration, s.currentTime + 5), s.duration);
+          else s.seekTo(s.currentTime + 5);
           break;
         case 'ArrowLeft':
           e.preventDefault();
           if (e.shiftKey) s.prev();
-          else s.setProgress(Math.max(0, s.currentTime - 5), s.duration);
+          else s.seekTo(s.currentTime - 5);
           break;
         case 'ArrowUp':
           e.preventDefault();
@@ -59,14 +63,20 @@ export function KeyboardShortcuts() {
           s.setVolume(Math.max(0, s.volume - 0.05));
           break;
         default:
+          // Matched case-insensitively so Shift and Caps Lock do not break the
+          // letter shortcuts, and each one claims the key so it cannot also
+          // trigger a browser default or a focused control.
           if (key === 'k') {
             e.preventDefault();
             s.toggle();
           } else if (key === 'm') {
+            e.preventDefault();
             s.toggleMute();
           } else if (key === 's') {
+            e.preventDefault();
             s.toggleShuffle();
           } else if (key === 'r') {
+            e.preventDefault();
             s.cycleRepeat();
           }
       }

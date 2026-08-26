@@ -7,8 +7,34 @@ to Pritam", "Plays well with Kesariya") and a full breakdown of the signals that
 produced its score. The listening profile is built and stored in the browser, so
 there is no sign up and no account.
 
-Flask backend, vanilla JavaScript frontend, no build step. Catalog data comes
-from the JioSaavn public endpoints.
+Catalog data comes from the JioSaavn public endpoints.
+
+## Two frontends
+
+The repository contains two complete frontends over one API, and it is worth
+being plain about the state of that:
+
+| | Legacy | Next.js |
+| --- | --- | --- |
+| Location | `templates/`, `static/` | `web/` |
+| Stack | Flask-rendered shell, vanilla JS, no build step | Next 16 App Router, React 19, TypeScript, Tailwind |
+| Served at | `/` by `app.py` | its own Vercel project |
+| In `vercel.json`? | yes, with a catch-all route | no |
+
+**`vercel.json` deploys only the Flask app**, so a deploy from this repository
+serves the legacy frontend at every path and the Next app is not published at
+all. The Next app is a presentation layer: it holds no catalogue logic and reads
+the same `/api/*` routes documented below.
+
+The two are not at parity. The legacy frontend still owns crossfade, the Web
+Audio visualizer, generated mixes, lyrics, station/radio surfaces and the "Why
+this" signal breakdown; the rest of this README describes it. The Next app covers
+browse, search, the catalogue pages, the player, favourites and recently played,
+and adds server rendering and per-page SEO. Consolidating on one of them is an
+open decision, not a finished migration.
+
+Everything below applies to the API and the recommendation engine, which both
+frontends share. See `web/README.md` for the Next app.
 
 ## Running locally
 
@@ -34,9 +60,10 @@ Verification scripts:
 | `catalog.py` | Normalized, cached read layer over the upstream endpoints |
 | `models.py` | Upstream payload to clean JSON |
 | `helpers.py` | Stream URL decryption, TTL cache, HTTP session |
-| `templates/index.html` | App shell |
-| `static/css/app.css` | Design system |
-| `static/js/app.js` | Router, views, store, player |
+| `templates/index.html` | App shell (legacy frontend) |
+| `static/css/app.css` | Design system (legacy frontend) |
+| `static/js/app.js` | Router, views, store, player (legacy frontend) |
+| `web/` | The Next.js frontend, documented in `web/README.md` |
 
 ## How the recommendation algorithm works
 
@@ -483,7 +510,12 @@ illegibility.
 ## Deploying
 
 Push to a repository connected to Vercel. `vercel.json` builds `app.py` with
-`@vercel/python` and bundles `templates/` and `static/`.
+`@vercel/python` and bundles `templates/` and `static/`, and routes every path to
+it. That serves the API and the legacy frontend together.
+
+The Next.js app in `web/` is not covered by that config. Publishing it needs its
+own Vercel project rooted at `web/`, with `FLASK_API_BASE` pointing at this
+deployment and `NEXT_PUBLIC_SITE_URL` at its own domain.
 
 The upstream API is geo-sensitive: radio and station endpoints only respond to
 Indian IPs, which is why relatedness is derived from playlist co-occurrence

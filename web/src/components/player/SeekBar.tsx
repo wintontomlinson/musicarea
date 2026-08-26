@@ -13,7 +13,7 @@ import { formatDuration } from '@/lib/utils';
 export function SeekBar({ showTimes = false }: { showTimes?: boolean }) {
   const currentTime = usePlayer((s) => s.currentTime);
   const duration = usePlayer((s) => s.duration);
-  const setProgress = usePlayer((s) => s.setProgress);
+  const seekTo = usePlayer((s) => s.seekTo);
   const trackRef = useRef<HTMLDivElement>(null);
 
   const pct = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0;
@@ -23,7 +23,7 @@ export function SeekBar({ showTimes = false }: { showTimes?: boolean }) {
     if (!el || duration <= 0) return;
     const rect = el.getBoundingClientRect();
     const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    setProgress(ratio * duration, duration);
+    seekTo(ratio * duration);
   }
 
   function onPointerDown(e: React.PointerEvent) {
@@ -36,11 +36,12 @@ export function SeekBar({ showTimes = false }: { showTimes?: boolean }) {
 
   function onKeyDown(e: React.KeyboardEvent) {
     if (duration <= 0) return;
-    if (e.key === 'ArrowRight') {
-      setProgress(Math.min(duration, currentTime + 5), duration);
-    } else if (e.key === 'ArrowLeft') {
-      setProgress(Math.max(0, currentTime - 5), duration);
-    }
+    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+    // The global shortcut handler also seeks on the arrow keys. Without stopping
+    // propagation here both fire and one press moves 10 seconds instead of 5.
+    e.preventDefault();
+    e.stopPropagation();
+    seekTo(e.key === 'ArrowRight' ? currentTime + 5 : currentTime - 5);
   }
 
   const bar = (

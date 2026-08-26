@@ -1,8 +1,15 @@
 import type { Metadata } from 'next';
-import { CollectionNotice } from '@/components/library/CollectionNotice';
+import { CollectionExperience } from '@/components/library/CollectionExperience';
 
 export const metadata: Metadata = { title: 'Recent listening', robots: { index: false } };
 
 export default function RecentPage() {
-  return <CollectionNotice kind="Recent listening" icon="clock" detail="A simple record of your last plays belongs here. MusicArea does not persist listening history yet, so it does not fabricate a recent activity list." />;
+  return (
+    <CollectionExperience
+      kind="Recent listening"
+      icon="clock"
+      source="recent"
+      intro="The last tracks you played, newest first, kept on this device. Clearing it does not affect your favourites."
+    />
+  );
 }

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 
 /**
  * Proxy for full song search results (with stream URLs), used by the Songs tab
@@ -11,7 +11,11 @@ export async function GET(req: Request) {
   try {
     const data = await api.searchSongs(query, 30);
     return NextResponse.json(data);
-  } catch {
-    return NextResponse.json({ error: 'Search failed' }, { status: 502 });
+  } catch (err) {
+    // Distinguish "the catalogue is unreachable" from "the catalogue said no",
+    // so the client can tell the listener something specific instead of
+    // reporting every failure as an empty result set.
+    const status = err instanceof ApiError && err.status === 503 ? 503 : 502;
+    return NextResponse.json({ error: 'Search failed' }, { status });
   }
 }

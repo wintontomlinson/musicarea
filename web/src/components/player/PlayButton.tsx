@@ -10,7 +10,6 @@ interface PlayButtonProps {
   list?: Song[];
   className?: string;
   size?: number;
-  variant?: 'overlay' | 'solid';
   label?: string;
 }
 
@@ -19,14 +18,7 @@ interface PlayButtonProps {
  * it reflects and toggles playback; otherwise it starts it (in the given list
  * context when provided, else as a single-track queue).
  */
-export function PlayButton({
-  song,
-  list,
-  className = '',
-  size = 18,
-  variant = 'overlay',
-  label,
-}: PlayButtonProps) {
+export function PlayButton({ song, list, className = '', size = 18, label }: PlayButtonProps) {
   const currentId = usePlayer((s) => s.currentTrack()?.id);
   const isPlaying = usePlayer((s) => s.isPlaying);
   const toggle = usePlayer((s) => s.toggle);
@@ -51,8 +43,9 @@ export function PlayButton({
     }
   }
 
-  // Both variants use the same white pill: it reads on artwork and on surfaces,
-  // and keeps the interface colourless.
+  // One white pill everywhere: it reads on artwork and on surfaces alike. There
+  // used to be a `variant` prop offering "overlay" and "solid", but both
+  // branches produced this same class list and no caller ever passed it.
   const base = 'grid place-items-center rounded-full bg-white text-black shadow-lift';
 
   return (

@@ -9,19 +9,22 @@ import type {
   MoodSet,
   Playlist,
   SearchAllData,
+  SearchResult,
   Song,
 } from './types';
 
 /**
- * Single source of truth for talking to the MusicArea Flask API. Server
- * components call these directly (server-to-server), so the base URL points at
- * the internal Flask service. A public fallback lets client code proxy through
- * the same value when needed.
+ * Single source of truth for talking to the MusicArea Flask API.
+ *
+ * Server-only by design. Every call here runs on the server (from a server
+ * component or a route handler under `src/app/api/`), so the base URL points at
+ * the internal Flask service and is read from a variable without a
+ * `NEXT_PUBLIC_` prefix, keeping it out of the browser bundle. There was a
+ * `NEXT_PUBLIC_FLASK_API_BASE` fallback here that no environment ever set and
+ * that could only have worked by exposing the internal host to the client, where
+ * Flask sends no CORS headers anyway.
  */
-const API_BASE =
-  process.env.FLASK_API_BASE ||
-  process.env.NEXT_PUBLIC_FLASK_API_BASE ||
-  'http://127.0.0.1:5000';
+const API_BASE = process.env.FLASK_API_BASE || 'http://127.0.0.1:5000';
 
 interface FetchOptions {
   /** ISR revalidation window in seconds. Catalogue data is cacheable. */
@@ -92,10 +95,11 @@ export const api = {
     return call<FeedData>('/api/feed', { body: payload });
   },
 
-  searchAll(query: string): Promise<SearchAllData> {
-    return call<SearchAllData>(`/api/search?query=${encodeURIComponent(query)}`, {
+  async searchAll(query: string): Promise<SearchAllData> {
+    const data = await call<SearchAllData>(`/api/search?query=${encodeURIComponent(query)}`, {
       revalidate: 120,
     });
+    return normalizeSearchAll(data);
   },
 
   async searchSongs(query: string, limit = 30): Promise<Song[]> {
@@ -146,4 +150,44 @@ export const api = {
   },
 };
 
-export { ApiError, API_BASE };
+/**
+ * Search is the one endpoint whose rows are assembled from loosely typed
+ * upstream payloads, so `title` and `type` can come back null. `SearchResult`
+ * declares both as required, and every consumer trusts that: a null title threw
+ * from `decodeEntities` and a null type threw from `resultSubtitle`, taking the
+ * whole results page down.
+ *
+ * Rather than make the type nullable and push a guard into each of the six
+ * render sites, the data is cleaned once here, at the boundary where it enters
+ * the app. Rows without a usable id or type are dropped, since neither a link
+ * nor a card can be built from them.
+ */
+function normalizeSearchAll(data: SearchAllData | null | undefined): SearchAllData {
+  if (!data) return {};
+  const sections: Array<keyof SearchAllData> = [
+    'topQuery',
+    'songs',
+    'albums',
+    'artists',
+    'playlists',
+  ];
+  const out: SearchAllData = {};
+  for (const key of sections) {
+    const results = data[key]?.results;
+    if (!Array.isArray(results)) continue;
+    out[key] = { results: results.filter(isUsableResult).map(cleanResult) };
+  }
+  return out;
+}
+
+const RESULT_TYPES = new Set(['song', 'album', 'artist', 'playlist']);
+
+function isUsableResult(row: SearchResult | null | undefined): row is SearchResult {
+  return !!row && typeof row.id === 'string' && !!row.id && RESULT_TYPES.has(row.type);
+}
+
+function cleanResult(row: SearchResult): SearchResult {
+  return { ...row, title: typeof row.title === 'string' ? row.title : '' };
+}
+
+export { ApiError };
