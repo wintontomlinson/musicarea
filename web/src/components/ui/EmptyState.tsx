@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-/** A friendly full-width state for errors and empty results. */
+/** A centred state for errors and empty results. */
 export function EmptyState({
   title,
   message,
@@ -13,15 +13,11 @@ export function EmptyState({
   ctaLabel?: string;
 }) {
   return (
-    <div className="glass mx-auto my-16 flex max-w-md flex-col items-center rounded-xl2 p-10 text-center">
-      <div className="mb-4 h-14 w-14 rounded-full bg-brand-soft" />
-      <h2 className="text-h4 font-extrabold">{title}</h2>
-      <p className="mt-2 text-sm text-text-secondary">{message}</p>
+    <div className="mx-auto my-20 flex max-w-sm flex-col items-center text-center">
+      <h2 className="text-h4 font-bold tracking-tight">{title}</h2>
+      <p className="mt-2 text-[15px] leading-relaxed text-text-secondary">{message}</p>
       {ctaHref && ctaLabel && (
-        <Link
-          href={ctaHref}
-          className="mt-6 rounded-full bg-brand px-6 py-2.5 text-sm font-bold text-white shadow-glow"
-        >
+        <Link href={ctaHref} className="button-primary mt-6">
           {ctaLabel}
         </Link>
       )}

@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
-import { ComingSoon } from '@/components/ui/ComingSoon';
+import { CollectionNotice } from '@/components/library/CollectionNotice';
 
-export const metadata: Metadata = { title: 'Recently Played', robots: { index: false } };
+export const metadata: Metadata = { title: 'Recent listening', robots: { index: false } };
 
 export default function RecentPage() {
-  return <ComingSoon page="Recently Played" />;
+  return <CollectionNotice kind="Recent listening" icon="clock" detail="A simple record of your last plays belongs here. MusicArea does not persist listening history yet, so it does not fabricate a recent activity list." />;
 }

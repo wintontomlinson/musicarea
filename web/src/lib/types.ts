@@ -96,6 +96,12 @@ export interface Mood {
   keyword?: string;
 }
 
+export interface MoodSet {
+  mood: Mood | null;
+  items: Song[];
+  meta?: { personalised?: boolean; pool?: number; returned?: number };
+}
+
 export interface BrowseData {
   rows: Row[];
   moods: Mood[];
@@ -124,12 +130,81 @@ export interface FeedData {
   candidates: number;
 }
 
+/**
+ * Search-all (autocomplete) results use a lighter, differently-keyed shape than
+ * the catalogue: `title` instead of `name`, no stream URLs, and a flat
+ * `primaryArtists` string. These are for suggestions and result cards; playing
+ * one requires resolving full song details first.
+ */
+export interface SearchResult {
+  id: string;
+  title: string;
+  type: 'song' | 'album' | 'artist' | 'playlist';
+  image?: QualityUrl[];
+  description?: string;
+  primaryArtists?: string;
+  singers?: string;
+  album?: { id?: string; name?: string } | string;
+  position?: number;
+}
+
 export interface SearchAllData {
-  topQuery?: string[];
-  songs?: { results: Song[] };
-  albums?: { results: CollectionCard[] };
-  artists?: { results: ArtistRef[] };
-  playlists?: { results: CollectionCard[] };
+  topQuery?: { results: SearchResult[] };
+  songs?: { results: SearchResult[] };
+  albums?: { results: SearchResult[] };
+  artists?: { results: SearchResult[] };
+  playlists?: { results: SearchResult[] };
+}
+
+export interface Album extends CollectionCard {
+  description?: string;
+  playCount?: number | null;
+  artists?: SongArtists;
+  songs: Song[];
+}
+
+export interface Playlist {
+  id: string;
+  name: string;
+  type: 'playlist';
+  image?: QualityUrl[];
+  description?: string;
+  songCount?: number | null;
+  followerCount?: number | null;
+  playCount?: number | null;
+  language?: string;
+  year?: string | number | null;
+  songs: Song[];
+}
+
+export interface Artist {
+  id: string;
+  name: string;
+  type: 'artist';
+  image?: QualityUrl[];
+  bio?: Array<{ title?: string; text?: string; sequence?: number }> | string | null;
+  followerCount?: number | null;
+  fanCount?: number | null;
+  isVerified?: boolean;
+  dominantLanguage?: string;
+  dominantType?: string;
+  subtitle?: string;
+  topSongs?: Song[];
+  topAlbums?: CollectionCard[];
+  singles?: CollectionCard[];
+  similarArtists?: ArtistRef[] | null;
+}
+
+/** A chart is an editorial playlist card; opening it yields the ranked songs. */
+export interface ChartCard {
+  id: string;
+  name?: string;
+  title?: string;
+  type: 'playlist';
+  image?: QualityUrl[];
+  subtitle?: string;
+  songCount?: number | null;
+  language?: string;
 }
 
 /** Envelope every Flask endpoint wraps its payload in. */

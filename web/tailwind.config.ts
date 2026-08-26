@@ -1,10 +1,5 @@
 import type { Config } from 'tailwindcss';
 
-/**
- * Design tokens from the product spec. The palette is dark-first: near-black
- * backgrounds, layered surfaces, a coral-pink brand accent and a deep purple
- * secondary, with a coral-to-purple gradient as the signature.
- */
 const config: Config = {
   content: [
     './src/app/**/*.{ts,tsx}',
@@ -14,71 +9,84 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        bg: '#0A0A0A',
+        bg: '#090613',
         surface: {
-          DEFAULT: '#111111',
-          raised: '#1A1A1A',
+          DEFAULT: '#151026',
+          raised: '#20183a',
         },
         accent: {
-          DEFAULT: '#FF4D6D', // coral-pink brand
-          soft: '#FF7A93',
+          DEFAULT: '#ff3bbf',
+          soft: '#ff78d7',
         },
         secondary: {
-          DEFAULT: '#7B2FBE', // deep purple
+          DEFAULT: '#b8add2',
         },
         text: {
-          DEFAULT: '#FFFFFF',
-          secondary: '#A0A0A0',
-          muted: '#555555',
+          DEFAULT: '#fffaff',
+          secondary: '#b8add2',
+          muted: '#786d96',
         },
       },
       borderColor: {
-        subtle: 'rgba(255,255,255,0.06)',
+        subtle: 'rgba(255,255,255,0.12)',
       },
       backgroundImage: {
-        brand: 'linear-gradient(135deg, #FF4D6D 0%, #7B2FBE 100%)',
-        'brand-soft': 'linear-gradient(135deg, rgba(255,77,109,0.16), rgba(123,47,190,0.16))',
+        brand: 'linear-gradient(110deg, #ff3bbf 0%, #a855f7 48%, #4de7ff 100%)',
+        'brand-soft': 'linear-gradient(110deg, rgba(255,59,191,0.20), rgba(168,85,247,0.18), rgba(77,231,255,0.16))',
+        disco: 'radial-gradient(circle at 12% 8%, rgba(255,59,191,0.25), transparent 29%), radial-gradient(circle at 87% 13%, rgba(77,231,255,0.20), transparent 28%), linear-gradient(130deg, #160b2a 0%, #0b0718 50%, #081421 100%)',
       },
       fontFamily: {
-        sans: ['var(--font-inter)', 'system-ui', 'sans-serif'],
+        sans: [
+          '-apple-system',
+          'BlinkMacSystemFont',
+          'SF Pro Display',
+          'SF Pro Text',
+          'var(--font-inter)',
+          'system-ui',
+          'sans-serif',
+        ],
       },
       fontSize: {
-        // Heading scale from the spec.
-        h1: ['48px', { lineHeight: '1.2', letterSpacing: '-0.02em' }],
-        h2: ['36px', { lineHeight: '1.2', letterSpacing: '-0.02em' }],
-        h3: ['28px', { lineHeight: '1.2', letterSpacing: '-0.01em' }],
-        h4: ['22px', { lineHeight: '1.25' }],
-        h5: ['18px', { lineHeight: '1.3' }],
-        h6: ['14px', { lineHeight: '1.4' }],
+        h1: ['46px', { lineHeight: '1.02', letterSpacing: '-0.045em' }],
+        h2: ['33px', { lineHeight: '1.08', letterSpacing: '-0.035em' }],
+        h3: ['25px', { lineHeight: '1.15', letterSpacing: '-0.025em' }],
+        h4: ['21px', { lineHeight: '1.25', letterSpacing: '-0.02em' }],
+        h5: ['17px', { lineHeight: '1.3', letterSpacing: '-0.012em' }],
+        h6: ['13px', { lineHeight: '1.4' }],
       },
       spacing: {
-        // 8px base unit scale.
         18: '72px',
         22: '88px',
         30: '120px',
       },
       borderRadius: {
-        card: '12px',
-        xl2: '20px',
+        card: '16px',
+        xl2: '24px',
       },
       boxShadow: {
-        lift: '0 18px 40px -18px rgba(0,0,0,0.7)',
-        glow: '0 0 60px -12px rgba(255,77,109,0.5)',
+        lift: '0 18px 42px -22px rgba(0,0,0,0.9)',
+        glow: '0 14px 36px -14px rgba(255,59,191,0.55)',
+        cyan: '0 14px 34px -15px rgba(77,231,255,0.55)',
       },
       transitionTimingFunction: {
-        smooth: 'cubic-bezier(0.4, 0, 0.2, 1)',
+        smooth: 'cubic-bezier(0.22, 1, 0.36, 1)',
       },
       backdropBlur: {
-        glass: '20px',
+        glass: '24px',
       },
       keyframes: {
         'fade-up': {
-          '0%': { opacity: '0', transform: 'translateY(10px)' },
+          '0%': { opacity: '0', transform: 'translateY(12px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        float: {
+          '0%, 100%': { transform: 'translate3d(0, 0, 0)' },
+          '50%': { transform: 'translate3d(0, -10px, 0)' },
         },
       },
       animation: {
-        'fade-up': 'fade-up 340ms cubic-bezier(0.4,0,0.2,1) both',
+        'fade-up': 'fade-up 420ms cubic-bezier(0.22,1,0.36,1) both',
+        float: 'float 5s ease-in-out infinite',
       },
     },
   },
