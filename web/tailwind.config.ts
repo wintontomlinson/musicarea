@@ -9,31 +9,29 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        bg: '#090613',
+        bg: '#0D0B13',
         surface: {
-          DEFAULT: '#151026',
-          raised: '#20183a',
+          DEFAULT: '#17141F',
+          raised: '#211D2A',
         },
         accent: {
-          DEFAULT: '#ff3bbf',
-          soft: '#ff78d7',
+          DEFAULT: '#D950A5',
+          soft: '#E477BF',
         },
         secondary: {
-          DEFAULT: '#b8add2',
+          DEFAULT: '#B7B0C0',
         },
         text: {
-          DEFAULT: '#fffaff',
-          secondary: '#b8add2',
-          muted: '#786d96',
+          DEFAULT: '#FFFAFF',
+          secondary: '#B7B0C0',
+          muted: '#7C7488',
         },
       },
       borderColor: {
         subtle: 'rgba(255,255,255,0.12)',
       },
       backgroundImage: {
-        brand: 'linear-gradient(110deg, #ff3bbf 0%, #a855f7 48%, #4de7ff 100%)',
-        'brand-soft': 'linear-gradient(110deg, rgba(255,59,191,0.20), rgba(168,85,247,0.18), rgba(77,231,255,0.16))',
-        disco: 'radial-gradient(circle at 12% 8%, rgba(255,59,191,0.25), transparent 29%), radial-gradient(circle at 87% 13%, rgba(77,231,255,0.20), transparent 28%), linear-gradient(130deg, #160b2a 0%, #0b0718 50%, #081421 100%)',
+        brand: 'linear-gradient(135deg, #D950A5, #C14995)',
       },
       fontFamily: {
         sans: [

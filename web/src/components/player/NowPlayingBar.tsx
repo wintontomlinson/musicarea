@@ -27,7 +27,7 @@ export function NowPlayingBar() {
   const cover = pickImage(track.image, '150x150');
 
   return (
-    <div className="hidden h-14 flex-1 items-center gap-3 rounded-xl border border-fuchsia-300/15 bg-fuchsia-400/[0.05] px-2 lg:flex">
+      <div className="hidden h-14 flex-1 items-center gap-3 rounded-lg border border-white/10 bg-white/[0.04] px-2 lg:flex">
       <button
         type="button"
         onClick={() => setFullscreen(true)}
