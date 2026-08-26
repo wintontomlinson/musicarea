@@ -8,6 +8,7 @@ import { MoodGrid } from '@/components/sections/MoodGrid';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { SITE } from '@/lib/config';
 import { preferredLanguages } from '@/lib/languages';
+import { LanguagePreferenceLink } from '@/components/preferences/LanguagePreferenceLink';
 
 export const metadata: Metadata = {
   title: `${SITE.name} · Discover and stream music`,
@@ -42,6 +43,7 @@ export default async function HomePage() {
         <p className="text-[14px] text-text-secondary">{greeting()}</p>
         <h1 className="mt-1 text-h2 font-extrabold tracking-[-0.04em] sm:text-h1">Listen now</h1>
         <p className="mt-2 max-w-xl text-[14px] leading-relaxed text-text-secondary">New picks from the languages you selected. Start a song to build a listening queue.</p>
+        <LanguagePreferenceLink />
       </section>
       {hero && <Hero song={hero} />}
       {rows.map((row) => <Carousel key={`${row.id}-${row.title}`} row={row} />)}
