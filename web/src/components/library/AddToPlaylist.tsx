@@ -13,6 +13,27 @@ import { Icon } from '@/components/ui/Icon';
  * ignored. A name field at the bottom creates a new playlist seeded with the
  * track, which is the common case for the first one.
  */
+/**
+ * A sheet on phones, an anchored popover from `sm` up.
+ *
+ * Anchored to the right of a track row, a fixed 240px panel does not fit beside
+ * the controls that follow it: at 320px it was pushed 21px past the left edge of
+ * the screen and the playlist names were clipped off. Escaping to a fixed sheet
+ * also gives each row a full-width hit area, which is the better shape for a
+ * thumb. It sits above the mini player and the tab bar, matching PlaybackAlert.
+ *
+ * Opaque rather than `glass-panel`. A menu laid over a dense track list has to be
+ * readable on its own terms, and a translucent one leans entirely on
+ * `backdrop-filter`, which is both the most expensive thing to composite here and
+ * the first thing a browser drops. The queue panel is near-opaque for the same
+ * reason.
+ */
+const SHEET =
+  'fixed inset-x-3 bottom-[calc(120px+env(safe-area-inset-bottom))] z-50 ' +
+  'overflow-hidden rounded-xl2 border border-fuchsia-300/25 bg-[#150c26] p-2 text-left ' +
+  'shadow-[0_18px_50px_-20px_rgba(0,0,0,.95)] backdrop-blur-xl ' +
+  'sm:absolute sm:inset-x-auto sm:bottom-auto sm:right-0 sm:mt-2 sm:w-60';
+
 export function AddToPlaylist({ song, className = '' }: { song: Song; className?: string }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
@@ -83,11 +104,7 @@ export function AddToPlaylist({ song, className = '' }: { song: Song; className?
       </button>
 
       {open && (
-        <div
-          role="dialog"
-          aria-label="Add to playlist"
-          className="glass-panel absolute right-0 z-50 mt-2 w-60 overflow-hidden rounded-xl2 border border-fuchsia-300/20 p-2 text-left shadow-glow"
-        >
+        <div role="dialog" aria-label="Add to playlist" className={SHEET}>
           <p className="px-2 pb-1.5 pt-1 text-[11px] font-bold uppercase tracking-[0.08em] text-text-muted">
             Add to playlist
           </p>

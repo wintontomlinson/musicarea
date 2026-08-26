@@ -32,9 +32,17 @@ export function Topbar() {
           <NavButton label="Go forward" icon="chevronRight" onClick={() => router.forward()} />
         </div>
 
-        <div className="hidden items-center gap-2 xl:flex">
+        {/* Transport from `lg`, which is where the mobile mini player stops.
+            Both used to appear only at `xl`, leaving everything from 1024px to
+            1279px with a now-playing plate and a seek bar but no way to pause:
+            the mini player was already hidden and the toolbar controls had not
+            arrived yet. Volume stays at `xl`, since it is the one control here
+            that has a hardware equivalent and the narrower toolbar needs room. */}
+        <div className="hidden shrink-0 items-center gap-2 lg:flex">
           <TransportControls size="mini" />
-          <VolumeControl />
+          <span className="hidden xl:flex">
+            <VolumeControl />
+          </span>
         </div>
 
         <NowPlayingBar />

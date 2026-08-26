@@ -100,6 +100,18 @@ export function AudioEngine() {
   const rampRef = useRef<number | null>(null);
   const loadTicketRef = useRef([0, 0]);
   const failuresRef = useRef(0);
+  /**
+   * The track the engine considers current, set synchronously.
+   *
+   * Deliberately not derived from the active deck. A deck only exists after its
+   * stream URL has been resolved, which is asynchronous, so between the decision
+   * to load and the deck appearing there is a window where the engine looks idle.
+   * Any store write in that window (and `hardLoad` itself writes `setLoading`)
+   * re-entered the subscription, which saw no deck, concluded the track had
+   * changed again, and called `hardLoad` once more: unbounded synchronous
+   * recursion that overflowed the stack the moment a track actually loaded.
+   */
+  const engineIdRef = useRef<string | null>(null);
   /** Position to restore once a reloaded source reports its duration. */
   const resumeAtRef = useRef<number | null>(null);
   /** Song id currently being preloaded onto the idle deck, to avoid duplicate work. */
@@ -437,6 +449,7 @@ export function AudioEngine() {
       }
 
       activeRef.current = toSlot;
+      engineIdRef.current = to.songId;
       to.retiring = false;
       to.howl.volume(0);
       if (!to.howl.playing()) to.howl.play();
@@ -521,6 +534,9 @@ export function AudioEngine() {
 
     /** Replace whatever is playing with this track, with no buffer to blend into. */
     async function hardLoad(song: Song | null, opts: { sameTrack?: boolean } = {}) {
+      // Claim the track before touching the store. Everything below can notify
+      // subscribers, and this engine is one of them.
+      engineIdRef.current = song?.id ?? null;
       cancelBlend();
       stopTicker();
 
@@ -570,11 +586,10 @@ export function AudioEngine() {
       const track = state.currentTrack();
       const active = activeDeck();
 
-      if (track?.id !== active?.songId) {
-        // The handover already put this track on the active deck; nothing to do
-        // but let it play.
-        if (track && active && active.songId === track.id) return;
-
+      // Compared against the engine's own claim, not against the active deck, so
+      // that a store write during an in-flight load is not mistaken for a new
+      // track. See `engineIdRef`.
+      if ((track?.id ?? null) !== engineIdRef.current) {
         const incoming = idleDeck();
         if (track && incoming && incoming.songId === track.id && !incoming.retiring) {
           // Buffered but not yet sounding, which is a skip into a preloaded
@@ -640,6 +655,7 @@ export function AudioEngine() {
       destroyDeck(1);
       activeRef.current = 0;
       preloadingRef.current = null;
+      engineIdRef.current = null;
     };
   }, []);
 

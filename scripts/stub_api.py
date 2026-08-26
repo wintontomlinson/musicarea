@@ -33,6 +33,32 @@ PORT = 5099
 RECEIVED = {"feed": None, "mixes": None}
 
 
+def silent_wav(seconds=30, rate=8000):
+    """A valid, playable WAV of silence.
+
+    Built by hand rather than shipped as a binary so this file stays readable and
+    self-contained. Serving real audio is what lets the player be driven end to
+    end: with an unreachable URL the engine correctly treats every track as
+    unplayable and there is nothing to test.
+    """
+    frames = rate * seconds
+    data_size = frames  # 8-bit mono
+    header = b"RIFF" + (36 + data_size).to_bytes(4, "little") + b"WAVE"
+    header += b"fmt " + (16).to_bytes(4, "little")
+    header += (1).to_bytes(2, "little")       # PCM
+    header += (1).to_bytes(2, "little")       # mono
+    header += rate.to_bytes(4, "little")
+    header += rate.to_bytes(4, "little")      # byte rate
+    header += (1).to_bytes(2, "little")       # block align
+    header += (8).to_bytes(2, "little")       # bits per sample
+    header += b"data" + data_size.to_bytes(4, "little")
+    # 128 is the zero point for unsigned 8-bit PCM.
+    return header + bytes([128]) * data_size
+
+
+SILENCE = silent_wav()
+
+
 def song(i, name, artist_id, artist_name, language="hindi", year="2022"):
     return {
         "id": f"song{i}",
@@ -53,9 +79,13 @@ def song(i, name, artist_id, artist_name, language="hindi", year="2022"):
             {"quality": "150x150", "url": "https://c.saavncdn.com/x-150x150.jpg"},
             {"quality": "500x500", "url": "https://c.saavncdn.com/x-500x500.jpg"},
         ],
+        # Point at this server's own /media endpoint rather than the real CDN, so
+        # playback actually succeeds offline. An unreachable stream sends the
+        # engine into its skip-and-retry path, which makes the player impossible
+        # to exercise (and, in a headless browser, tends to kill the tab).
         "downloadUrl": [
-            {"quality": "96kbps", "url": "https://aac.saavncdn.com/x_96.mp4"},
-            {"quality": "320kbps", "url": "https://aac.saavncdn.com/x_320.mp4"},
+            {"quality": "96kbps", "url": f"http://127.0.0.1:{PORT}/media/silence.wav"},
+            {"quality": "320kbps", "url": f"http://127.0.0.1:{PORT}/media/silence.wav"},
         ],
     }
 
@@ -211,8 +241,22 @@ class Handler(BaseHTTPRequestHandler):
     def err(self, message, status):
         self._send({"success": False, "message": message}, status)
 
+    def _send_media(self):
+        """Serve the silence clip, with the CORS header the visualizer probes for."""
+        self.send_response(200)
+        self.send_header("Content-Type", "audio/wav")
+        self.send_header("Content-Length", str(len(SILENCE)))
+        self.send_header("Accept-Ranges", "none")
+        # Present so the visualizer's cross-origin check passes and the analyser
+        # path gets exercised too.
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(SILENCE)
+
     def do_GET(self):
         path = self.path.split("?")[0]
+        if path.startswith("/media/"):
+            return self._send_media()
         if path == "/api/browse":
             return self.ok(browse())
         if path == "/api/charts":

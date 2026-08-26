@@ -33,9 +33,11 @@ export function TasteMeter({ profile }: { profile: FeedProfile | null }) {
 
   return (
     <div className="rounded-card border border-white/10 bg-white/[0.03] p-4">
-      <div className="flex items-baseline justify-between gap-3">
+      {/* Wraps as whole items rather than breaking the stat mid-phrase, which on a
+          360px screen left "signals" orphaned on its own line. */}
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <p className="section-kicker">Your taste profile</p>
-        <p className="text-[12px] tabular-nums text-text-secondary">
+        <p className="whitespace-nowrap text-[12px] tabular-nums text-text-secondary">
           {signals ? `${pct}% from ${signals} ${signals === 1 ? 'signal' : 'signals'}` : 'Listening to learn'}
         </p>
       </div>

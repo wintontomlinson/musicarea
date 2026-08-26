@@ -8,6 +8,17 @@ import { usePlayer } from '@/stores/player';
 import { FALLBACK_COVER, pickImage } from '@/lib/utils';
 import { Icon } from '@/components/ui/Icon';
 
+/**
+ * `grid-cols-1` is load bearing here.
+ *
+ * Without an explicit column track, the implicit one is sized to max-content, and
+ * a grid item's default `min-width: auto` means it will not shrink below that. A
+ * long playlist name therefore pushed every card out to 511px and overflowed the
+ * page at each phone width. Tailwind's column utilities resolve to
+ * `minmax(0, 1fr)`, which can shrink, so naming the single-column case fixes it.
+ */
+const PLAYLIST_GRID = 'grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3';
+
 /** The listener's playlists, with a way to start a new one. */
 export function PlaylistsPanel() {
   const hydrate = usePlaylists((s) => s.hydrate);
@@ -74,7 +85,7 @@ export function PlaylistsPanel() {
           </p>
         </div>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className={PLAYLIST_GRID}>
           {playlists.map((p) => {
             // A four-cover collage of the playlist's own contents says more than
             // a generic icon; it is what the playlist actually sounds like.
