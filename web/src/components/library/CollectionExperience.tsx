@@ -83,7 +83,7 @@ export function CollectionExperience({
         </section>
       ) : (
         <section className="premium-panel mx-auto flex w-full max-w-2xl flex-col items-center p-8 text-center sm:p-12">
-          <span className="grid h-16 w-16 place-items-center rounded-full bg-fuchsia-400/10 text-accent-soft ring-1 ring-fuchsia-300/30">
+          <span className="grid h-16 w-16 place-items-center rounded-full bg-accent/10 text-accent-soft ring-1 ring-accent/30">
             <Icon name={icon} size={27} />
           </span>
           <h2 className="mt-5 text-h4 font-extrabold">

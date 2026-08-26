@@ -31,9 +31,9 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-white/10 bg-[#0b0717]/80 px-3 py-4 backdrop-blur-xl lg:flex">
+    <aside className="chrome-panel sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-white/10 px-3 py-4 lg:flex">
       <Link href="/" className="mb-8 flex items-center gap-3 px-2" aria-label={`${SITE.name} home`}>
-        <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand text-white shadow-glow">
+        <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand text-on-accent shadow-glow">
           <Icon name="disc" size={20} />
         </span>
         <span className="text-[20px] font-extrabold tracking-[-0.05em]">{SITE.name}</span>
@@ -49,7 +49,7 @@ export function Sidebar() {
         {LIBRARY.map((item) => <NavLink key={item.href} item={item} active={item.match(pathname)} />)}
       </nav>
 
-      <div className="mt-7 rounded-card border border-fuchsia-300/15 bg-gradient-to-br from-fuchsia-500/15 via-violet-500/10 to-cyan-400/10 p-3">
+      <div className="mt-7 rounded-card border border-accent/15 bg-brand-soft p-3">
         <span className="section-kicker">Tonight&apos;s vibe</span>
         <p className="mt-1 text-[13px] font-semibold leading-snug text-white">Discover a new sound, then let the queue take over.</p>
         <Link href="/explore" className="mt-3 inline-flex items-center gap-1 text-[12px] font-bold text-accent-soft hover:text-white">
@@ -87,7 +87,7 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
       href={item.href}
       aria-current={active ? 'page' : undefined}
       className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-[14px] font-semibold transition ${
-        active ? 'bg-brand text-white shadow-glow' : 'text-text-secondary hover:bg-white/[0.07] hover:text-white'
+        active ? 'bg-brand text-on-accent shadow-glow' : 'text-text-secondary hover:bg-white/[0.07] hover:text-white'
       }`}
     >
       <Icon name={item.icon} size={18} className="shrink-0" />

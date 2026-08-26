@@ -165,7 +165,7 @@ export function SearchExperience({ moods, initialQuery }: { moods: Mood[]; initi
             onFocus={() => suggest && setShowSuggest(true)}
             placeholder="Artists, Songs, Lyrics, and More"
             aria-label="Search"
-            className="w-full rounded-xl border border-white/15 bg-[#160d29]/80 py-3.5 pl-11 pr-4 text-[15px] font-medium outline-none transition placeholder:text-text-muted focus:border-fuchsia-300/60 focus:bg-[#1c1031] focus:shadow-glow"
+            className="w-full rounded-xl border border-white/15 bg-surface-raised/80 py-3.5 pl-11 pr-4 text-[15px] font-medium outline-none transition placeholder:text-text-muted focus:border-accent/60 focus:bg-surface-raised focus:shadow-glow"
           />
         </form>
 
@@ -203,7 +203,7 @@ function SuggestSheet({ data, onPick }: { data: SearchAllData; onPick: () => voi
   const rows = top ? [top, ...songs, ...artists] : [...songs, ...artists];
 
   return (
-    <div className="glass-panel absolute z-40 mt-2 w-full overflow-hidden rounded-xl2 border border-fuchsia-300/20 p-1.5 shadow-glow">
+    <div className="glass-panel absolute z-40 mt-2 w-full overflow-hidden rounded-xl2 border border-accent/20 p-1.5 shadow-glow">
       {rows.map((r) => (
         <Link
           key={`${r.type}-${r.id}`}
@@ -337,7 +337,7 @@ function TopResultCard({ result }: { result: SearchResult }) {
   return (
     <Link
       href={resultHref(result)}
-      className="surface-card group flex flex-col items-center gap-4 p-6 text-center transition duration-300 hover:-translate-y-1 hover:border-fuchsia-300/35 hover:bg-surface-raised hover:shadow-glow"
+      className="surface-card group flex flex-col items-center gap-4 p-6 text-center transition duration-300 hover:-translate-y-1 hover:border-accent/35 hover:bg-surface-raised hover:shadow-glow"
     >
       <span
         className={`relative block h-28 w-28 overflow-hidden shadow-lift ${

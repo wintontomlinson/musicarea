@@ -26,7 +26,7 @@ export function DetailHeader({
   return (
     <header className="flex flex-col items-center gap-6 text-center sm:flex-row sm:items-start sm:text-left">
       <div
-        className={`relative aspect-square w-44 shrink-0 overflow-hidden border border-white/15 shadow-[0_22px_50px_-20px_rgba(255,59,191,.42)] sm:w-56 lg:w-64 ${
+        className={`relative aspect-square w-44 shrink-0 overflow-hidden border border-white/15 shadow-[0_22px_50px_-20px_rgb(var(--accent-rgb)/.42)] sm:w-56 lg:w-64 ${
           circular ? 'rounded-full' : 'rounded-xl2'
         }`}
       >

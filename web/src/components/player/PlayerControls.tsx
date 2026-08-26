@@ -53,13 +53,13 @@ export function TransportControls({ size = 'mini' }: { size?: 'mini' | 'full' })
         type="button"
         aria-label={isPlaying ? 'Pause' : 'Play'}
         onClick={toggle}
-        className={`grid place-items-center rounded-full bg-brand text-white shadow-glow transition hover:scale-105 active:scale-95 ${
+        className={`grid place-items-center rounded-full bg-brand text-on-accent shadow-glow transition hover:scale-105 active:scale-95 ${
           big ? 'h-16 w-16' : 'h-9 w-9'
         }`}
       >
         {isLoading ? (
           <span
-            className={`animate-spin rounded-full border-2 border-white/30 border-t-white ${
+            className={`animate-spin rounded-full border-2 border-on-accent/30 border-t-on-accent ${
               big ? 'h-7 w-7' : 'h-4 w-4'
             }`}
             aria-hidden="true"

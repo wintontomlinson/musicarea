@@ -89,7 +89,10 @@ export default async function ChartsPage({ searchParams }: { searchParams: Promi
             aria-current={c.id === selectedId ? 'page' : undefined}
             className={`shrink-0 rounded-lg px-3.5 py-1.5 text-[13px] font-medium transition-colors ${
               c.id === selectedId
-                ? 'bg-accent/[0.16] text-accent'
+                // Not `text-accent`: the fill behind it is the same token now, so
+                // the two would track one hue and only the alpha would separate
+                // them. The soft variant is a lifted version of the same colour.
+                ? 'bg-accent/[0.16] text-accent-soft'
                 : 'bg-white/[0.08] text-text-secondary hover:bg-white/[0.14] hover:text-white'
             }`}
           >

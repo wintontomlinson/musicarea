@@ -30,7 +30,7 @@ export function ChartList({ songs }: { songs: Song[] }) {
           <div
             key={`${song.id}-${i}`}
             className={`group grid grid-cols-[28px_44px_1fr_auto] items-center gap-3 rounded-xl border border-transparent px-2 py-2.5 transition-colors sm:grid-cols-[34px_48px_1fr_auto_auto] ${
-              isCurrent ? 'border-fuchsia-300/20 bg-fuchsia-400/[0.09]' : 'hover:bg-white/[0.06]'
+              isCurrent ? 'row-active' : 'hover:bg-white/[0.06]'
             }`}
           >
             {/* Rank */}

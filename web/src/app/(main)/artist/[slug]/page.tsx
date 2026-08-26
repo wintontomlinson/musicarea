@@ -13,6 +13,7 @@ import { CollectionActions } from '@/components/player/CollectionActions';
 import { Carousel } from '@/components/sections/Carousel';
 import { JsonLd, breadcrumbLd } from '@/components/seo/JsonLd';
 import { Icon } from '@/components/ui/Icon';
+import { ThemeCover } from '@/components/theme/ThemeCover';
 
 export const revalidate = 600;
 
@@ -95,6 +96,7 @@ export default async function ArtistPage({ params }: { params: Promise<{ slug: s
 
   return (
     <div className="flex flex-col gap-9 pb-8">
+      <ThemeCover cover={cover} />
       <JsonLd data={groupLd} />
       <JsonLd
         data={breadcrumbLd([
@@ -106,7 +108,9 @@ export default async function ArtistPage({ params }: { params: Promise<{ slug: s
       {/* Full-bleed banner, as Apple Music heads an artist page. */}
       <header className="relative flex min-h-[300px] items-end overflow-hidden sm:min-h-[400px]">
         <Image src={cover} alt="" fill priority sizes="100vw" className="object-cover" />
-        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/55 to-black/20" />
+        {/* Tinted rather than flat black, so the banner fades into the page the
+            artwork is already colouring instead of cutting a grey hole in it. */}
+        <div className="absolute inset-0 bg-gradient-to-t from-scrim via-scrim/60 to-scrim/15" />
         <div className="relative mx-auto flex w-full max-w-[1600px] flex-col gap-3 px-4 pb-7 sm:px-8 lg:px-10">
           {artist.isVerified && (
             <span className="flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-[0.06em] text-accent">

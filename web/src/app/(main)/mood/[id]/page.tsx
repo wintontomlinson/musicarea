@@ -8,6 +8,8 @@ import { CollectionActions } from '@/components/player/CollectionActions';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { EntityUnavailable, unavailableMetadata } from '@/components/ui/EntityUnavailable';
 import { Icon } from '@/components/ui/Icon';
+import { ThemeCover } from '@/components/theme/ThemeCover';
+import { pickImage } from '@/lib/utils';
 
 export const revalidate = 300;
 
@@ -41,8 +43,13 @@ export default async function MoodPage({ params }: { params: Promise<{ id: strin
   if (result.status === 'missing') notFound();
   const set = result.data;
 
+  // A mood has no sleeve of its own, so its own cover art is used when the
+  // catalogue supplies one and the opening track stands in for it otherwise.
+  const themeCover = set.mood.image || (set.items[0] ? pickImage(set.items[0].image) : null);
+
   return (
     <div className="app-page">
+      {themeCover && <ThemeCover cover={themeCover} />}
       <section className="disco-panel p-6 sm:p-8">
         <p className="section-kicker">Mood station</p>
         <h1 className="mt-2 text-h2 font-extrabold tracking-[-0.04em] sm:text-h1">

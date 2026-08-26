@@ -11,6 +11,7 @@ import { DetailHeader } from '@/components/sections/DetailHeader';
 import { TrackList } from '@/components/sections/TrackList';
 import { CollectionActions } from '@/components/player/CollectionActions';
 import { JsonLd, breadcrumbLd } from '@/components/seo/JsonLd';
+import { ThemeCover } from '@/components/theme/ThemeCover';
 
 export const revalidate = 600;
 
@@ -81,6 +82,8 @@ export default async function AlbumPage({ params }: { params: Promise<{ slug: st
 
   return (
     <div className="app-page">
+      {/* Colour the whole site from this sleeve while the page is open. */}
+      <ThemeCover cover={cover} />
       <JsonLd data={albumLd} />
       <JsonLd
         data={breadcrumbLd([

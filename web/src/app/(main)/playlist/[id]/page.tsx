@@ -10,6 +10,7 @@ import { DetailHeader } from '@/components/sections/DetailHeader';
 import { TrackList } from '@/components/sections/TrackList';
 import { CollectionActions } from '@/components/player/CollectionActions';
 import { JsonLd, breadcrumbLd } from '@/components/seo/JsonLd';
+import { ThemeCover } from '@/components/theme/ThemeCover';
 
 export const revalidate = 600;
 
@@ -55,6 +56,7 @@ export default async function PlaylistPage({ params }: { params: Promise<{ id: s
 
   return (
     <div className="app-page">
+      <ThemeCover cover={cover} />
       <JsonLd
         data={{
           '@context': 'https://schema.org',

@@ -19,7 +19,7 @@ export function NowPlayingBar() {
   if (!track) {
     return (
       <div className="hidden h-14 flex-1 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] lg:flex">
-        <span className="inline-flex items-center gap-2 text-[12px] font-semibold text-text-muted"><span className="h-1.5 w-1.5 rounded-full bg-fuchsia-400" />Choose a track to begin</span>
+        <span className="inline-flex items-center gap-2 text-[12px] font-semibold text-text-muted"><span className="h-1.5 w-1.5 rounded-full bg-accent" />Choose a track to begin</span>
       </div>
     );
   }
@@ -27,7 +27,7 @@ export function NowPlayingBar() {
   const cover = pickImage(track.image, '150x150');
 
   return (
-    <div className="hidden h-14 flex-1 items-center gap-3 rounded-xl border border-fuchsia-300/15 bg-fuchsia-400/[0.05] px-2 lg:flex">
+    <div className="hidden h-14 flex-1 items-center gap-3 rounded-xl border border-accent/15 bg-accent/[0.05] px-2 lg:flex">
       <button
         type="button"
         onClick={() => setFullscreen(true)}

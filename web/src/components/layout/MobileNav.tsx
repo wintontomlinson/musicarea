@@ -15,7 +15,7 @@ const ITEMS: Array<{ href: string; label: string; icon: IconName; match: (path: 
 export function MobileNav() {
   const pathname = usePathname();
   return (
-    <nav aria-label="Tabs" className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-white/10 bg-[#110b20]/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden">
+    <nav aria-label="Tabs" className="chrome-panel fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-white/10 pb-[env(safe-area-inset-bottom)] [--chrome-alpha:0.9] lg:hidden">
       {ITEMS.map((item) => {
         const active = item.match(pathname);
         return <Link key={item.href} href={item.href} aria-current={active ? 'page' : undefined} className={`relative flex min-h-[55px] flex-col items-center justify-center gap-1 text-[10px] font-bold transition ${active ? 'text-accent-soft' : 'text-text-muted'}`}>

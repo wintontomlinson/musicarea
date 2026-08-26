@@ -11,6 +11,7 @@ import { DetailHeader } from '@/components/sections/DetailHeader';
 import { TrackList } from '@/components/sections/TrackList';
 import { PlayPill } from '@/components/player/PlayPill';
 import { JsonLd, breadcrumbLd } from '@/components/seo/JsonLd';
+import { ThemeCover } from '@/components/theme/ThemeCover';
 
 export const revalidate = 600;
 
@@ -88,6 +89,7 @@ export default async function SongPage({ params }: { params: Promise<{ slug: str
 
   return (
     <div className="app-page">
+      <ThemeCover cover={cover} />
       <JsonLd data={recordingLd} />
       <JsonLd
         data={breadcrumbLd([
