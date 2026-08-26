@@ -4,10 +4,13 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AVATARS, LANGUAGES } from '@/lib/config';
 import { useUser } from '@/stores/user';
-import { usePlayer } from '@/stores/player';
+import { usePlayer, MAX_CROSSFADE } from '@/stores/player';
 import { useHistory } from '@/stores/history';
 import { resetPersonalised } from '@/lib/personalised';
 import { QUALITY_LABELS, STREAM_QUALITIES } from '@/lib/utils';
+
+/** Mirrors PRELOAD_LEAD_SECONDS in the audio engine, for the copy below. */
+const PRELOAD_LEAD_HINT = 15;
 import { Avatar } from '@/components/ui/Avatar';
 import { Icon, type IconName } from '@/components/ui/Icon';
 
@@ -30,6 +33,8 @@ export function SettingsExperience() {
   const toggleAutoplay = usePlayer((state) => state.toggleAutoplay);
   const quality = usePlayer((state) => state.quality);
   const setQuality = usePlayer((state) => state.setQuality);
+  const crossfade = usePlayer((state) => state.crossfade);
+  const setCrossfade = usePlayer((state) => state.setCrossfade);
   const activeQuality = usePlayer((state) => state.activeQuality);
   const activeSteppedDown = usePlayer((state) => state.activeSteppedDown);
   const hydrateHistory = useHistory((state) => state.hydrate);
@@ -68,6 +73,7 @@ export function SettingsExperience() {
         <section className="premium-panel p-5"><p className="section-kicker mb-1">Streaming</p><h2 className="section-title">Audio quality</h2><div className="mt-4 space-y-2">{STREAM_QUALITIES.map((rung) => { const active = quality === rung; const info = QUALITY_LABELS[rung]; return <button key={rung} type="button" aria-pressed={active} onClick={() => setQuality(rung)} className={`flex w-full items-center gap-3 rounded-card border p-3 text-left transition ${active ? 'border-fuchsia-300/35 bg-fuchsia-500/10' : 'border-white/10 bg-black/15 hover:bg-white/[0.06]'}`}><span className={`grid h-9 w-9 shrink-0 place-items-center rounded-full text-[11px] font-bold tabular-nums ${active ? 'bg-brand text-white' : 'bg-white/[0.08] text-text-secondary'}`}>{rung.replace('kbps', '')}</span><span className="min-w-0"><span className="block text-[13px] font-bold">{info.label}</span><span className="mt-0.5 block text-[11px] leading-relaxed text-text-secondary">{info.detail}</span></span>{active && <Icon name="check" size={16} className="ml-auto shrink-0 text-accent-soft" />}</button>; })}</div>
           <p className="mt-4 text-[12px] leading-relaxed text-text-secondary">{activeQuality ? <>Currently playing at <span className="font-bold text-white">{activeQuality}</span>{activeSteppedDown && <> because this track does not offer {quality}</>}.</> : 'Start a track to see the rung in use.'}</p>
           <p className="mt-2 text-[12px] leading-relaxed text-text-muted">There is no lossless tier to offer. The catalogue publishes five rungs, all AAC in an MP4 container, so 320 kbps is a real ceiling rather than a setting. If a track is missing your choice, it steps down for that track only rather than failing.</p></section>
+        <section className="premium-panel p-5"><p className="section-kicker mb-1">Between tracks</p><h2 className="section-title">Crossfade</h2><div className="mt-4 flex items-baseline justify-between text-[13px]"><span className="font-semibold">{crossfade === 0 ? 'Off' : `${crossfade} seconds`}</span><button type="button" onClick={() => setCrossfade(crossfade === 0 ? 6 : 0)} className="text-[12px] font-bold text-accent-soft hover:text-white">{crossfade === 0 ? 'Turn on' : 'Turn off'}</button></div><input aria-label="Crossfade seconds" type="range" min={0} max={MAX_CROSSFADE} step={1} value={crossfade} onChange={(event) => setCrossfade(Number(event.target.value))} className="mt-2 h-1.5 w-full cursor-pointer accent-fuchsia-400" /><p className="mt-3 text-[12px] leading-relaxed text-text-secondary">The next track is buffered about {PRELOAD_LEAD_HINT} seconds ahead and the outgoing one falls away under it on an equal-power curve, so the blend does not dip in the middle.</p><p className="mt-2 text-[12px] leading-relaxed text-text-muted">Off is still gapless. The changeover becomes a 60ms blend into that same buffer, which is inaudible but means playback never stalls waiting for the next track. Crossfade is skipped while Repeat one is on, and a manual skip uses a shorter blend so the button still feels immediate.</p></section>
         <section className="premium-panel p-5"><p className="section-kicker mb-1">Recommendations</p><h2 className="section-title">Listening history</h2><p className="mt-2 text-[12px] leading-relaxed text-text-secondary">Your plays, likes and skips are kept on this device and sent with each request so the recommender can rank for you. It keeps no account and stores nothing server side, so this log is the whole profile.</p><p className="mt-3 text-[13px] font-semibold">{historyCount ? `${historyCount} ${historyCount === 1 ? 'event' : 'events'} recorded` : 'No listening recorded yet'}</p>{historyCount > 0 && <button type="button" onClick={clearListeningHistory} className="mt-3 text-[13px] font-bold text-accent-soft hover:text-white">Clear listening history</button>}</section>
         <section className="rounded-xl2 border border-fuchsia-300/15 bg-fuchsia-500/[0.06] p-5"><h2 className="text-[15px] font-extrabold">Local storage notice</h2><p className="mt-2 text-[12px] leading-relaxed text-text-secondary">Profile and language choices use local browser storage. Player preferences, favourites and listening history are stored separately on this device.</p><button type="button" onClick={resetLocalProfile} className="mt-4 text-[13px] font-bold text-accent-soft hover:text-white">Reset local profile</button></section></aside></div></div>;
 }

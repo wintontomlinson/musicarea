@@ -15,7 +15,11 @@ interface PersistedPrefs {
   repeat: RepeatMode;
   autoplay: boolean;
   quality: StreamQuality;
+  crossfade: number;
 }
+
+/** Bounds for the crossfade setting, in seconds. */
+export const MAX_CROSSFADE = 12;
 
 const PREFS_KEY = 'musicarea:prefs:v1';
 const DEFAULT_PREFS: PersistedPrefs = {
@@ -29,6 +33,7 @@ const DEFAULT_PREFS: PersistedPrefs = {
   // Default to the ceiling the catalogue offers. The lower rungs exist for weak
   // connections, not as a sensible default.
   quality: '320kbps',
+  crossfade: 6,
 };
 
 /** Volume restored when unmuting from a slider that was dragged to zero. */
@@ -68,6 +73,10 @@ function loadPrefs(): PersistedPrefs {
       quality: STREAM_QUALITIES.includes(parsed.quality as StreamQuality)
         ? (parsed.quality as StreamQuality)
         : DEFAULT_PREFS.quality,
+      crossfade:
+        typeof parsed.crossfade === 'number' && Number.isFinite(parsed.crossfade)
+          ? Math.max(0, Math.min(MAX_CROSSFADE, parsed.crossfade))
+          : DEFAULT_PREFS.crossfade,
     };
   } catch {
     return DEFAULT_PREFS;
@@ -91,6 +100,7 @@ function savePrefs(state: PersistedPrefs) {
     repeat: state.repeat,
     autoplay: state.autoplay,
     quality: state.quality,
+    crossfade: state.crossfade,
   };
   try {
     localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
@@ -128,6 +138,14 @@ export interface PlayerState {
   autoplay: boolean;
   /** The bitrate rung to ask for. */
   quality: StreamQuality;
+  /**
+   * Crossfade length in seconds, or 0 for off.
+   *
+   * Off does not mean an abrupt handover: the next track is buffered ahead either
+   * way, and with crossfade off the changeover becomes a 60ms blend into that
+   * buffer. Inaudible, but it means playback never stalls between tracks.
+   */
+  crossfade: number;
   /**
    * The rung actually playing, which can be lower than `quality` when a
    * particular track does not publish it. Reported by the engine on load so the
@@ -180,6 +198,7 @@ export interface PlayerState {
   setPlaybackError: (message: string | null) => void;
   toggleAutoplay: () => void;
   setQuality: (quality: StreamQuality) => void;
+  setCrossfade: (seconds: number) => void;
   /** Engine to store: the rung this track is actually streaming at. */
   setActiveStream: (quality: string | null, steppedDown: boolean) => void;
   reorderQueue: (fromQueueIndex: number, toQueueIndex: number) => void;
@@ -211,6 +230,7 @@ export const usePlayer = create<PlayerState>((set, get) => ({
   repeat: initialPrefs.repeat,
   autoplay: initialPrefs.autoplay,
   quality: initialPrefs.quality,
+  crossfade: initialPrefs.crossfade,
   activeQuality: null,
   activeSteppedDown: false,
   currentTime: 0,
@@ -369,6 +389,13 @@ export const usePlayer = create<PlayerState>((set, get) => ({
   setQuality: (quality) => {
     if (get().quality === quality) return;
     set({ quality });
+    savePrefs(get());
+  },
+
+  setCrossfade: (seconds) => {
+    const crossfade = Math.max(0, Math.min(MAX_CROSSFADE, Math.round(seconds)));
+    if (get().crossfade === crossfade) return;
+    set({ crossfade });
     savePrefs(get());
   },
 
