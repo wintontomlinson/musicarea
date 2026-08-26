@@ -140,12 +140,79 @@ explore and search pages carry no `revalidate` export: per-fetch caching in
 
 ## Design system
 
-Tokens live in `tailwind.config.ts` and `src/app/globals.css`:
+Every colour resolves through a custom property declared in
+`src/app/globals.css`. `tailwind.config.ts` holds no colour values of its own;
+each entry points at one of those properties via
+`rgb(var(--token-rgb) / <alpha-value>)`, which is what keeps opacity modifiers
+such as `bg-accent/25` and `bg-surface/80` working. Tokens are stored as bare
+`r g b` channels for exactly that reason.
 
-- Background `#090613`, surfaces `#151026` / `#20183a`
+The default palette:
+
+- Background `#090613`, surfaces `#151026` / `#20183a`, scrim `#080411`
 - Accent `#ff3bbf` with `#ff78d7`, brand gradient through purple to cyan `#4de7ff`
 - Inter (variable) ahead of the system stack, heading scale `h1`..`h6`, glass
   panels, brand-tinted scrollbar
+
+Because there are no hardcoded colours left in the components, adding a token or
+retuning the palette is a change to two files rather than forty.
+
+Two tokens exist only because the palette moves. Use `text-on-accent`, never
+`text-white`, for anything sitting on `bg-accent` or `bg-brand`: the palette
+decides whether light or dark ink is readable on the accent it generated, and a
+yellow accent needs dark ink. And `--chrome-alpha` lets the sidebar, toolbar and
+tab bar share `.chrome-panel` at different opacities.
+
+Colours that carry a fixed meaning stay outside the token system on purpose: the
+amber playback warning, the per-language and per-avatar identity tints in
+`lib/config.ts`, the white play pill, and the selection rings and check badges
+that sit on top of those fixed tints.
+
+## Adaptive colour
+
+The site takes its colours from the artwork in front of the listener. Album,
+artist, song, playlist and mood pages drop in `<ThemeCover cover={...} />`, and
+`<DynamicTheme />` (mounted with the audio engine in `(main)/layout.tsx`) resolves
+a palette and writes it onto `<html>`, along with the `theme-color` meta tag so
+mobile browser chrome follows too. Page artwork wins over the playing track, so
+browsing an album tints the site to that record even while something else plays.
+Listeners can turn the whole thing off in Settings, which is persisted under
+`musicarea:theme:v1`.
+
+`src/lib/color.ts` does the extraction, with no dependencies:
+
+- The cover is requested through `/_next/image?...&w=64`, not from the CDN
+  directly. That route is same-origin, so `getImageData` on the sampling canvas
+  cannot be refused, which it would be for an opaque cross-origin image.
+- Hue is voted on in 24 buckets, weighted by saturation and by closeness to mid
+  lightness, so the result is the colour a person would name rather than the
+  muddy average of the histogram.
+- Only the hue travels from the artwork. Each token is then pulled until its
+  **relative luminance** lands in a band, which is the part that makes this safe:
+  HSL lightness is not perceived lightness, so pinning lightness instead would
+  leave white-on-accent at 3.2:1 for pink and 1.1:1 for yellow. Banding luminance
+  makes contrast roughly hue-invariant, and `--on-accent` flips to dark ink above
+  the point where white stops clearing 3:1.
+- The secondary hue keeps the direction the artwork suggests but is capped at 72
+  degrees from the accent, so gradients stay analogous instead of sweeping through
+  an unrelated colour family. The gradient's midpoint is additionally held
+  wherever the chosen ink can be read over it.
+- Anything unsamplable (the inline SVG fallback cover, a greyscale sleeve, a
+  failed or slow request) resolves to the static brand palette. Extraction never
+  rejects. Successes are cached per URL for the session; failures deliberately are
+  not, so one dropped request does not pin an album to the brand palette forever.
+
+`DEFAULT_PALETTE` in that file holds the same literals as the `:root` block, so
+server rendering and the first paint use the brand palette and the adaptive one
+arrives as a fade.
+
+The fade is why the tokens are declared with `@property … syntax: '<number>+'`. An
+untyped custom property can be swapped but not interpolated, so anything derived
+from it snaps; registering the channels lets the transition happen on the
+*variables*, and every colour, border, shadow and gradient built on them
+cross-fades together from one rule on `:root`. Gradients could not have been faded
+any other way, since `background-image` is not interpolable. Browsers without
+`@property` just change palette instantly.
 
 ## Structure
 
@@ -165,12 +232,14 @@ web/src/
     library/                LikeButton, collections
     search/                 SearchExperience and result helpers
     sections/               Hero, Carousel, MoodGrid, TrackList, ChartList
+    theme/                  DynamicTheme (applier), ThemeCover (page marker)
     cards/ ui/ seo/         MediaCard, Icon, EmptyState, JsonLd
   lib/
     api.ts                  typed Flask client + search normalisation
+    color.ts                artwork sampling and palette generation
     entity.ts               found / missing / unavailable for detail pages
     types.ts                response types (from real Flask shapes)
     utils.ts, config.ts, languages.ts
   stores/
-    player.ts  library.ts  user.ts
+    player.ts  library.ts  user.ts  theme.ts
 ```

@@ -9,6 +9,7 @@ import { KeyboardShortcuts } from '@/components/player/KeyboardShortcuts';
 import { MediaSession } from '@/components/player/MediaSession';
 import { PlaybackAlert } from '@/components/player/PlaybackAlert';
 import { OnboardingGate } from '@/components/onboarding/OnboardingGate';
+import { DynamicTheme } from '@/components/theme/DynamicTheme';
 
 /**
  * Shared chrome for the primary app views, arranged the way Apple Music does:
@@ -30,6 +31,11 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           <main className="flex-1 pb-40 lg:pb-10">{children}</main>
         </div>
         <MobileNav />
+
+        {/* Colours the design tokens from the artwork on screen. Renders
+            nothing, and sits with the engine because it is a subscriber to the
+            player in exactly the same way. */}
+        <DynamicTheme />
 
         {/* Player: engine + surfaces, always mounted. */}
         <AudioEngine />

@@ -1,35 +1,58 @@
 import type { Config } from 'tailwindcss';
 
+/**
+ * The palette here deliberately holds no colour values. Every entry points at a
+ * custom property declared in `src/app/globals.css`, because the theme engine in
+ * `src/lib/color.ts` rewrites those properties at runtime to match the artwork
+ * on screen. This file used to duplicate the hex values, which meant utilities
+ * compiled to static colours and ignored the tokens entirely.
+ *
+ * The `rgb(var(--x) / <alpha-value>)` form is what keeps opacity modifiers such
+ * as `bg-surface/80` and `border-accent/25` working. It only works because the
+ * variables hold bare channels (`255 59 191`) rather than `rgb(...)`.
+ */
+const channel = (token: string) => `rgb(var(${token}) / <alpha-value>)`;
+
 const config: Config = {
   content: ['./src/app/**/*.{ts,tsx}', './src/components/**/*.{ts,tsx}'],
   theme: {
     extend: {
       colors: {
-        bg: '#090613',
+        bg: channel('--bg-rgb'),
+        scrim: channel('--scrim-rgb'),
         surface: {
-          DEFAULT: '#151026',
-          raised: '#20183a',
+          DEFAULT: channel('--surface-rgb'),
+          raised: channel('--surface-raised-rgb'),
         },
         accent: {
-          DEFAULT: '#ff3bbf',
-          soft: '#ff78d7',
+          DEFAULT: channel('--accent-rgb'),
+          soft: channel('--accent-soft-rgb'),
+          mid: channel('--accent-mid-rgb'),
+          alt: channel('--accent-alt-rgb'),
         },
+        // Ink for content sitting on an accent fill. Flips between light and dark
+        // with the generated accent's luminance, which is why `text-white` is
+        // wrong on any accent background.
+        'on-accent': channel('--on-accent-rgb'),
         secondary: {
-          DEFAULT: '#b8add2',
+          DEFAULT: channel('--text-secondary-rgb'),
         },
         text: {
-          DEFAULT: '#fffaff',
-          secondary: '#b8add2',
-          muted: '#786d96',
+          DEFAULT: channel('--text-rgb'),
+          secondary: channel('--text-secondary-rgb'),
+          muted: channel('--text-muted-rgb'),
         },
       },
       borderColor: {
-        subtle: 'rgba(255,255,255,0.12)',
+        subtle: 'var(--line)',
       },
       backgroundImage: {
-        brand: 'linear-gradient(110deg, #ff3bbf 0%, #a855f7 48%, #4de7ff 100%)',
-        'brand-soft': 'linear-gradient(110deg, rgba(255,59,191,0.20), rgba(168,85,247,0.18), rgba(77,231,255,0.16))',
-        disco: 'radial-gradient(circle at 12% 8%, rgba(255,59,191,0.25), transparent 29%), radial-gradient(circle at 87% 13%, rgba(77,231,255,0.20), transparent 28%), linear-gradient(130deg, #160b2a 0%, #0b0718 50%, #081421 100%)',
+        brand:
+          'linear-gradient(110deg, rgb(var(--accent-rgb)) 0%, rgb(var(--accent-mid-rgb)) 48%, rgb(var(--accent-alt-rgb)) 100%)',
+        'brand-soft':
+          'linear-gradient(110deg, rgb(var(--accent-rgb) / 0.20), rgb(var(--accent-mid-rgb) / 0.18), rgb(var(--accent-alt-rgb) / 0.16))',
+        disco:
+          'radial-gradient(circle at 12% 8%, rgb(var(--accent-rgb) / 0.25), transparent 29%), radial-gradient(circle at 87% 13%, rgb(var(--accent-alt-rgb) / 0.20), transparent 28%), linear-gradient(130deg, rgb(var(--surface-raised-rgb)) 0%, rgb(var(--bg-rgb)) 50%, rgb(var(--scrim-rgb)) 100%)',
       },
       fontFamily: {
         // Inter first. It used to sit behind -apple-system and SF Pro, which
@@ -65,11 +88,12 @@ const config: Config = {
       },
       boxShadow: {
         lift: '0 18px 42px -22px rgba(0,0,0,0.9)',
-        glow: '0 14px 36px -14px rgba(255,59,191,0.55)',
-        cyan: '0 14px 34px -15px rgba(77,231,255,0.55)',
+        glow: '0 14px 36px -14px rgb(var(--accent-rgb) / 0.55)',
+        'glow-lg': '0 30px 70px -28px rgb(var(--accent-rgb) / 0.7)',
+        'glow-alt': '0 14px 34px -15px rgb(var(--accent-alt-rgb) / 0.55)',
       },
       transitionTimingFunction: {
-        smooth: 'cubic-bezier(0.22, 1, 0.36, 1)',
+        smooth: 'var(--ease-smooth)',
       },
       backdropBlur: {
         glass: '24px',

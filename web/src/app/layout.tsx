@@ -36,8 +36,10 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  // Matches --bg in globals.css. It was pure black, which left a visible seam
-  // between the browser chrome and the page on mobile.
+  // Matches the default --bg-rgb in globals.css. It was pure black, which left a
+  // visible seam between the browser chrome and the page on mobile. This is only
+  // the starting value: `applyPalette` in src/lib/color.ts rewrites this meta tag
+  // whenever the artwork palette changes, so the chrome follows the album too.
   themeColor: '#090613',
   width: 'device-width',
   initialScale: 1,

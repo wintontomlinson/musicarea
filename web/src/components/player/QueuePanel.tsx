@@ -71,13 +71,13 @@ export function QueuePanel() {
     <>
       {/* Scrim */}
       <div
-        className="fixed inset-0 z-[55] bg-[#090613]/75 backdrop-blur-sm"
+        className="fixed inset-0 z-[55] bg-scrim/75 backdrop-blur-sm"
         onClick={() => setQueueOpen(false)}
         aria-hidden="true"
       />
       <aside
         aria-label="Play queue"
-        className="fixed right-0 top-0 z-[56] flex h-full w-full max-w-sm flex-col border-l border-fuchsia-300/20 bg-[#130b24]/95 shadow-[-20px_0_60px_-28px_rgba(255,59,191,.45)] backdrop-blur-xl"
+        className="fixed right-0 top-0 z-[56] flex h-full w-full max-w-sm flex-col border-l border-accent/20 bg-surface/95 shadow-[-20px_0_60px_-28px_rgb(var(--accent-rgb)/.45)] backdrop-blur-xl"
       >
         <header className="flex items-center justify-between border-b border-subtle p-4">
           <h2 className="text-h5 font-extrabold tracking-tight">Playing next</h2>
@@ -167,7 +167,7 @@ function QueueRow({
   return (
     <div
       className={`group flex items-center gap-2.5 rounded-md p-2 transition-colors ${
-        active ? 'border border-fuchsia-300/20 bg-fuchsia-400/[0.09]' : 'border border-transparent hover:bg-white/[0.07]'
+        active ? 'row-active border' : 'border border-transparent hover:bg-white/[0.07]'
       }`}
     >
       {draggable && (
