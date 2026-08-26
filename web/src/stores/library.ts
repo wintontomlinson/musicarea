@@ -2,6 +2,7 @@
 
 import { create } from 'zustand';
 import type { Song } from '@/lib/types';
+import { sanitiseSongs, slimSong } from '@/lib/slimSong';
 import { useHistory } from './history';
 
 const LIBRARY_KEY = 'musicarea:library:v1';
@@ -18,23 +19,6 @@ interface PersistedLibrary {
 
 const EMPTY: PersistedLibrary = { liked: [], recent: [] };
 
-/**
- * Store a reduced record of each song.
- *
- * `downloadUrl` is deliberately dropped: the arrays hold five URLs per track and
- * signed CDN links expire anyway, so keeping them would bloat localStorage with
- * values that go stale. The audio engine already resolves a stream on demand via
- * `/api/song/[id]` when a queued track arrives without one, which is exactly the
- * case a stored song hits.
- *
- * `recommendation` is dropped too: it describes why a track was surfaced in one
- * particular feed, which is meaningless once the song is saved.
- */
-function slim(song: Song): Song {
-  const { downloadUrl: _downloadUrl, recommendation: _recommendation, ...rest } = song;
-  return rest;
-}
-
 function load(): PersistedLibrary {
   if (typeof window === 'undefined') return EMPTY;
   try {
@@ -42,22 +26,12 @@ function load(): PersistedLibrary {
     if (!raw) return EMPTY;
     const parsed = JSON.parse(raw) as Partial<PersistedLibrary>;
     return {
-      liked: sanitise(parsed.liked).slice(0, MAX_LIKED),
-      recent: sanitise(parsed.recent).slice(0, MAX_RECENT),
+      liked: sanitiseSongs(parsed.liked).slice(0, MAX_LIKED),
+      recent: sanitiseSongs(parsed.recent).slice(0, MAX_RECENT),
     };
   } catch {
     return EMPTY;
   }
-}
-
-/** Drop anything that is not a usable song record, so one bad write cannot
- *  break every screen that reads the library. */
-function sanitise(list: unknown): Song[] {
-  if (!Array.isArray(list)) return [];
-  return list.filter(
-    (item): item is Song =>
-      !!item && typeof item === 'object' && typeof (item as Song).id === 'string' && !!(item as Song).id,
-  );
 }
 
 function persist(state: PersistedLibrary) {
@@ -112,7 +86,7 @@ export const useLibrary = create<LibraryState>((set, get) => ({
     // Newest first, so the favourites screen reads most-recently-loved down.
     const nextLiked = exists
       ? liked.filter((s) => s.id !== song.id)
-      : [slim(song), ...liked].slice(0, MAX_LIKED);
+      : [slimSong(song), ...liked].slice(0, MAX_LIKED);
     set({ liked: nextLiked });
     persist({ liked: nextLiked, recent });
   },
@@ -138,7 +112,7 @@ export const useLibrary = create<LibraryState>((set, get) => ({
     // Replaying the track already at the head is not a new entry, otherwise
     // repeat-one would fill the whole list with one song.
     if (recent[0]?.id === song.id) return;
-    const nextRecent = [slim(song), ...recent.filter((s) => s.id !== song.id)].slice(0, MAX_RECENT);
+    const nextRecent = [slimSong(song), ...recent.filter((s) => s.id !== song.id)].slice(0, MAX_RECENT);
     set({ recent: nextRecent });
     persist({ liked, recent: nextRecent });
   },

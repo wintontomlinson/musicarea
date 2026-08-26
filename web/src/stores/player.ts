@@ -2,9 +2,11 @@
 
 import { create } from 'zustand';
 import type { Song } from '@/lib/types';
+import { STREAM_QUALITIES, type StreamQuality } from '@/lib/utils';
 import { useHistory } from './history';
 
-export type RepeatMode = 'off' | 'all' | 'one';
+export const REPEAT_MODES = ['off', 'all', 'one'] as const;
+export type RepeatMode = (typeof REPEAT_MODES)[number];
 
 interface PersistedPrefs {
   volume: number;
@@ -12,6 +14,7 @@ interface PersistedPrefs {
   shuffle: boolean;
   repeat: RepeatMode;
   autoplay: boolean;
+  quality: StreamQuality;
 }
 
 const PREFS_KEY = 'musicarea:prefs:v1';
@@ -23,6 +26,9 @@ const DEFAULT_PREFS: PersistedPrefs = {
   // On by default. A queue that stops dead at the end of an album is the thing
   // people notice; every major player keeps going.
   autoplay: true,
+  // Default to the ceiling the catalogue offers. The lower rungs exist for weak
+  // connections, not as a sensible default.
+  quality: '320kbps',
 };
 
 /** Volume restored when unmuting from a slider that was dragged to zero. */
@@ -35,11 +41,34 @@ const FALLBACK_UNMUTE_VOLUME = 0.5;
  */
 const SKIP_RATIO = 0.25;
 
+/**
+ * Read stored preferences, validating each one.
+ *
+ * Spreading the parsed JSON over the defaults is not enough on its own: it fills
+ * in missing keys but accepts whatever is present, so a value left by an older
+ * build or edited by hand would flow straight into the player. A bad `quality`
+ * would then be requested for every track, and a bad `repeat` would fall through
+ * `cycleRepeat`'s `indexOf` and get stuck.
+ */
 function loadPrefs(): PersistedPrefs {
   if (typeof window === 'undefined') return DEFAULT_PREFS;
   try {
     const raw = localStorage.getItem(PREFS_KEY);
-    return raw ? { ...DEFAULT_PREFS, ...JSON.parse(raw) } : DEFAULT_PREFS;
+    if (!raw) return DEFAULT_PREFS;
+    const parsed = JSON.parse(raw) as Partial<PersistedPrefs>;
+    const volume = typeof parsed.volume === 'number' ? parsed.volume : DEFAULT_PREFS.volume;
+    return {
+      volume: Math.max(0, Math.min(1, volume)),
+      muted: typeof parsed.muted === 'boolean' ? parsed.muted : DEFAULT_PREFS.muted,
+      shuffle: typeof parsed.shuffle === 'boolean' ? parsed.shuffle : DEFAULT_PREFS.shuffle,
+      repeat: REPEAT_MODES.includes(parsed.repeat as RepeatMode)
+        ? (parsed.repeat as RepeatMode)
+        : DEFAULT_PREFS.repeat,
+      autoplay: typeof parsed.autoplay === 'boolean' ? parsed.autoplay : DEFAULT_PREFS.autoplay,
+      quality: STREAM_QUALITIES.includes(parsed.quality as StreamQuality)
+        ? (parsed.quality as StreamQuality)
+        : DEFAULT_PREFS.quality,
+    };
   } catch {
     return DEFAULT_PREFS;
   }
@@ -61,6 +90,7 @@ function savePrefs(state: PersistedPrefs) {
     shuffle: state.shuffle,
     repeat: state.repeat,
     autoplay: state.autoplay,
+    quality: state.quality,
   };
   try {
     localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
@@ -96,6 +126,16 @@ export interface PlayerState {
   repeat: RepeatMode;
   /** Keep playing past the end of the queue with a taste-ranked station. */
   autoplay: boolean;
+  /** The bitrate rung to ask for. */
+  quality: StreamQuality;
+  /**
+   * The rung actually playing, which can be lower than `quality` when a
+   * particular track does not publish it. Reported by the engine on load so the
+   * interface can state what is true rather than what was requested.
+   */
+  activeQuality: string | null;
+  /** True when the current track forced a step down from `quality`. */
+  activeSteppedDown: boolean;
   /**
    * Last reported playback position, in seconds. This is a *report* from the
    * audio engine, never an instruction to it. Ask for a new position with
@@ -139,6 +179,9 @@ export interface PlayerState {
   seekTo: (time: number) => void;
   setPlaybackError: (message: string | null) => void;
   toggleAutoplay: () => void;
+  setQuality: (quality: StreamQuality) => void;
+  /** Engine to store: the rung this track is actually streaming at. */
+  setActiveStream: (quality: string | null, steppedDown: boolean) => void;
   reorderQueue: (fromQueueIndex: number, toQueueIndex: number) => void;
   addToQueue: (song: Song) => void;
   /**
@@ -167,6 +210,9 @@ export const usePlayer = create<PlayerState>((set, get) => ({
   shuffle: initialPrefs.shuffle,
   repeat: initialPrefs.repeat,
   autoplay: initialPrefs.autoplay,
+  quality: initialPrefs.quality,
+  activeQuality: null,
+  activeSteppedDown: false,
   currentTime: 0,
   duration: 0,
   seekSeq: 0,
@@ -308,7 +354,7 @@ export const usePlayer = create<PlayerState>((set, get) => ({
   },
 
   cycleRepeat: () => {
-    const modes: RepeatMode[] = ['off', 'all', 'one'];
+    const modes = REPEAT_MODES;
     const repeat = modes[(modes.indexOf(get().repeat) + 1) % modes.length];
     set({ repeat });
     const s = get();
@@ -319,6 +365,14 @@ export const usePlayer = create<PlayerState>((set, get) => ({
     set({ autoplay: !get().autoplay });
     savePrefs(get());
   },
+
+  setQuality: (quality) => {
+    if (get().quality === quality) return;
+    set({ quality });
+    savePrefs(get());
+  },
+
+  setActiveStream: (activeQuality, activeSteppedDown) => set({ activeQuality, activeSteppedDown }),
 
   setProgress: (currentTime, duration) => set({ currentTime, duration }),
 

@@ -10,6 +10,7 @@ import { entityHref, formatCount, idFromSlug, pickImage } from '@/lib/utils';
 import { SITE } from '@/lib/config';
 import { TrackList } from '@/components/sections/TrackList';
 import { CollectionActions } from '@/components/player/CollectionActions';
+import { StationButton } from '@/components/player/StationButton';
 import { Carousel } from '@/components/sections/Carousel';
 import { JsonLd, breadcrumbLd } from '@/components/seo/JsonLd';
 import { Icon } from '@/components/ui/Icon';
@@ -121,11 +122,12 @@ export default async function ArtistPage({ params }: { params: Promise<{ slug: s
               {formatCount(artist.followerCount)} followers
             </p>
           ) : null}
-          {topSongs.length > 0 && (
-            <div className="mt-2">
-              <CollectionActions songs={topSongs} />
-            </div>
-          )}
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            {topSongs.length > 0 && <CollectionActions songs={topSongs} />}
+            {/* A station reaches past this artist into the ones they share
+                playlists with, which is what the top-songs list cannot do. */}
+            <StationButton kind="artist" id={artist.id} label="Artist station" />
+          </div>
         </div>
       </header>
 

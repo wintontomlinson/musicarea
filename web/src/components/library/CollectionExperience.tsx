@@ -34,6 +34,7 @@ export function CollectionExperience({
   const songs: Song[] = useLibrary((s) => (source === 'liked' ? s.liked : s.recent));
   const clearLiked = useLibrary((s) => s.clearLiked);
   const clearRecent = useLibrary((s) => s.clearRecent);
+  const removeLiked = useLibrary((s) => s.removeLiked);
 
   useEffect(() => {
     hydrate();
@@ -78,7 +79,13 @@ export function CollectionExperience({
             </div>
           </div>
           <div className="premium-panel p-2 sm:p-3">
-            <TrackList songs={songs} />
+            {/* Favourites can be unfavourited from here. Recently played is a
+                record of what happened, so individual rows are not editable;
+                the whole history clears instead. */}
+            <TrackList
+              songs={songs}
+              onRemove={source === 'liked' ? (song) => removeLiked(song.id) : undefined}
+            />
           </div>
         </section>
       ) : (

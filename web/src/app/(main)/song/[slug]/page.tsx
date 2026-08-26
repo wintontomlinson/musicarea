@@ -5,11 +5,12 @@ import { api } from '@/lib/api';
 import { loadEntity } from '@/lib/entity';
 import type { Song } from '@/lib/types';
 import { EntityUnavailable, unavailableMetadata } from '@/components/ui/EntityUnavailable';
-import { artistLine, entityHref, idFromSlug, pickImage, pickStreamUrl, primaryArtist } from '@/lib/utils';
+import { artistLine, entityHref, idFromSlug, pickImage, pickStream, primaryArtist } from '@/lib/utils';
 import { SITE } from '@/lib/config';
 import { DetailHeader } from '@/components/sections/DetailHeader';
 import { TrackList } from '@/components/sections/TrackList';
 import { PlayPill } from '@/components/player/PlayPill';
+import { StationButton } from '@/components/player/StationButton';
 import { JsonLd, breadcrumbLd } from '@/components/seo/JsonLd';
 
 export const revalidate = 600;
@@ -36,7 +37,7 @@ export async function generateMetadata({
   const description = `Listen to ${song.name} by ${artist}${
     song.album?.name ? ` from the album ${song.album.name}` : ''
   } on ${SITE.name}.`;
-  const audio = pickStreamUrl(song);
+  const audio = pickStream(song)?.url;
   return {
     title,
     description,
@@ -64,16 +65,26 @@ export default async function SongPage({ params }: { params: Promise<{ slug: str
   const cover = pickImage(song.image);
   const artist = primaryArtist(song);
 
-  // More from the primary artist (best-effort; hidden on failure).
-  let moreFromArtist: Song[] = [];
-  if (artist?.id) {
-    try {
-      const res = await api.artistSongs(artist.id);
-      moreFromArtist = res.songs.filter((s) => s.id !== song.id).slice(0, 10);
-    } catch {
-      moreFromArtist = [];
-    }
-  }
+  // Both sections are best-effort and hidden on failure, and they are fetched
+  // together rather than in sequence so one slow response does not delay the
+  // other. "More like this" is the recommender ranking the catalogue against this
+  // track; "More by" is just the artist's own back catalogue.
+  const [similarRes, artistSongsRes] = await Promise.allSettled([
+    api.similar([song.id], 12),
+    artist?.id ? api.artistSongs(artist.id) : Promise.resolve({ songs: [] as Song[] }),
+  ]);
+
+  const similar: Song[] =
+    similarRes.status === 'fulfilled'
+      ? (similarRes.value.items ?? []).filter((s) => s.id !== song.id).slice(0, 10)
+      : [];
+
+  const moreFromArtist: Song[] =
+    artistSongsRes.status === 'fulfilled'
+      ? artistSongsRes.value.songs
+          .filter((s) => s.id !== song.id && !similar.some((x) => x.id === s.id))
+          .slice(0, 10)
+      : [];
 
   const recordingLd = {
     '@context': 'https://schema.org',
@@ -123,8 +134,25 @@ export default async function SongPage({ params }: { params: Promise<{ slug: str
             {song.year ? ` · ${song.year}` : ''}
           </span>
         }
-        actions={<PlayPill song={song} />}
+        actions={
+          <span className="flex flex-wrap items-center gap-3">
+            <PlayPill song={song} />
+            <StationButton kind="song" id={song.id} label="Song radio" />
+          </span>
+        }
       />
+
+      {similar.length > 0 && (
+        <section>
+          <div className="mb-3">
+            <h2 className="section-title">More like this</h2>
+            <p className="mt-1 text-[13px] text-text-secondary">
+              Ranked against this track by the recommender, not just by artist.
+            </p>
+          </div>
+          <TrackList songs={similar} />
+        </section>
+      )}
 
       {moreFromArtist.length > 0 && (
         <section>

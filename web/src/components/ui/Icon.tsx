@@ -38,6 +38,10 @@ const paths = {
   sparkle: 'm12 2 1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8zm7 14 .8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8zM5 15l.7 2.3L8 18l-2.3.7L5 21l-.7-2.3L2 18l2.3-.7z',
   check: 'm9.4 16.6-4.2-4.2 1.4-1.4 2.8 2.8 7.8-7.8 1.4 1.4z',
   thumbDown: 'M15 3H6.5a2 2 0 0 0-1.9 1.4l-2 6A2 2 0 0 0 4.5 13H9l-.8 3.6a2.2 2.2 0 0 0 3.9 1.8L16 13h-1V3zm2 0h3v10h-3z',
+  playlistAdd: 'M3 6h11v2H3zm0 4h11v2H3zm0 4h7v2H3zm14-6h2v3h3v2h-3v3h-2v-3h-3v-2h3z',
+  pencil: 'M4 17.2 16.4 4.8l2.8 2.8L6.8 20H4zM17.8 3.4l1.4-1.4a1 1 0 0 1 1.4 0l1.4 1.4a1 1 0 0 1 0 1.4l-1.4 1.4z',
+  trash: 'M9 3h6v2h4v2H5V5h4zm-2 6h10l-.8 11a1 1 0 0 1-1 .9H8.8a1 1 0 0 1-1-.9z',
+  radio: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8m0 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4M6.3 4.9 7.7 6.3a8 8 0 0 0 0 11.4l-1.4 1.4a10 10 0 0 1 0-14.2m11.4 0a10 10 0 0 1 0 14.2l-1.4-1.4a8 8 0 0 0 0-11.4z',
 } as const satisfies Record<string, string>;
 
 export type IconName = keyof typeof paths;

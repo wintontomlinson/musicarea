@@ -6,7 +6,7 @@ import { usePlayer } from '@/stores/player';
 import { useLibrary } from '@/stores/library';
 import { useHistory } from '@/stores/history';
 import type { Song } from '@/lib/types';
-import { pickStreamUrl } from '@/lib/utils';
+import { pickStream, type ChosenStream } from '@/lib/utils';
 
 /**
  * The audio engine. A single always-mounted component that owns the Howl
@@ -59,6 +59,9 @@ export function AudioEngine() {
   // two Howls end up playing and only one of them is reachable to stop.
   const loadTicketRef = useRef(0);
   const failuresRef = useRef(0);
+  // Position to restore once a reloaded source reports its duration. Set when the
+  // quality preference changes mid-track.
+  const resumeAtRef = useRef<number | null>(null);
 
   useEffect(() => {
     function stopTicker() {
@@ -102,8 +105,9 @@ export function AudioEngine() {
       }, 250);
     }
 
-    async function resolveUrl(song: Song): Promise<string | null> {
-      const direct = pickStreamUrl(song);
+    async function resolveStream(song: Song): Promise<ChosenStream | null> {
+      const requested = usePlayer.getState().quality;
+      const direct = pickStream(song, requested);
       if (direct) return direct;
       // The song lacked stream URLs (e.g. a slim record); fetch full details.
       try {
@@ -111,7 +115,7 @@ export function AudioEngine() {
         if (!res.ok) return null;
         const full = (await res.json()) as Song[] | { data?: Song[] };
         const list = Array.isArray(full) ? full : full.data;
-        return list && list[0] ? pickStreamUrl(list[0]) : null;
+        return list && list[0] ? pickStream(list[0], requested) : null;
       } catch {
         return null;
       }
@@ -154,7 +158,7 @@ export function AudioEngine() {
       usePlayer.getState().next(true);
     }
 
-    async function loadAndPlay(song: Song | null) {
+    async function loadAndPlay(song: Song | null, opts: { sameTrack?: boolean } = {}) {
       const ticket = ++loadTicketRef.current;
 
       // Tear down any existing sound.
@@ -164,20 +168,26 @@ export function AudioEngine() {
         howlRef.current = null;
       }
       loadedIdRef.current = song?.id ?? null;
-      maxProgressRef.current = 0;
-      playLoggedRef.current = false;
+      // Reloading the same source (a quality change) keeps the listening stats it
+      // has already accumulated; a genuinely new track starts them over.
+      if (!opts.sameTrack) {
+        maxProgressRef.current = 0;
+        playLoggedRef.current = false;
+      }
       if (!song) return;
 
       usePlayer.getState().setLoading(true);
-      const url = await resolveUrl(song);
+      const stream = await resolveStream(song);
       // A newer load (or the effect's own teardown) superseded this one.
       if (loadTicketRef.current !== ticket) return;
 
-      if (!url) {
+      if (!stream) {
         usePlayer.getState().setLoading(false);
+        usePlayer.getState().setActiveStream(null, false);
         handleFailure();
         return;
       }
+      const url = stream.url;
 
       const howl = new Howl({
         src: [url],
@@ -195,7 +205,21 @@ export function AudioEngine() {
           const s = usePlayer.getState();
           s.setLoading(false);
           s.setPlaybackError(null);
-          s.setProgress(0, howl.duration() || 0);
+          s.setActiveStream(stream.quality, stream.steppedDown);
+
+          // Restore the position after a quality change. The seek has to wait
+          // until the new source reports a duration: assigning a time to a media
+          // element still in HAVE_NOTHING is silently dropped, so doing it any
+          // earlier would look like it worked and restart the track instead.
+          const resumeAt = resumeAtRef.current;
+          resumeAtRef.current = null;
+          const duration = howl.duration() || 0;
+          if (resumeAt && resumeAt > 0 && resumeAt < duration) {
+            howl.seek(resumeAt);
+            s.setProgress(resumeAt, duration);
+          } else {
+            s.setProgress(0, duration);
+          }
         },
         onplay: () => {
           usePlayer.getState().setPlaying(true);
@@ -237,6 +261,18 @@ export function AudioEngine() {
       // A different track is current: load it.
       if (track?.id !== loadedIdRef.current) {
         void loadAndPlay(track);
+        return;
+      }
+
+      // The quality preference changed. Reload this track at the new rung and
+      // pick the listener up where they were, rather than making them lose their
+      // place to change a setting.
+      if (state.quality !== prev.quality && track) {
+        const raw = howlRef.current?.seek();
+        resumeAtRef.current = typeof raw === 'number' ? raw : null;
+        // Same track, so the listening it has already earned stands: a reload
+        // must not let the 12-second threshold log a second play for it.
+        void loadAndPlay(track, { sameTrack: true });
         return;
       }
 

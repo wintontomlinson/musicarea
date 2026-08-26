@@ -7,6 +7,7 @@ import { usePlayer } from '@/stores/player';
 import { artistLine, entityHref, formatDuration, pickImage, primaryArtist } from '@/lib/utils';
 import { Icon } from '@/components/ui/Icon';
 import { LikeButton } from '@/components/library/LikeButton';
+import { AddToPlaylist } from '@/components/library/AddToPlaylist';
 
 /**
  * Apple Music's track table: plain rows separated by hairlines that start past
@@ -19,10 +20,13 @@ export function TrackList({
   songs,
   showArt = true,
   showAlbum = true,
+  onRemove,
 }: {
   songs: Song[];
   showArt?: boolean;
   showAlbum?: boolean;
+  /** Renders a remove control per row. Used by the collections that own theirs. */
+  onRemove?: (song: Song) => void;
 }) {
   const currentId = usePlayer((s) => s.currentTrack()?.id);
   const isPlaying = usePlayer((s) => s.isPlaying);
@@ -136,11 +140,27 @@ export function TrackList({
               <button
                 type="button"
                 aria-label={`Add ${song.name} to the queue`}
+                title="Add to queue"
                 onClick={() => addToQueue(song)}
                 className="grid h-7 w-7 place-items-center rounded-md text-text-muted transition-colors hover:text-white sm:opacity-0 sm:transition-opacity sm:group-focus-within:opacity-100 sm:group-hover:opacity-100"
               >
                 <Icon name="plus" size={15} />
               </button>
+              <AddToPlaylist
+                song={song}
+                className="h-7 w-7 sm:opacity-0 sm:transition-opacity sm:group-focus-within:opacity-100 sm:group-hover:opacity-100"
+              />
+              {onRemove && (
+                <button
+                  type="button"
+                  aria-label={`Remove ${song.name}`}
+                  title="Remove"
+                  onClick={() => onRemove(song)}
+                  className="grid h-7 w-7 place-items-center rounded-md text-text-muted transition-colors hover:text-white sm:opacity-0 sm:transition-opacity sm:group-focus-within:opacity-100 sm:group-hover:opacity-100"
+                >
+                  <Icon name="close" size={15} />
+                </button>
+              )}
               <span className="ml-1 text-[13px] tabular-nums text-text-secondary">
                 {formatDuration(song.duration)}
               </span>

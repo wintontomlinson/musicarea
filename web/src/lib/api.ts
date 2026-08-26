@@ -34,6 +34,16 @@ interface FetchOptions {
   revalidate?: number;
   method?: 'GET' | 'POST';
   body?: unknown;
+  /**
+   * Cache this POST anyway.
+   *
+   * POSTs default to uncached because the ones carrying a listening history are
+   * per-listener by definition. `/api/similar` is not: its body is a list of
+   * seed track ids, so the same ids always produce the same ranking and it is as
+   * cacheable as any GET. Leaving it uncached would have made every song page
+   * that shows related tracks dynamic.
+   */
+  cacheableBody?: boolean;
 }
 
 class ApiError extends Error {
@@ -46,7 +56,7 @@ class ApiError extends Error {
 }
 
 async function call<T>(path: string, opts: FetchOptions = {}): Promise<T> {
-  const { revalidate = 300, method = 'GET', body } = opts;
+  const { revalidate = 300, method = 'GET', body, cacheableBody = false } = opts;
   const url = `${API_BASE}${path}`;
 
   const init: RequestInit & { next?: { revalidate: number } } = {
@@ -59,9 +69,12 @@ async function call<T>(path: string, opts: FetchOptions = {}): Promise<T> {
     init.method = 'POST';
     (init.headers as Record<string, string>)['Content-Type'] = 'application/json';
     init.body = JSON.stringify(body);
-    // Personalized POSTs must not be cached.
-    init.cache = 'no-store';
-    delete init.next;
+    if (!cacheableBody) {
+      // A POST carrying a listening history is per-listener, so caching it would
+      // serve one person's recommendations to another.
+      init.cache = 'no-store';
+      delete init.next;
+    }
   }
 
   let res: Response;
@@ -177,9 +190,16 @@ export const api = {
     );
   },
 
-  /** "More like this" from up to ten seed track ids. */
+  /**
+   * "More like this" from up to ten seed track ids. A POST, but a deterministic
+   * one: the same seeds always rank the same way, so it is cached like a GET.
+   */
   similar(ids: string[], limit = 16): Promise<{ items: Song[] }> {
-    return call<{ items: Song[] }>('/api/similar', { body: { ids: ids.slice(0, 10), limit } });
+    return call<{ items: Song[] }>('/api/similar', {
+      body: { ids: ids.slice(0, 10), limit },
+      cacheableBody: true,
+      revalidate: 600,
+    });
   },
 
   /**

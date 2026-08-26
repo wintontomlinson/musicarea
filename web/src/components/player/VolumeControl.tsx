@@ -2,6 +2,7 @@
 
 import { usePlayer } from '@/stores/player';
 import { Icon } from '@/components/ui/Icon';
+import { QualityBadge } from './QualityBadge';
 
 /**
  * Apple Music's volume slider: small speaker glyphs either side of a slim
@@ -17,6 +18,7 @@ export function VolumeControl() {
 
   return (
     <div className="flex items-center gap-1.5">
+      <QualityBadge />
       <button
         type="button"
         aria-label={muted ? 'Unmute' : 'Mute'}

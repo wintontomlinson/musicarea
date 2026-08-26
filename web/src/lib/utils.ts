@@ -107,19 +107,71 @@ export function isSong(item: Song | CollectionCard): item is Song {
 }
 
 /**
- * Pick the best stream URL from a song's downloadUrl array. Prefers the highest
- * quality the source offers (320kbps AAC), stepping down when it is missing.
+ * Every rung the catalogue publishes, best first.
+ *
+ * All five are AAC in an MP4 container on the same CDN. There is no lossless
+ * tier to request: no FLAC, ALAC or WAV variant exists, so 320 kbps is a real
+ * ceiling rather than a setting, and offering a "lossless" option would only
+ * mislabel the same AAC stream.
  */
-export function pickStreamUrl(song: Song): string | null {
+const STREAM_RUNGS = ['320kbps', '160kbps', '96kbps', '48kbps', '12kbps'] as const;
+
+/**
+ * The rungs worth offering as a choice. The bottom two exist in the catalogue but
+ * are only reached by stepping down, never by asking: they are there for a track
+ * that publishes nothing better, not as something anyone would pick.
+ */
+export const STREAM_QUALITIES = ['320kbps', '160kbps', '96kbps'] as const;
+export type StreamQuality = (typeof STREAM_QUALITIES)[number];
+
+export const QUALITY_LABELS: Record<StreamQuality, { label: string; detail: string }> = {
+  '320kbps': { label: 'High', detail: '320 kbps AAC, the best the catalogue offers' },
+  '160kbps': { label: 'Balanced', detail: '160 kbps AAC, easier on a weak connection' },
+  '96kbps': { label: 'Data saver', detail: '96 kbps AAC, lowest data use' },
+};
+
+export interface ChosenStream {
+  url: string;
+  /** The rung actually being played, which is not always the one requested. */
+  quality: string;
+  /** True when the track had nothing at the requested rung and had to drop. */
+  steppedDown: boolean;
+}
+
+/**
+ * Choose a stream for a song at, or as close as possible to, the requested rung.
+ *
+ * Steps down when the requested rung is missing for this track, and steps up if
+ * only better ones exist, so a track is never rejected for lacking one specific
+ * variant. Reports which rung was used so the interface can state what is
+ * actually playing rather than what was asked for.
+ */
+export function pickStream(
+  song: Song,
+  requested: StreamQuality = '320kbps',
+): ChosenStream | null {
   const urls = song.downloadUrl;
-  if (!urls || urls.length === 0) return null;
-  const order = ['320kbps', '160kbps', '96kbps', '48kbps', '12kbps'];
-  for (const q of order) {
-    const found = urls.find((u) => u.quality === q);
-    if (found?.url) return found.url;
+  if (!urls?.length) return null;
+
+  const at = (quality: string) => urls.find((u) => u.quality === quality && u.url)?.url;
+  const requestedIndex = STREAM_RUNGS.indexOf(requested as (typeof STREAM_RUNGS)[number]);
+  const start = requestedIndex === -1 ? 0 : requestedIndex;
+
+  // Down from the requested rung first: a lower bitrate is a compromise the
+  // listener asked to tolerate, a higher one costs them data they did not.
+  for (let i = start; i < STREAM_RUNGS.length; i++) {
+    const url = at(STREAM_RUNGS[i]);
+    if (url) return { url, quality: STREAM_RUNGS[i], steppedDown: i > start };
   }
-  // Fallback: the last entry, which the API orders highest-last.
-  return urls[urls.length - 1]?.url || null;
+  for (let i = start - 1; i >= 0; i--) {
+    const url = at(STREAM_RUNGS[i]);
+    if (url) return { url, quality: STREAM_RUNGS[i], steppedDown: false };
+  }
+
+  // An unrecognised quality tag: take the last entry, which the API orders
+  // highest-last, rather than treating the track as unplayable.
+  const last = urls[urls.length - 1];
+  return last?.url ? { url: last.url, quality: last.quality || 'unknown', steppedDown: false } : null;
 }
 
 /** Time-based greeting for the home hero. */
