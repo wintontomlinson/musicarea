@@ -6,8 +6,11 @@ import type {
   ChartCard,
   FeedData,
   HistoryEntry,
+  Lyrics,
+  MixesData,
   MoodSet,
   Playlist,
+  RadioSet,
   SearchAllData,
   SearchResult,
   Song,
@@ -147,6 +150,56 @@ export const api = {
   /** Editorial chart playlists (each opens to a ranked song list). */
   charts(): Promise<{ items: ChartCard[] }> {
     return call<{ items: ChartCard[] }>('/api/charts', { revalidate: 600 });
+  },
+
+  /**
+   * Generated mixes built from the profile. A cold build takes several seconds,
+   * which is why this is requested separately from the feed rather than folded
+   * into it.
+   */
+  mixes(payload: { history: HistoryEntry[]; perMix?: number }): Promise<MixesData> {
+    return call<MixesData>('/api/mixes', { body: payload });
+  },
+
+  /** Station seeded from one track. Includes the seed it was built from. */
+  radio(songId: string, limit = 40): Promise<RadioSet> {
+    return call<RadioSet>(
+      `/api/radio/${encodeURIComponent(songId)}?limit=${limit}`,
+      { revalidate: 300 },
+    );
+  },
+
+  /** Station seeded from an artist. Returns no `seed`, unlike song radio. */
+  artistRadio(artistId: string, limit = 40): Promise<RadioSet> {
+    return call<RadioSet>(
+      `/api/artists/${encodeURIComponent(artistId)}/radio?limit=${limit}`,
+      { revalidate: 300 },
+    );
+  },
+
+  /** "More like this" from up to ten seed track ids. */
+  similar(ids: string[], limit = 16): Promise<{ items: Song[] }> {
+    return call<{ items: Song[] }>('/api/similar', { body: { ids: ids.slice(0, 10), limit } });
+  },
+
+  /**
+   * Lyrics for a track. Flask answers 404 when it has none, which `call` turns
+   * into an ApiError; that is an expected outcome, not a failure, so callers
+   * should treat 404 as "no lyrics".
+   */
+  lyrics(songId: string): Promise<Lyrics> {
+    return call<Lyrics>(`/api/songs/${encodeURIComponent(songId)}/lyrics`, { revalidate: 3600 });
+  },
+
+  /**
+   * Resolve full details, including stream URLs, for up to 25 ids at once.
+   * Returns a bare array. Used to rehydrate songs stored without their streams.
+   */
+  songsByIds(ids: string[]): Promise<Song[]> {
+    const capped = ids.filter(Boolean).slice(0, 25);
+    return call<Song[]>(`/api/songs?ids=${encodeURIComponent(capped.join(','))}`, {
+      revalidate: 600,
+    });
   },
 };
 

@@ -30,14 +30,38 @@ export interface AlbumRef {
   url?: string | null;
 }
 
+/** The eight scoring signals the recommender blends, echoed per track. */
+export type SignalName =
+  | 'artist'
+  | 'collab'
+  | 'session'
+  | 'language'
+  | 'era'
+  | 'popularity'
+  | 'freshness'
+  | 'recall';
+
+/**
+ * Why a track was recommended, attached by the recommender.
+ *
+ * Everything past `rank` is optional on purpose. A cold-start mood set emits a
+ * degraded block carrying only `rank`, `reason` and `personalised`, and the
+ * feed's `heavy-rotation` row carries no block at all, so a consumer that
+ * assumes `signals` exists will throw on both.
+ */
 export interface Recommendation {
   rank: number;
-  score: number;
+  /** Empty string when the winning signal is not personal enough to explain. */
   reason: string | null;
-  signals: Record<string, number>;
-  sources: string[];
-  discovery: boolean;
-  familiar: boolean;
+  score?: number;
+  signals?: Partial<Record<SignalName, number>>;
+  sources?: string[];
+  /** False for a mood set built without listening history. */
+  personalised?: boolean;
+  /** True when the listener has no direct history with the artist. */
+  discovery?: boolean;
+  /** True when the listener has already heard the track. */
+  familiar?: boolean;
 }
 
 export interface Song {
@@ -111,12 +135,16 @@ export interface BrowseData {
 }
 
 export interface FeedProfile {
+  /** True until the decayed positive event weight reaches 1.0. */
   coldStart: boolean;
+  /** 0..1, the decayed positive weight over 25. Drives the taste meter. */
   strength: number;
   events: number;
   artistCount: number;
   languageCount: number;
-  topArtists: Array<{ id?: string; name: string; score?: number }>;
+  /** Up to 8, descending. The field is `weight`, not `score`. */
+  topArtists: Array<{ id?: string; name: string; weight?: number }>;
+  /** Up to 3, from the 2-day session half-life rather than the 21-day one. */
   recentArtists: Array<{ id?: string; name: string }>;
   topLanguages: string[];
   preferredLanguages: string[];
@@ -128,6 +156,54 @@ export interface FeedData {
   rows: Row[];
   profile: FeedProfile;
   candidates: number;
+}
+
+/**
+ * A generated mix from `POST /api/mixes`, the Daily Mix equivalent.
+ *
+ * Note the field names: the API returns `name`, `items` and `note`, not the
+ * `title`/`songs`/`reason` a row uses.
+ */
+export interface Mix {
+  /** `artist-<id>` | `language-<lang>` | `discovery` */
+  id: string;
+  name: string;
+  subtitle?: string;
+  /** One line on how the mix was built. */
+  note?: string;
+  type: 'mix';
+  songCount?: number;
+  image?: QualityUrl[] | null;
+  /** Up to four covers for the collage tile. */
+  covers?: Array<QualityUrl[] | null>;
+  items: Song[];
+}
+
+export interface MixesData {
+  mixes: Mix[];
+  meta?: {
+    coldStart?: boolean;
+    reason?: string;
+    candidates?: number;
+    count?: number;
+    profileStrength?: number;
+  };
+}
+
+/**
+ * A station. `GET /api/radio/<songId>` includes the `seed` it was built from;
+ * `GET /api/artists/<id>/radio` returns only `items` and `meta`.
+ */
+export interface RadioSet {
+  seed?: Song | null;
+  items: Song[];
+  meta?: { candidates?: number; returned?: number; seedName?: string; artist?: string };
+}
+
+export interface Lyrics {
+  lyrics: string;
+  copyright?: string | null;
+  snippet?: string | null;
 }
 
 /**
@@ -219,8 +295,31 @@ export interface HistoryEntry {
   name?: string;
   language?: string;
   year?: string | number;
-  event?: string;
+  event?: ListeningEvent;
+  /** Milliseconds since the epoch. The decay maths divides by 86_400_000. */
   at?: number;
   playCount?: number;
+  /** At most 12 per entry; entries without a string id are dropped server side. */
   artists?: Array<{ id: string; name: string }>;
 }
+
+/**
+ * The events the recommender scores, with the weight each carries. Mirrored from
+ * `EVENT_WEIGHTS` in recommender.py so the client can show a taste strength
+ * before the first feed response comes back; it must stay in step with it.
+ *
+ * An unknown or missing event is treated as a `play` (weight 1.0) server side.
+ */
+export const EVENT_WEIGHTS = {
+  play: 1.0,
+  complete: 1.7,
+  repeat: 2.2,
+  like: 2.6,
+  playlist_add: 2.0,
+  queue: 1.1,
+  search_play: 1.3,
+  skip: -0.7,
+  dislike: -2.4,
+} as const satisfies Record<string, number>;
+
+export type ListeningEvent = keyof typeof EVENT_WEIGHTS;

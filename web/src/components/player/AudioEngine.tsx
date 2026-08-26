@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import { Howl, Howler } from 'howler';
 import { usePlayer } from '@/stores/player';
 import { useLibrary } from '@/stores/library';
+import { useHistory } from '@/stores/history';
 import type { Song } from '@/lib/types';
 import { pickStreamUrl } from '@/lib/utils';
 
@@ -31,11 +32,27 @@ import { pickStreamUrl } from '@/lib/utils';
  */
 const MAX_CONSECUTIVE_FAILURES = 5;
 
+/**
+ * Seconds of playback before a track counts as a `play` for the taste profile.
+ * Logging on load would let a scroll through a shelf rewrite someone's taste,
+ * so a play has to survive the intro first.
+ */
+const PLAY_THRESHOLD_SECONDS = 12;
+
+/** Fraction of a track that must be heard for the end to count as a `complete`. */
+const COMPLETE_RATIO = 0.9;
+
 export function AudioEngine() {
   const howlRef = useRef<Howl | null>(null);
   const tickRef = useRef<number | null>(null);
   // The song id currently loaded into Howler, to detect real track changes.
   const loadedIdRef = useRef<string | null>(null);
+  // Furthest point reached in the current track, used to decide whether its end
+  // was a genuine listen. Tracked rather than read at `onend`, where the
+  // position has already been reset.
+  const maxProgressRef = useRef(0);
+  // A play is logged once per load, not once per tick.
+  const playLoggedRef = useRef(false);
   // Bumped on every load. An in-flight load whose ticket is stale must not
   // create a Howl: React strict mode mounts effects twice, and a fast track
   // change can also overtake the `await` on stream-URL resolution. Without this
@@ -67,6 +84,16 @@ export function AudioEngine() {
         const raw = howl.seek();
         const time = typeof raw === 'number' ? raw : 0;
         const dur = howl.duration() || 0;
+        if (time > maxProgressRef.current) maxProgressRef.current = time;
+
+        // A play counts once the intro is past. This is the single most common
+        // event feeding the taste profile.
+        if (!playLoggedRef.current && time >= PLAY_THRESHOLD_SECONDS) {
+          playLoggedRef.current = true;
+          const track = usePlayer.getState().currentTrack();
+          if (track) useHistory.getState().log(track, 'play');
+        }
+
         const { currentTime } = usePlayer.getState();
         // Only write when it actually moved, to avoid needless renders.
         if (Math.abs(time - currentTime) >= 0.25) {
@@ -88,6 +115,21 @@ export function AudioEngine() {
       } catch {
         return null;
       }
+    }
+
+    /**
+     * Record how a track finished. A track heard through to the end is a much
+     * stronger taste signal than one that merely started, and a replay under
+     * repeat-one is stronger still, so the three are logged as different events.
+     */
+    function logEnd(song: Song, duration: number) {
+      const ratio = duration > 0 ? maxProgressRef.current / duration : 0;
+      const { repeat } = usePlayer.getState();
+      if (repeat === 'one') {
+        useHistory.getState().log(song, 'repeat');
+        return;
+      }
+      useHistory.getState().log(song, ratio >= COMPLETE_RATIO ? 'complete' : 'play');
     }
 
     /** Give up after too many unplayable tracks in a row. */
@@ -122,6 +164,8 @@ export function AudioEngine() {
         howlRef.current = null;
       }
       loadedIdRef.current = song?.id ?? null;
+      maxProgressRef.current = 0;
+      playLoggedRef.current = false;
       if (!song) return;
 
       usePlayer.getState().setLoading(true);
@@ -166,6 +210,7 @@ export function AudioEngine() {
         },
         onend: () => {
           stopTicker();
+          logEnd(song, howl.duration() || 0);
           usePlayer.getState().next(true);
         },
         onloaderror: () => {

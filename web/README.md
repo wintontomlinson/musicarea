@@ -28,6 +28,18 @@ npm run dev                    # http://localhost:3000
 With the API down, every page still renders: shelves fall back to an empty
 state and detail pages report that the catalogue is unreachable.
 
+To work on the personalised surfaces without network access, or without building
+up a real listening profile first, run the stub API instead:
+
+```bash
+python3 scripts/stub_api.py &                    # from the repo root, port 5099
+cd web && FLASK_API_BASE=http://127.0.0.1:5099 npm run dev
+```
+
+It serves the real payload shapes, including the awkward ones: a cold versus warm
+feed, `heavy-rotation` items with no recommendation block, a 404 from the lyrics
+endpoint, and search results with null titles.
+
 ## Scripts
 
 ```bash
@@ -86,6 +98,69 @@ never contain `--`, which makes the first `--` an unambiguous boundary. A single
 hyphen would not be: catalogue ids come from upstream as base64url-style tokens
 that can themselves contain `-`, and splitting on the last hyphen truncated
 those ids and 404'd the page.
+
+## Personalisation
+
+The recommendation engine is server side but **stateless**: no accounts, no
+database. It rebuilds the listening profile on every request from a log the
+browser sends it, so `src/stores/history.ts` is the input to the whole algorithm.
+
+Before it existed the home page called the feed endpoint from a server component
+with `history: []`, which server components have no way to improve on since they
+cannot read localStorage. The result was that `coldStart` was permanently true,
+four of the feed's five shelves were never emitted, and the ranking had nothing to
+rank by. Home is now split: editorial shelves stay server rendered, and
+`PersonalSection` makes the real request from the client.
+
+### The event log
+
+Append-only, one row per event, capped at 400 to match the server. Events and
+their weights mirror `EVENT_WEIGHTS` in `recommender.py`:
+
+| Event | Weight | Emitted when |
+| --- | --- | --- |
+| `play` | 1.0 | 12 seconds into a track, so a scroll cannot rewrite a profile |
+| `complete` | 1.7 | a track ends having played 90% or more |
+| `repeat` | 2.2 | a track ends under repeat-one |
+| `like` | 2.6 | favourited (never on unfavouriting) |
+| `playlist_add` | 2.0 | reserved; no user playlists yet |
+| `queue` | 1.1 | added to the queue by hand |
+| `search_play` | 1.3 | played from search results |
+| `skip` | −0.7 | skipped by hand under 25% played |
+| `dislike` | −2.4 | "not for me" |
+
+Only the fields the server keeps go on the wire: `id`, `name`, `language`,
+`year`, `playCount`, `event`, `at` and `artists[{id,name}]`. The body limit is
+128 KiB and the whole log is posted on every request, so at 400 entries the
+budget is about 300 bytes each; including `image` or `downloadUrl` would break it.
+Measured, a full 400-entry log is around 68 KiB.
+
+Autoplay never writes to the log. A station appended by the player is not a
+choice the listener made, so `extendQueue` exists alongside `addToQueue`
+specifically to avoid recording one.
+
+### Caching is required, not an optimisation
+
+Flask rate-limits the recommender routes to 35 requests a minute and keys the
+bucket on the socket address. Because these calls arrive through this app's route
+handlers, every visitor shares one bucket. Neither response can be cached at the
+HTTP layer either, since both are POSTs keyed on browser state. `lib/personalised.ts`
+therefore holds a client-side cache keyed on the log's revision: four minutes for
+the feed, ten for mixes (a cold mix build runs several recall passes), with
+single-flight and a back-off on 429.
+
+### Surfaces
+
+- **Made for you** mixes, from `POST /api/mixes`: an artist mix, a language mix
+  and a discovery mix, disjoint from each other. A mix has no page to link to, so
+  the tile plays it.
+- **Feed shelves**, from `POST /api/feed`: `made-for-you`, `because-you-played`,
+  `discover`, `fresh-for-you` and `heavy-rotation`. The last is a record of what
+  was played rather than a prediction, and carries no `recommendation` block.
+- **Why this**, in the full player: the reason plus the ranked signal breakdown.
+  Every recommended track has carried this all along and nothing displayed it.
+- **Taste profile**, on home: `profile.strength`, with the same formula computed
+  locally so the bar is populated before the first response.
 
 ## Player
 
@@ -171,6 +246,8 @@ web/src/
     entity.ts               found / missing / unavailable for detail pages
     types.ts                response types (from real Flask shapes)
     utils.ts, config.ts, languages.ts
+  hooks/
+    usePersonalised.ts      feed + mixes, keyed on the log revision
   stores/
-    player.ts  library.ts  user.ts
+    player.ts  library.ts  user.ts  history.ts
 ```

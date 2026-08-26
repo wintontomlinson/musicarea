@@ -2,6 +2,7 @@
 
 import { create } from 'zustand';
 import type { Song } from '@/lib/types';
+import { useHistory } from './history';
 
 export type RepeatMode = 'off' | 'all' | 'one';
 
@@ -10,6 +11,7 @@ interface PersistedPrefs {
   muted: boolean;
   shuffle: boolean;
   repeat: RepeatMode;
+  autoplay: boolean;
 }
 
 const PREFS_KEY = 'musicarea:prefs:v1';
@@ -18,10 +20,20 @@ const DEFAULT_PREFS: PersistedPrefs = {
   muted: false,
   shuffle: false,
   repeat: 'off',
+  // On by default. A queue that stops dead at the end of an album is the thing
+  // people notice; every major player keeps going.
+  autoplay: true,
 };
 
 /** Volume restored when unmuting from a slider that was dragged to zero. */
 const FALLBACK_UNMUTE_VOLUME = 0.5;
+
+/**
+ * Abandoning a track before this fraction is a rejection worth recording. Past
+ * it, the listener heard enough that skipping on is not a judgement, so nothing
+ * is logged rather than penalising the artist for a track that was mostly played.
+ */
+const SKIP_RATIO = 0.25;
 
 function loadPrefs(): PersistedPrefs {
   if (typeof window === 'undefined') return DEFAULT_PREFS;
@@ -33,8 +45,23 @@ function loadPrefs(): PersistedPrefs {
   }
 }
 
-function savePrefs(prefs: PersistedPrefs) {
+/**
+ * Persist the preference slice of the store.
+ *
+ * Takes the whole state and picks what it needs, rather than being handed a
+ * literal at each call site. Every action that changes a preference used to
+ * rebuild that object by hand, so adding one meant editing four call sites and
+ * silently dropping it from any that were missed.
+ */
+function savePrefs(state: PersistedPrefs) {
   if (typeof window === 'undefined') return;
+  const prefs: PersistedPrefs = {
+    volume: state.volume,
+    muted: state.muted,
+    shuffle: state.shuffle,
+    repeat: state.repeat,
+    autoplay: state.autoplay,
+  };
   try {
     localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
   } catch {
@@ -67,6 +94,8 @@ export interface PlayerState {
   muted: boolean;
   shuffle: boolean;
   repeat: RepeatMode;
+  /** Keep playing past the end of the queue with a taste-ranked station. */
+  autoplay: boolean;
   /**
    * Last reported playback position, in seconds. This is a *report* from the
    * audio engine, never an instruction to it. Ask for a new position with
@@ -109,8 +138,16 @@ export interface PlayerState {
   /** UI to engine: ask for a new playback position. */
   seekTo: (time: number) => void;
   setPlaybackError: (message: string | null) => void;
+  toggleAutoplay: () => void;
   reorderQueue: (fromQueueIndex: number, toQueueIndex: number) => void;
   addToQueue: (song: Song) => void;
+  /**
+   * Append tracks the listener did not choose, such as an autoplay station.
+   * Separate from `addToQueue` because that records a `queue` event, and
+   * attributing machine-appended tracks to the listener would feed the taste
+   * profile choices they never made.
+   */
+  extendQueue: (songs: Song[]) => void;
   removeFromQueue: (queueIndex: number) => void;
   clearQueue: () => void;
   setFullscreen: (open: boolean) => void;
@@ -129,6 +166,7 @@ export const usePlayer = create<PlayerState>((set, get) => ({
   muted: initialPrefs.muted,
   shuffle: initialPrefs.shuffle,
   repeat: initialPrefs.repeat,
+  autoplay: initialPrefs.autoplay,
   currentTime: 0,
   duration: 0,
   seekSeq: 0,
@@ -176,6 +214,17 @@ export const usePlayer = create<PlayerState>((set, get) => ({
   next: (auto = false) => {
     const { order, orderPos, repeat, seekSeq } = get();
     if (!order.length) return;
+
+    // A skip is only a skip when a person asked for it. `auto` covers a track
+    // ending and the engine stepping past an unplayable one, neither of which
+    // says anything about taste.
+    if (!auto) {
+      const { currentTime, duration } = get();
+      const track = get().currentTrack();
+      if (track && duration > 0 && currentTime / duration < SKIP_RATIO) {
+        useHistory.getState().log(track, 'skip');
+      }
+    }
     if (repeat === 'one' && auto) {
       // Replay the same track. This goes through the seek counter rather than
       // just writing currentTime: a track that ended with its position already
@@ -224,7 +273,7 @@ export const usePlayer = create<PlayerState>((set, get) => ({
     const muted = volume === 0;
     set({ volume, muted });
     const s = get();
-    savePrefs({ volume, muted, shuffle: s.shuffle, repeat: s.repeat });
+    savePrefs(s);
   },
 
   toggleMute: () => {
@@ -235,7 +284,7 @@ export const usePlayer = create<PlayerState>((set, get) => ({
     const nextVolume = !muted && volume === 0 ? FALLBACK_UNMUTE_VOLUME : volume;
     set({ muted, volume: nextVolume });
     const s = get();
-    savePrefs({ volume: nextVolume, muted, shuffle: s.shuffle, repeat: s.repeat });
+    savePrefs(s);
   },
 
   toggleShuffle: () => {
@@ -255,7 +304,7 @@ export const usePlayer = create<PlayerState>((set, get) => ({
       }
     }
     const s = get();
-    savePrefs({ volume: s.volume, muted: s.muted, shuffle: nextShuffle, repeat: s.repeat });
+    savePrefs(s);
   },
 
   cycleRepeat: () => {
@@ -263,7 +312,12 @@ export const usePlayer = create<PlayerState>((set, get) => ({
     const repeat = modes[(modes.indexOf(get().repeat) + 1) % modes.length];
     set({ repeat });
     const s = get();
-    savePrefs({ volume: s.volume, muted: s.muted, shuffle: s.shuffle, repeat });
+    savePrefs(s);
+  },
+
+  toggleAutoplay: () => {
+    set({ autoplay: !get().autoplay });
+    savePrefs(get());
   },
 
   setProgress: (currentTime, duration) => set({ currentTime, duration }),
@@ -329,6 +383,21 @@ export const usePlayer = create<PlayerState>((set, get) => ({
     const { queue, order } = get();
     const nextQueue = [...queue, song];
     set({ queue: nextQueue, order: [...order, nextQueue.length - 1] });
+    // Choosing to queue something is a mild positive signal.
+    useHistory.getState().log(song, 'queue');
+  },
+
+  extendQueue: (songs) => {
+    const { queue, order } = get();
+    const known = new Set(queue.map((s) => s.id));
+    // A station is built from the same catalogue the queue came from, so it can
+    // legitimately return something already lined up. Adding it twice would make
+    // the queue repeat itself a few tracks later.
+    const additions = songs.filter((s) => s?.id && !known.has(s.id));
+    if (!additions.length) return;
+    const nextQueue = [...queue, ...additions];
+    const appended = additions.map((_, i) => queue.length + i);
+    set({ queue: nextQueue, order: [...order, ...appended] });
   },
 
   removeFromQueue: (queueIndex) => {

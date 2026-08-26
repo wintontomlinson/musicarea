@@ -27,11 +27,12 @@ all. The Next app is a presentation layer: it holds no catalogue logic and reads
 the same `/api/*` routes documented below.
 
 The two are not at parity. The legacy frontend still owns crossfade, the Web
-Audio visualizer, generated mixes, lyrics, station/radio surfaces and the "Why
-this" signal breakdown; the rest of this README describes it. The Next app covers
-browse, search, the catalogue pages, the player, favourites and recently played,
-and adds server rendering and per-page SEO. Consolidating on one of them is an
-open decision, not a finished migration.
+Audio visualizer and the audio-quality controls; the rest of this README
+describes it. The Next app covers browse, search, the catalogue pages, the
+player, favourites and recently played, and adds server rendering, per-page SEO,
+autoplay stations and the "Why this" signal breakdown, which nothing displayed
+before. Both now drive the recommendation engine from a local listening log.
+Consolidating on one of them is an open decision, not a finished migration.
 
 Everything below applies to the API and the recommendation engine, which both
 frontends share. See `web/README.md` for the Next app.
@@ -64,6 +65,7 @@ Verification scripts:
 | `static/css/app.css` | Design system (legacy frontend) |
 | `static/js/app.js` | Router, views, store, player (legacy frontend) |
 | `web/` | The Next.js frontend, documented in `web/README.md` |
+| `scripts/stub_api.py` | Offline stand-in for this API, for frontend work without network access |
 
 ## How the recommendation algorithm works
 

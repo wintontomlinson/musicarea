@@ -2,6 +2,7 @@
 
 import { create } from 'zustand';
 import type { Song } from '@/lib/types';
+import { useHistory } from './history';
 
 const LIBRARY_KEY = 'musicarea:library:v1';
 
@@ -104,6 +105,10 @@ export const useLibrary = create<LibraryState>((set, get) => ({
     get().hydrate();
     const { liked, recent } = get();
     const exists = liked.some((s) => s.id === song.id);
+    // Only a like is recorded, never an unlike. Removing a favourite means "this
+    // no longer belongs in my list", not "I dislike this", and the log is
+    // append-only so there is nothing to take back.
+    if (!exists) useHistory.getState().log(song, 'like');
     // Newest first, so the favourites screen reads most-recently-loved down.
     const nextLiked = exists
       ? liked.filter((s) => s.id !== song.id)

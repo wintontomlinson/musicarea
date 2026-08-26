@@ -9,6 +9,7 @@ import { MoodGrid } from '@/components/sections/MoodGrid';
 import { TrackList } from '@/components/sections/TrackList';
 import { Icon } from '@/components/ui/Icon';
 import { usePlayer } from '@/stores/player';
+import { useHistory } from '@/stores/history';
 import { decodeEntities, resultHref, resultImage, resultSubtitle } from './resultHelpers';
 
 type Tab = 'all' | 'songs' | 'artists' | 'albums' | 'playlists';
@@ -250,6 +251,7 @@ function SearchResults({
   failed: boolean;
 }) {
   const playQueue = usePlayer((s) => s.playQueue);
+  const logEvent = useHistory((s) => s.log);
   const top = results?.topQuery?.results?.[0];
   const artists = results?.artists?.results ?? [];
   const albums = results?.albums?.results ?? [];
@@ -302,7 +304,12 @@ function SearchResults({
                   {songResults.length > 0 && (
                     <button
                       type="button"
-                      onClick={() => playQueue(songResults, 0)}
+                      onClick={() => {
+                        // Playing a search result is a stronger signal than a
+                        // shelf tap: the listener named what they wanted.
+                        if (songResults[0]) logEvent(songResults[0], 'search_play');
+                        playQueue(songResults, 0);
+                      }}
                       className="text-[13px] font-medium text-accent transition-colors hover:text-accent-soft"
                     >
                       Play all

@@ -8,6 +8,7 @@ import { QueuePanel } from '@/components/player/QueuePanel';
 import { KeyboardShortcuts } from '@/components/player/KeyboardShortcuts';
 import { MediaSession } from '@/components/player/MediaSession';
 import { PlaybackAlert } from '@/components/player/PlaybackAlert';
+import { AutoplayRadio } from '@/components/player/AutoplayRadio';
 import { OnboardingGate } from '@/components/onboarding/OnboardingGate';
 
 /**
@@ -37,6 +38,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         <FullPlayer />
         <QueuePanel />
         <PlaybackAlert />
+        <AutoplayRadio />
         <KeyboardShortcuts />
         <MediaSession />
       </div>
