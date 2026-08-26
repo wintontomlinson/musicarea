@@ -107,9 +107,15 @@ export function SearchExperience({ moods, initialQuery }: { moods: Mood[]; initi
 
   return (
     <div className="app-page">
-      <h1 className="text-h2 font-bold tracking-tight sm:text-h1">Search</h1>
+      <section>
+        <p className="section-kicker">Find your next favourite</p>
+        <h1 className="mt-2 text-h2 font-extrabold tracking-[-0.04em] sm:text-h1">
+          Search the <span className="headline-gradient">soundtrack.</span>
+        </h1>
+        <p className="mt-2 text-[15px] text-text-secondary">Songs, artists, albums and playlists are one search away.</p>
+      </section>
 
-      <div ref={boxRef} className="relative w-full max-w-2xl">
+      <div ref={boxRef} className="relative w-full max-w-3xl">
         <form
           role="search"
           onSubmit={(e) => {
@@ -128,7 +134,7 @@ export function SearchExperience({ moods, initialQuery }: { moods: Mood[]; initi
             onFocus={() => suggest && setShowSuggest(true)}
             placeholder="Artists, Songs, Lyrics, and More"
             aria-label="Search"
-            className="w-full rounded-lg bg-white/[0.09] py-2.5 pl-11 pr-4 text-[15px] outline-none transition-colors placeholder:text-text-muted focus:bg-white/[0.14]"
+            className="w-full rounded-xl border border-white/15 bg-[#160d29]/80 py-3.5 pl-11 pr-4 text-[15px] font-medium outline-none transition placeholder:text-text-muted focus:border-fuchsia-300/60 focus:bg-[#1c1031] focus:shadow-glow"
           />
         </form>
 
@@ -165,7 +171,7 @@ function SuggestSheet({ data, onPick }: { data: SearchAllData; onPick: () => voi
   const rows = top ? [top, ...songs, ...artists] : [...songs, ...artists];
 
   return (
-    <div className="glass-panel absolute z-40 mt-2 w-full overflow-hidden rounded-xl2 p-1.5 shadow-lift">
+    <div className="glass-panel absolute z-40 mt-2 w-full overflow-hidden rounded-xl2 border border-fuchsia-300/20 p-1.5 shadow-glow">
       {rows.map((r) => (
         <Link
           key={`${r.type}-${r.id}`}
@@ -287,7 +293,7 @@ function TopResultCard({ result }: { result: SearchResult }) {
   return (
     <Link
       href={resultHref(result)}
-      className="surface-card group flex flex-col items-center gap-4 p-6 text-center transition-colors hover:bg-surface-raised"
+      className="surface-card group flex flex-col items-center gap-4 p-6 text-center transition duration-300 hover:-translate-y-1 hover:border-fuchsia-300/35 hover:bg-surface-raised hover:shadow-glow"
     >
       <span
         className={`relative block h-28 w-28 overflow-hidden shadow-lift ${
@@ -322,7 +328,7 @@ function ResultGrid({
       <h2 className="mb-3 section-title">{title}</h2>
       <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-5">
         {items.map((r) => (
-          <Link key={r.id} href={resultHref(r)} className="group block">
+          <Link key={r.id} href={resultHref(r)} className="group block transition duration-300 hover:-translate-y-1">
             <span
               className={`relative mb-2 block aspect-square overflow-hidden shadow-lift ${
                 circular ? 'rounded-full' : 'rounded-card'

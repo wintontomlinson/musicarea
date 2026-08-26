@@ -26,8 +26,8 @@ export function DetailHeader({
   return (
     <header className="flex flex-col items-center gap-6 text-center sm:flex-row sm:items-start sm:text-left">
       <div
-        className={`relative aspect-square w-44 shrink-0 overflow-hidden shadow-lift sm:w-56 lg:w-64 ${
-          circular ? 'rounded-full' : 'rounded-card'
+        className={`relative aspect-square w-44 shrink-0 overflow-hidden border border-white/15 shadow-[0_22px_50px_-20px_rgba(255,59,191,.42)] sm:w-56 lg:w-64 ${
+          circular ? 'rounded-full' : 'rounded-xl2'
         }`}
       >
         <Image src={cover} alt={title} fill priority sizes="256px" className="object-cover" />
@@ -35,7 +35,7 @@ export function DetailHeader({
 
       <div className="min-w-0 flex-1 sm:pt-2">
         <h1 className="text-h3 font-bold tracking-tight sm:text-h2">{title}</h1>
-        <p className="mt-1 text-[15px] font-medium text-accent sm:text-h5">{eyebrow}</p>
+        <p className="mt-1 text-[15px] font-bold text-accent-soft sm:text-h5">{eyebrow}</p>
         {meta && <div className="mt-2 text-[13px] uppercase tracking-wide text-text-secondary">{meta}</div>}
         {actions && <div className="mt-5 flex justify-center gap-3 sm:justify-start">{actions}</div>}
         {description && (

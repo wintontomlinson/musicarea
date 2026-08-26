@@ -53,7 +53,7 @@ export function TransportControls({ size = 'mini' }: { size?: 'mini' | 'full' })
         type="button"
         aria-label={isPlaying ? 'Pause' : 'Play'}
         onClick={toggle}
-        className={`grid place-items-center rounded-md text-white transition-opacity hover:opacity-70 ${
+        className={`grid place-items-center rounded-full bg-brand text-white shadow-glow transition hover:scale-105 active:scale-95 ${
           big ? 'h-16 w-16' : 'h-9 w-9'
         }`}
       >

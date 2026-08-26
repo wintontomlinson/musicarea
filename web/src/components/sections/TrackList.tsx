@@ -38,8 +38,8 @@ export function TrackList({
         return (
           <div
             key={`${song.id}-${i}`}
-            className={`group grid grid-cols-[22px_1fr_auto] items-center gap-3 rounded-md px-2 py-2 transition-colors sm:grid-cols-[22px_1.6fr_1fr_auto] ${
-              isCurrent ? 'bg-white/[0.06]' : 'hover:bg-white/[0.06]'
+            className={`group grid grid-cols-[22px_1fr_auto] items-center gap-3 rounded-xl border border-transparent px-2 py-2.5 transition-colors sm:grid-cols-[22px_1.6fr_1fr_auto] ${
+              isCurrent ? 'border-fuchsia-300/20 bg-fuchsia-400/[0.09]' : 'hover:bg-white/[0.06]'
             }`}
           >
             {/* Index / equalizer / play */}
@@ -68,7 +68,7 @@ export function TrackList({
             {/* Title + artist (+ art) */}
             <div className="flex min-w-0 items-center gap-3">
               {showArt && (
-                <span className="relative h-11 w-11 shrink-0 overflow-hidden rounded">
+                <span className="relative h-11 w-11 shrink-0 overflow-hidden rounded-xl border border-white/10">
                   <Image
                     src={pickImage(song.image, '150x150')}
                     alt=""

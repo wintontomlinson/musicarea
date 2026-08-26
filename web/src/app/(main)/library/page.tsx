@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
-import { ComingSoon } from '@/components/ui/ComingSoon';
+import { LibraryExperience } from '@/components/library/LibraryExperience';
 
-export const metadata: Metadata = { title: 'Your Library', robots: { index: false } };
+export const metadata: Metadata = { title: 'Your Space', robots: { index: false } };
 
 export default function LibraryPage() {
-  return <ComingSoon page="Your Library" />;
+  return <LibraryExperience />;
 }

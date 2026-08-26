@@ -2,18 +2,12 @@
 
 export const SITE = {
   name: 'MusicArea',
-  tagline: 'Music that learns what you love',
+  tagline: 'Turn up your world',
   description:
-    'Stream millions of songs with a player that learns your taste. Discover new music, build playlists and listen free on MusicArea.',
-  // The public origin of the deployed frontend. Overridden per environment.
+    'Discover and stream music with a vivid player, fresh catalogue picks and listening preferences that stay on your device.',
   url: process.env.NEXT_PUBLIC_SITE_URL || 'https://musicarea.app',
 } as const;
 
-/**
- * The languages the Flask catalogue supports, with display metadata for the
- * onboarding language-preference step. Tints are neutral greys: the interface
- * stays colourless and selection is shown with a white border instead.
- */
 export interface LanguageOption {
   id: string;
   label: string;
@@ -22,39 +16,34 @@ export interface LanguageOption {
 }
 
 export const LANGUAGES: LanguageOption[] = [
-  { id: 'hindi', label: 'Hindi', native: 'हिन्दी', tint: '#242424' },
-  { id: 'english', label: 'English', native: 'English', tint: '#1F1F1F' },
-  { id: 'punjabi', label: 'Punjabi', native: 'ਪੰਜਾਬੀ', tint: '#262626' },
-  { id: 'tamil', label: 'Tamil', native: 'தமிழ்', tint: '#1D1D1D' },
-  { id: 'telugu', label: 'Telugu', native: 'తెలుగు', tint: '#232323' },
-  { id: 'marathi', label: 'Marathi', native: 'मराठी', tint: '#1E1E1E' },
-  { id: 'bengali', label: 'Bengali', native: 'বাংলা', tint: '#252525' },
-  { id: 'kannada', label: 'Kannada', native: 'ಕನ್ನಡ', tint: '#202020' },
-  { id: 'malayalam', label: 'Malayalam', native: 'മലയാളം', tint: '#272727' },
-  { id: 'gujarati', label: 'Gujarati', native: 'ગુજરાતી', tint: '#1C1C1C' },
-  { id: 'bhojpuri', label: 'Bhojpuri', native: 'भोजपुरी', tint: '#242424' },
-  { id: 'urdu', label: 'Urdu', native: 'اردو', tint: '#1F1F1F' },
-  { id: 'haryanvi', label: 'Haryanvi', native: 'हरियाणवी', tint: '#262626' },
-  { id: 'rajasthani', label: 'Rajasthani', native: 'राजस्थानी', tint: '#1D1D1D' },
-  { id: 'assamese', label: 'Assamese', native: 'অসমীয়া', tint: '#232323' },
-  { id: 'odia', label: 'Odia', native: 'ଓଡ଼ିଆ', tint: '#1E1E1E' },
+  { id: 'hindi', label: 'Hindi', native: 'हिन्दी', tint: '#4b195d' },
+  { id: 'english', label: 'English', native: 'English', tint: '#153a67' },
+  { id: 'punjabi', label: 'Punjabi', native: 'ਪੰਜਾਬੀ', tint: '#6b291a' },
+  { id: 'tamil', label: 'Tamil', native: 'தமிழ்', tint: '#1a4c46' },
+  { id: 'telugu', label: 'Telugu', native: 'తెలుగు', tint: '#51371a' },
+  { id: 'marathi', label: 'Marathi', native: 'मराठी', tint: '#3c2459' },
+  { id: 'bengali', label: 'Bengali', native: 'বাংলা', tint: '#174c70' },
+  { id: 'kannada', label: 'Kannada', native: 'ಕನ್ನಡ', tint: '#633046' },
+  { id: 'malayalam', label: 'Malayalam', native: 'മലയാളം', tint: '#254168' },
+  { id: 'gujarati', label: 'Gujarati', native: 'ગુજરાતી', tint: '#665018' },
+  { id: 'bhojpuri', label: 'Bhojpuri', native: 'भोजपुरी', tint: '#523b74' },
+  { id: 'urdu', label: 'Urdu', native: 'اردو', tint: '#0d4f5a' },
+  { id: 'haryanvi', label: 'Haryanvi', native: 'हरियाणवी', tint: '#6a213f' },
+  { id: 'rajasthani', label: 'Rajasthani', native: 'राजस्थानी', tint: '#664117' },
+  { id: 'assamese', label: 'Assamese', native: 'অসমীয়া', tint: '#253d70' },
+  { id: 'odia', label: 'Odia', native: 'ଓଡ଼ିଆ', tint: '#4e295f' },
 ];
 
 export const LANGUAGE_IDS = LANGUAGES.map((l) => l.id);
 export const DEFAULT_LANGUAGES = ['hindi'];
 
-/** Preset avatars for the local profile (no photo upload). Neutral greys of
- *  differing lightness, so they stay distinguishable without colour. */
 export const AVATARS: { id: string; tint: string }[] = [
-  { id: 'graphite', tint: '#2E2E2E' },
-  { id: 'slate', tint: '#3D3D3D' },
-  { id: 'ash', tint: '#4C4C4C' },
-  { id: 'stone', tint: '#5B5B5B' },
-  { id: 'silver', tint: '#6A6A6A' },
-  { id: 'pearl', tint: '#7A7A7A' },
+  { id: 'violet', tint: '#8b5cf6' },
+  { id: 'fuchsia', tint: '#ec4899' },
+  { id: 'coral', tint: '#fb7185' },
+  { id: 'amber', tint: '#f59e0b' },
+  { id: 'cyan', tint: '#06b6d4' },
+  { id: 'indigo', tint: '#6366f1' },
 ];
 
-/** Cookie the client mirrors preferred languages into so the server can SSR
- *  the feed for the right languages on first paint. */
 export const LANG_COOKIE = 'ma_langs';
-

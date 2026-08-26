@@ -96,6 +96,12 @@ export interface Mood {
   keyword?: string;
 }
 
+export interface MoodSet {
+  mood: Mood | null;
+  items: Song[];
+  meta?: { personalised?: boolean; pool?: number; returned?: number };
+}
+
 export interface BrowseData {
   rows: Row[];
   moods: Mood[];

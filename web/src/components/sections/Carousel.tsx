@@ -4,43 +4,17 @@ import { MediaCard } from '@/components/cards/MediaCard';
 import { Icon } from '@/components/ui/Icon';
 import { isSong } from '@/lib/utils';
 
-/**
- * An Apple Music shelf: a bold title with a red "See All" link, then a
- * horizontally snapping row of cards that runs out to the page gutters.
- */
 export function Carousel({ row }: { row: Row }) {
   if (!row.items?.length) return null;
-  // For song rows the whole shelf becomes the play context, so pressing play on
-  // any card queues the rest of the row from that point.
-  const songContext: Song[] | undefined =
-    row.kind === 'songs' ? (row.items.filter(isSong) as Song[]) : undefined;
-
+  const songContext: Song[] | undefined = row.kind === 'songs' ? (row.items.filter(isSong) as Song[]) : undefined;
   return (
     <section>
-      <div className="mb-3 flex items-end gap-3">
-        <div className="min-w-0">
-          <h2 className="truncate section-title">{row.title}</h2>
-          {row.subtitle && (
-            <p className="mt-0.5 truncate text-[13px] text-text-secondary">{row.subtitle}</p>
-          )}
-        </div>
-        {row.showAll && (
-          <Link
-            href={row.showAll}
-            className="ml-auto flex shrink-0 items-center gap-0.5 text-[13px] font-medium text-accent transition-colors hover:text-accent-soft"
-          >
-            See All
-            <Icon name="chevronRight" size={13} />
-          </Link>
-        )}
+      <div className="mb-4 flex items-end gap-3">
+        <div className="min-w-0"><p className="section-kicker mb-1">{row.kind === 'songs' ? 'Play it loud' : 'Pick a side'}</p><h2 className="truncate section-title">{row.title}</h2>{row.subtitle && <p className="mt-1 truncate text-[13px] text-text-secondary">{row.subtitle}</p>}</div>
+        {row.showAll && <Link href={row.showAll} className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full border border-fuchsia-300/25 bg-fuchsia-400/10 px-3 py-1.5 text-[12px] font-bold text-accent-soft transition hover:bg-fuchsia-400/20 hover:text-white">See all <Icon name="chevronRight" size={13} /></Link>}
       </div>
-
-      <div className="no-scrollbar -mx-4 flex snap-x gap-4 overflow-x-auto px-4 pb-1 sm:-mx-8 sm:px-8 lg:-mx-10 lg:px-10">
-        {row.items.map((item) => (
-          <div key={item.id} className="w-[9.5rem] shrink-0 snap-start sm:w-[11rem] lg:w-[12rem]">
-            <MediaCard item={item} context={songContext} />
-          </div>
-        ))}
+      <div className="no-scrollbar -mx-4 flex snap-x gap-4 overflow-x-auto px-4 pb-3 sm:-mx-8 sm:px-8 lg:-mx-10 lg:px-10">
+        {row.items.map((item) => <div key={item.id} className="w-[9.75rem] shrink-0 snap-start sm:w-[11rem] lg:w-[12.5rem]"><MediaCard item={item} context={songContext} /></div>)}
       </div>
     </section>
   );

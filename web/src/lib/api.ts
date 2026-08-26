@@ -6,6 +6,7 @@ import type {
   ChartCard,
   FeedData,
   HistoryEntry,
+  MoodSet,
   Playlist,
   SearchAllData,
   Song,
@@ -133,6 +134,10 @@ export const api = {
       `/api/playlists?id=${encodeURIComponent(id)}&limit=${limit}`,
       { revalidate: 600 },
     );
+  },
+
+  mood(id: string, limit = 40): Promise<MoodSet> {
+    return call<MoodSet>(`/api/moods/${encodeURIComponent(id)}?limit=${limit}`, { revalidate: 300 });
   },
 
   /** Editorial chart playlists (each opens to a ranked song list). */
