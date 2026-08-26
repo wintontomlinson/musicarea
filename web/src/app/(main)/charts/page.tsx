@@ -2,7 +2,6 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import type { ChartCard, Playlist } from '@/lib/types';
-import { pickImage } from '@/lib/utils';
 import { SITE } from '@/lib/config';
 import { ChartList } from '@/components/sections/ChartList';
 import { CollectionActions } from '@/components/player/CollectionActions';
@@ -19,13 +18,16 @@ export const metadata: Metadata = {
   },
 };
 
-export const revalidate = 600;
+// No `revalidate` here: reading `searchParams` for the ?c= selection makes this
+// route dynamic, so a route-level revalidate window would never apply. The
+// per-fetch `next.revalidate` in lib/api.ts is what caches the chart data.
 
 function chartLabel(c: ChartCard): string {
   return c.name || c.title || 'Chart';
 }
 
-export default async function ChartsPage({ searchParams }: { searchParams: { c?: string } }) {
+export default async function ChartsPage({ searchParams }: { searchParams: Promise<{ c?: string }> }) {
+  const { c: requestedChart } = await searchParams;
   let charts: ChartCard[] = [];
   try {
     charts = (await api.charts()).items ?? [];
@@ -47,8 +49,11 @@ export default async function ChartsPage({ searchParams }: { searchParams: { c?:
   }
 
   // Selected chart (defaults to the first). Then open it to get the ranked songs.
-  const selectedId = searchParams.c && charts.some((c) => c.id === searchParams.c) ? searchParams.c : charts[0].id;
-  const selected = charts.find((c) => c.id === selectedId)!;
+  // Resolve the object first and derive the id from it, so an unknown ?c= value
+  // falls back to a chart that definitely exists rather than needing an
+  // assertion that the lookup succeeded.
+  const selected = charts.find((c) => c.id === requestedChart) ?? charts[0];
+  const selectedId = selected.id;
 
   let playlist: Playlist | null = null;
   try {

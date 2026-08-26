@@ -6,6 +6,7 @@ import type { Song } from '@/lib/types';
 import { usePlayer } from '@/stores/player';
 import { artistLine, entityHref, formatDuration, pickImage, primaryArtist } from '@/lib/utils';
 import { Icon } from '@/components/ui/Icon';
+import { LikeButton } from '@/components/library/LikeButton';
 
 /**
  * Apple Music's track table: plain rows separated by hairlines that start past
@@ -27,6 +28,7 @@ export function TrackList({
   const isPlaying = usePlayer((s) => s.isPlaying);
   const toggle = usePlayer((s) => s.toggle);
   const playQueue = usePlayer((s) => s.playQueue);
+  const addToQueue = usePlayer((s) => s.addToQueue);
 
   if (!songs.length) return null;
 
@@ -122,9 +124,26 @@ export function TrackList({
               </div>
             )}
 
-            {/* Duration */}
-            <span className="text-[13px] tabular-nums text-text-secondary">
-              {formatDuration(song.duration)}
+            {/* Row actions + duration. The actions stay visible once a track is
+                favourited so the state is readable without hovering, and are
+                always visible on touch, where there is no hover at all. */}
+            <span className="flex items-center gap-1">
+              <LikeButton
+                song={song}
+                size={15}
+                className="h-7 w-7 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-focus-within:opacity-100 sm:group-hover:opacity-100 sm:aria-pressed:opacity-100"
+              />
+              <button
+                type="button"
+                aria-label={`Add ${song.name} to the queue`}
+                onClick={() => addToQueue(song)}
+                className="grid h-7 w-7 place-items-center rounded-md text-text-muted transition-colors hover:text-white sm:opacity-0 sm:transition-opacity sm:group-focus-within:opacity-100 sm:group-hover:opacity-100"
+              >
+                <Icon name="plus" size={15} />
+              </button>
+              <span className="ml-1 text-[13px] tabular-nums text-text-secondary">
+                {formatDuration(song.duration)}
+              </span>
             </span>
           </div>
         );

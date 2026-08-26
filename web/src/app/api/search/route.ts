@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 
 /**
- * Proxy for the combined search (autocomplete) used by the instant suggestions
- * dropdown and the "All" results tab. Keeps the Flask base URL server-side.
+ * Proxy for the grouped search endpoint (top result, songs, albums, artists,
+ * playlists). Runs on the server so the Flask base URL stays internal.
  */
 export async function GET(req: Request) {
   const query = new URL(req.url).searchParams.get('q')?.trim();
@@ -11,7 +11,8 @@ export async function GET(req: Request) {
   try {
     const data = await api.searchAll(query);
     return NextResponse.json(data);
-  } catch {
-    return NextResponse.json({ error: 'Search failed' }, { status: 502 });
+  } catch (err) {
+    const status = err instanceof ApiError && err.status === 503 ? 503 : 502;
+    return NextResponse.json({ error: 'Search failed' }, { status });
   }
 }

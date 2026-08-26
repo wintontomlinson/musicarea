@@ -8,10 +8,10 @@ import { api } from '@/lib/api';
  */
 export async function GET(
   _req: Request,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const songs = await api.song(params.id);
+    const songs = await api.song((await params).id);
     return NextResponse.json(songs);
   } catch {
     return NextResponse.json({ error: 'Song not found' }, { status: 404 });

@@ -11,22 +11,20 @@ export const metadata: Metadata = {
   alternates: { canonical: '/search' },
 };
 
-export const revalidate = 300;
-
 export default async function SearchPage({
   searchParams,
 }: {
-  searchParams: { q?: string };
+  searchParams: Promise<{ q?: string }>;
 }) {
   // Moods power the before-typing state; fetched on the server and cached.
   let moods: Mood[] = [];
   try {
-    const browse = await api.browse(preferredLanguages());
+    const browse = await api.browse(await preferredLanguages());
     moods = browse.moods ?? [];
   } catch {
     moods = [];
   }
-  const initialQuery = (searchParams.q ?? '').trim();
+  const initialQuery = ((await searchParams).q ?? '').trim();
 
   return (
     <Suspense fallback={<div className="p-6 text-sm text-text-secondary">Loading search…</div>}>

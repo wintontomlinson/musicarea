@@ -1,8 +1,10 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { api } from '@/lib/api';
+import { loadEntity } from '@/lib/entity';
 import type { Playlist } from '@/lib/types';
-import { formatCount, formatDuration, pickImage } from '@/lib/utils';
+import { EntityUnavailable, unavailableMetadata } from '@/components/ui/EntityUnavailable';
+import { entityHref, formatCount, formatDuration, pickImage } from '@/lib/utils';
 import { SITE } from '@/lib/config';
 import { DetailHeader } from '@/components/sections/DetailHeader';
 import { TrackList } from '@/components/sections/TrackList';
@@ -11,18 +13,18 @@ import { JsonLd, breadcrumbLd } from '@/components/seo/JsonLd';
 
 export const revalidate = 600;
 
-async function getPlaylist(id: string): Promise<Playlist | null> {
-  try {
-    const pl = await api.playlist(id, 100);
-    return pl?.id ? pl : null;
-  } catch {
-    return null;
-  }
+function getPlaylist(id: string) {
+  return loadEntity(
+    () => api.playlist(id, 100),
+    (pl): pl is Playlist => !!pl?.id,
+  );
 }
 
-export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
-  const pl = await getPlaylist(params.id);
-  if (!pl) return { title: 'Playlist not found' };
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const result = await getPlaylist((await params).id);
+  if (result.status === 'unavailable') return unavailableMetadata('playlist');
+  if (result.status === 'missing') return { title: 'Playlist not found', robots: { index: false } };
+  const pl = result.data;
   const cover = pickImage(pl.image);
   const description =
     pl.description ||
@@ -30,7 +32,7 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   return {
     title: pl.name,
     description,
-    alternates: { canonical: `/playlist/${pl.id}` },
+    alternates: { canonical: entityHref('playlist', pl.name, pl.id) },
     openGraph: {
       type: 'music.playlist',
       title: pl.name,
@@ -41,9 +43,11 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   };
 }
 
-export default async function PlaylistPage({ params }: { params: { id: string } }) {
-  const pl = await getPlaylist(params.id);
-  if (!pl) notFound();
+export default async function PlaylistPage({ params }: { params: Promise<{ id: string }> }) {
+  const result = await getPlaylist((await params).id);
+  if (result.status === 'unavailable') return <EntityUnavailable kind="playlist" />;
+  if (result.status === 'missing') notFound();
+  const pl = result.data;
 
   const cover = pickImage(pl.image);
   const songs = pl.songs ?? [];
@@ -64,7 +68,7 @@ export default async function PlaylistPage({ params }: { params: { id: string } 
       <JsonLd
         data={breadcrumbLd([
           { name: 'Home', path: '/' },
-          { name: pl.name, path: `/playlist/${pl.id}` },
+          { name: pl.name, path: entityHref('playlist', pl.name, pl.id) },
         ])}
       />
 

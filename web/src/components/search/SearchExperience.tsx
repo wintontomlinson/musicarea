@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -29,65 +29,96 @@ export function SearchExperience({ moods, initialQuery }: { moods: Mood[]; initi
 
   const [suggest, setSuggest] = useState<SearchAllData | null>(null);
   const [showSuggest, setShowSuggest] = useState(false);
-  const [results, setResults] = useState<SearchAllData | null>(null);
-  const [songResults, setSongResults] = useState<Song[]>([]);
-  const [loading, setLoading] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
 
-  // Keep local state in sync when the URL query changes (e.g. via the top bar).
-  useEffect(() => {
-    const q = params.get('q') ?? '';
-    setInput(q);
-    setCommitted(q);
-  }, [params]);
+  /**
+   * Results are held as one object tagged with the query they belong to, rather
+   * than as separate `results` / `songs` / `loading` / `failed` flags. Tagging
+   * makes "these results are for the query on screen" checkable, so a slow
+   * response for an abandoned query can never repaint over a newer one, and it
+   * lets `loading` be derived instead of toggled from inside the effect.
+   */
+  const [payload, setPayload] = useState<{
+    query: string;
+    results: SearchAllData | null;
+    songs: Song[];
+    failed: boolean;
+  } | null>(null);
 
-  // Debounced suggestions while typing.
+  const settled = payload?.query === committed ? payload : null;
+  const loading = Boolean(committed) && !settled;
+  const results = settled?.results ?? null;
+  const songResults = settled?.songs ?? [];
+  const failed = settled?.failed ?? false;
+
+  // Mirror the URL query into local state. Derived from `params` during render
+  // rather than assigned from an effect: writing state in an effect for this
+  // costs an extra render pass and shows one frame of the stale query.
+  const urlQuery = params.get('q') ?? '';
+  const [syncedQuery, setSyncedQuery] = useState(urlQuery);
+  if (urlQuery !== syncedQuery) {
+    setSyncedQuery(urlQuery);
+    setInput(urlQuery);
+    setCommitted(urlQuery);
+  }
+
+  // Debounced suggestions while typing. Nothing is cleared here on the way out:
+  // the sheet is gated on the query still being unsubmitted at render time, so
+  // stale suggestions cannot be shown even while they are still in state.
   useEffect(() => {
     const q = input.trim();
-    if (!q || q === committed) {
-      setSuggest(null);
-      return;
-    }
+    if (!q || q === committed) return;
+    const controller = new AbortController();
     const id = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
-        if (res.ok) {
-          setSuggest((await res.json()) as SearchAllData);
-          setShowSuggest(true);
-        }
+        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`, {
+          signal: controller.signal,
+        });
+        if (!res.ok) return;
+        setSuggest((await res.json()) as SearchAllData);
+        setShowSuggest(true);
       } catch {
-        /* ignore transient suggest errors */
+        /* aborted, or a transient suggest failure: leave the sheet as it is */
       }
     }, 220);
-    return () => clearTimeout(id);
+    return () => {
+      clearTimeout(id);
+      // Cancel the in-flight request too. Without this, a slow response for an
+      // earlier keystroke could land after a later one and repaint stale
+      // suggestions.
+      controller.abort();
+    };
   }, [input, committed]);
 
   // Load full results when a query is committed.
-  const loadResults = useCallback(async (q: string) => {
-    if (!q) {
-      setResults(null);
-      setSongResults([]);
-      return;
-    }
-    setLoading(true);
-    try {
-      const [all, songs] = await Promise.all([
-        fetch(`/api/search?q=${encodeURIComponent(q)}`).then((r) => (r.ok ? r.json() : null)),
-        fetch(`/api/search/songs?q=${encodeURIComponent(q)}`).then((r) => (r.ok ? r.json() : [])),
-      ]);
-      setResults(all as SearchAllData | null);
-      setSongResults((songs as Song[]) || []);
-    } catch {
-      setResults(null);
-      setSongResults([]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
-    void loadResults(committed);
-  }, [committed, loadResults]);
+    const q = committed;
+    if (!q) return;
+    const controller = new AbortController();
+
+    (async () => {
+      try {
+        const [all, songs] = await Promise.all([
+          fetch(`/api/search?q=${encodeURIComponent(q)}`, { signal: controller.signal }),
+          fetch(`/api/search/songs?q=${encodeURIComponent(q)}`, { signal: controller.signal }),
+        ]);
+        // A failure on both sides is a failure to report, not an empty result
+        // set. Showing "No songs found" for a 502 tells the listener their query
+        // matched nothing, which is a different and wrong thing to say.
+        if (!all.ok && !songs.ok) throw new Error('search failed');
+        const nextResults = all.ok ? ((await all.json()) as SearchAllData) : null;
+        const nextSongs = songs.ok ? (((await songs.json()) as Song[]) ?? []) : [];
+        if (controller.signal.aborted) return;
+        setPayload({ query: q, results: nextResults, songs: nextSongs, failed: false });
+      } catch {
+        if (controller.signal.aborted) return;
+        setPayload({ query: q, results: null, songs: [], failed: true });
+      }
+    })();
+
+    // Abandon the request when the query changes or the component unmounts.
+    return () => controller.abort();
+  }, [committed]);
 
   // Close the suggestion sheet on outside click.
   useEffect(() => {
@@ -138,7 +169,7 @@ export function SearchExperience({ moods, initialQuery }: { moods: Mood[]; initi
           />
         </form>
 
-        {showSuggest && suggest && input.trim() && (
+        {showSuggest && suggest && input.trim() && input.trim() !== committed && (
           <SuggestSheet data={suggest} onPick={() => setShowSuggest(false)} />
         )}
       </div>
@@ -154,6 +185,7 @@ export function SearchExperience({ moods, initialQuery }: { moods: Mood[]; initi
           results={results}
           songResults={songResults}
           loading={loading}
+          failed={failed}
         />
       )}
     </div>
@@ -207,6 +239,7 @@ function SearchResults({
   results,
   songResults,
   loading,
+  failed,
 }: {
   query: string;
   tab: Tab;
@@ -214,6 +247,7 @@ function SearchResults({
   results: SearchAllData | null;
   songResults: Song[];
   loading: boolean;
+  failed: boolean;
 }) {
   const playQueue = usePlayer((s) => s.playQueue);
   const top = results?.topQuery?.results?.[0];
@@ -242,7 +276,17 @@ function SearchResults({
 
       {loading && <p className="text-[13px] text-text-secondary">Searching for “{query}”…</p>}
 
-      {!loading && (
+      {!loading && failed && (
+        <div className="rounded-xl2 border border-amber-300/25 bg-amber-400/[0.06] p-5">
+          <h2 className="text-[15px] font-bold text-amber-100">Search is unavailable</h2>
+          <p className="mt-1 text-[13px] leading-relaxed text-amber-50/70">
+            The catalogue could not be reached, so there are no results to show for &ldquo;{query}
+            &rdquo;. This is not the same as finding nothing: try again in a moment.
+          </p>
+        </div>
+      )}
+
+      {!loading && !failed && (
         <div className="flex flex-col gap-10">
           {(tab === 'all' || tab === 'songs') && (
             <div className="grid gap-8 lg:grid-cols-[minmax(0,300px)_1fr]">

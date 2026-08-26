@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import { SITE } from '@/lib/config';
+import { JsonLd } from '@/components/seo/JsonLd';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -35,7 +36,9 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#000000',
+  // Matches --bg in globals.css. It was pure black, which left a visible seam
+  // between the browser chrome and the page on mobile.
+  themeColor: '#090613',
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
@@ -47,20 +50,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-screen bg-bg font-sans text-white antialiased">
         {/* WebSite structured data with a SearchAction, so search engines can
             surface a sitelinks search box for the app. */}
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{
-            __html: JSON.stringify({
-              '@context': 'https://schema.org',
-              '@type': 'WebSite',
-              name: SITE.name,
-              url: SITE.url,
-              potentialAction: {
-                '@type': 'SearchAction',
-                target: `${SITE.url}/search?q={search_term_string}`,
-                'query-input': 'required name=search_term_string',
-              },
-            }),
+        <JsonLd
+          data={{
+            '@context': 'https://schema.org',
+            '@type': 'WebSite',
+            name: SITE.name,
+            url: SITE.url,
+            potentialAction: {
+              '@type': 'SearchAction',
+              target: `${SITE.url}/search?q={search_term_string}`,
+              'query-input': 'required name=search_term_string',
+            },
           }}
         />
         {children}

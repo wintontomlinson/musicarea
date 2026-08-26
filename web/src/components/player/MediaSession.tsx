@@ -15,6 +15,10 @@ export function MediaSession() {
   useEffect(() => {
     if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return;
     const ms = navigator.mediaSession;
+    // A few browsers expose mediaSession without the MediaMetadata constructor.
+    // Constructing it unguarded threw from inside a store subscription, which
+    // took the whole listener down with it.
+    const canDescribe = typeof window !== 'undefined' && 'MediaMetadata' in window;
 
     ms.setActionHandler('play', () => usePlayer.getState().setPlaying(true));
     ms.setActionHandler('pause', () => usePlayer.getState().setPlaying(false));
@@ -24,16 +28,15 @@ export function MediaSession() {
     ms.setActionHandler('previoustrack', () => usePlayer.getState().prev());
     ms.setActionHandler('nexttrack', () => usePlayer.getState().next(false));
     ms.setActionHandler('seekto', (details) => {
-      const s = usePlayer.getState();
-      if (typeof details.seekTime === 'number') s.setProgress(details.seekTime, s.duration);
+      if (typeof details.seekTime === 'number') usePlayer.getState().seekTo(details.seekTime);
     });
     ms.setActionHandler('seekforward', () => {
       const s = usePlayer.getState();
-      s.setProgress(Math.min(s.duration, s.currentTime + 10), s.duration);
+      s.seekTo(s.currentTime + 10);
     });
     ms.setActionHandler('seekbackward', () => {
       const s = usePlayer.getState();
-      s.setProgress(Math.max(0, s.currentTime - 10), s.duration);
+      s.seekTo(s.currentTime - 10);
     });
 
     let lastId: string | null = null;
@@ -44,12 +47,14 @@ export function MediaSession() {
       // Update metadata only when the track actually changes.
       if (track && track.id !== lastId) {
         lastId = track.id;
-        ms.metadata = new MediaMetadata({
-          title: track.name,
-          artist: artistLine(track),
-          album: track.album?.name || '',
-          artwork: artworkFor(track),
-        });
+        if (canDescribe) {
+          ms.metadata = new MediaMetadata({
+            title: track.name,
+            artist: artistLine(track),
+            album: track.album?.name || '',
+            artwork: artworkFor(track),
+          });
+        }
       } else if (!track) {
         lastId = null;
         ms.metadata = null;

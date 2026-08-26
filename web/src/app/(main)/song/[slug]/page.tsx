@@ -2,7 +2,9 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import { loadEntity } from '@/lib/entity';
 import type { Song } from '@/lib/types';
+import { EntityUnavailable, unavailableMetadata } from '@/components/ui/EntityUnavailable';
 import { artistLine, entityHref, idFromSlug, pickImage, pickStreamUrl, primaryArtist } from '@/lib/utils';
 import { SITE } from '@/lib/config';
 import { DetailHeader } from '@/components/sections/DetailHeader';
@@ -12,22 +14,22 @@ import { JsonLd, breadcrumbLd } from '@/components/seo/JsonLd';
 
 export const revalidate = 600;
 
-async function getSong(slug: string): Promise<Song | null> {
-  try {
-    const songs = await api.song(idFromSlug(slug));
-    return songs[0] ?? null;
-  } catch {
-    return null;
-  }
+function getSong(slug: string) {
+  return loadEntity(
+    async () => (await api.song(idFromSlug(slug)))[0] ?? null,
+    (song): song is Song => !!song?.id,
+  );
 }
 
 export async function generateMetadata({
   params,
 }: {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
-  const song = await getSong(params.slug);
-  if (!song) return { title: 'Song not found' };
+  const result = await getSong((await params).slug);
+  if (result.status === 'unavailable') return unavailableMetadata('song');
+  if (result.status === 'missing') return { title: 'Song not found', robots: { index: false } };
+  const song = result.data;
   const cover = pickImage(song.image);
   const artist = artistLine(song);
   const title = `${song.name} by ${artist}`;
@@ -53,9 +55,11 @@ export async function generateMetadata({
   };
 }
 
-export default async function SongPage({ params }: { params: { slug: string } }) {
-  const song = await getSong(params.slug);
-  if (!song) notFound();
+export default async function SongPage({ params }: { params: Promise<{ slug: string }> }) {
+  const result = await getSong((await params).slug);
+  if (result.status === 'unavailable') return <EntityUnavailable kind="song" />;
+  if (result.status === 'missing') notFound();
+  const song = result.data;
 
   const cover = pickImage(song.image);
   const artist = primaryArtist(song);

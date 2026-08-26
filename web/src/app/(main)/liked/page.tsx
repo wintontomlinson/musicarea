@@ -1,8 +1,15 @@
 import type { Metadata } from 'next';
-import { CollectionNotice } from '@/components/library/CollectionNotice';
+import { CollectionExperience } from '@/components/library/CollectionExperience';
 
 export const metadata: Metadata = { title: 'Favourites', robots: { index: false } };
 
 export default function LikedPage() {
-  return <CollectionNotice kind="Favourites" icon="heart" detail="A clean place for the music you love. Saving favourites is not connected yet, so this screen stays honest about what is available." />;
+  return (
+    <CollectionExperience
+      kind="Favourites"
+      icon="heart"
+      source="liked"
+      intro="The music you have hearted, kept on this device. Nothing is uploaded and no account is needed."
+    />
+  );
 }

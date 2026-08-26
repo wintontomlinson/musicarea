@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { usePlayer } from '@/stores/player';
+import type { Song } from '@/lib/types';
 import { artistLine, pickImage } from '@/lib/utils';
 import { Icon } from '@/components/ui/Icon';
 
@@ -18,6 +19,9 @@ export function QueuePanel() {
   const order = usePlayer((s) => s.order);
   const orderPos = usePlayer((s) => s.orderPos);
   const playAt = usePlayer((s) => s.playAt);
+  // The now-playing row used to render a focusable button wired to a no-op.
+  // Toggling playback is the obvious thing for it to do.
+  const toggle = usePlayer((s) => s.toggle);
   const reorderQueue = usePlayer((s) => s.reorderQueue);
   const removeFromQueue = usePlayer((s) => s.removeFromQueue);
   const clearQueue = usePlayer((s) => s.clearQueue);
@@ -25,16 +29,35 @@ export function QueuePanel() {
   const [dragFrom, setDragFrom] = useState<number | null>(null);
   const [dragOver, setDragOver] = useState<number | null>(null);
 
+  // Escape closes the panel. The scrim is click-to-dismiss but aria-hidden, so
+  // without this there was no keyboard way out.
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        setQueueOpen(false);
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, setQueueOpen]);
+
   if (!open) return null;
 
   const currentQueueIndex = order[orderPos];
   const current = queue[currentQueueIndex];
-  // Upcoming = order positions after the current one.
-  const upcoming = order.slice(orderPos + 1).map((qi, i) => ({
-    queueIndex: qi,
-    orderPos: orderPos + 1 + i,
-    song: queue[qi],
-  }));
+  // Upcoming = order positions after the current one. Rows whose song is missing
+  // are dropped rather than rendered: an order entry pointing past the queue is
+  // a bug worth surviving, not one worth crashing the whole panel over.
+  const upcoming = order
+    .slice(orderPos + 1)
+    .map((qi, i) => ({
+      queueIndex: qi,
+      orderPos: orderPos + 1 + i,
+      song: queue[qi],
+    }))
+    .filter((entry): entry is typeof entry & { song: Song } => Boolean(entry.song));
 
   function onDrop(targetQueueIndex: number) {
     if (dragFrom !== null && dragFrom !== targetQueueIndex) {
@@ -83,7 +106,7 @@ export function QueuePanel() {
               <p className="px-2 pb-2 text-[12px] font-semibold uppercase tracking-[0.06em] text-text-secondary">
                 Now Playing
               </p>
-              <QueueRow song={current} active onClick={() => undefined} />
+              <QueueRow song={current} active onClick={toggle} />
             </>
           )}
 

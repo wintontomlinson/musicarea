@@ -2,7 +2,9 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import { loadEntity } from '@/lib/entity';
 import type { Album } from '@/lib/types';
+import { EntityUnavailable, unavailableMetadata } from '@/components/ui/EntityUnavailable';
 import { entityHref, formatDuration, idFromSlug, pickImage } from '@/lib/utils';
 import { SITE } from '@/lib/config';
 import { DetailHeader } from '@/components/sections/DetailHeader';
@@ -12,13 +14,11 @@ import { JsonLd, breadcrumbLd } from '@/components/seo/JsonLd';
 
 export const revalidate = 600;
 
-async function getAlbum(slug: string): Promise<Album | null> {
-  try {
-    const album = await api.album(idFromSlug(slug));
-    return album?.id ? album : null;
-  } catch {
-    return null;
-  }
+function getAlbum(slug: string) {
+  return loadEntity(
+    () => api.album(idFromSlug(slug)),
+    (album): album is Album => !!album?.id,
+  );
 }
 
 function albumArtist(album: Album): { name: string; id?: string } {
@@ -26,9 +26,11 @@ function albumArtist(album: Album): { name: string; id?: string } {
   return { name: a?.name || 'Various Artists', id: a?.id };
 }
 
-export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
-  const album = await getAlbum(params.slug);
-  if (!album) return { title: 'Album not found' };
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const result = await getAlbum((await params).slug);
+  if (result.status === 'unavailable') return unavailableMetadata('album');
+  if (result.status === 'missing') return { title: 'Album not found', robots: { index: false } };
+  const album = result.data;
   const cover = pickImage(album.image);
   const artist = albumArtist(album).name;
   const title = `${album.name} by ${artist}`;
@@ -49,9 +51,11 @@ export async function generateMetadata({ params }: { params: { slug: string } })
   };
 }
 
-export default async function AlbumPage({ params }: { params: { slug: string } }) {
-  const album = await getAlbum(params.slug);
-  if (!album) notFound();
+export default async function AlbumPage({ params }: { params: Promise<{ slug: string }> }) {
+  const result = await getAlbum((await params).slug);
+  if (result.status === 'unavailable') return <EntityUnavailable kind="album" />;
+  if (result.status === 'missing') notFound();
+  const album = result.data;
 
   const cover = pickImage(album.image);
   const artist = albumArtist(album);
