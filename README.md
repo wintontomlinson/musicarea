@@ -26,13 +26,13 @@ serves the legacy frontend at every path and the Next app is not published at
 all. The Next app is a presentation layer: it holds no catalogue logic and reads
 the same `/api/*` routes documented below.
 
-The two are not at parity. The legacy frontend still owns crossfade, the Web
-Audio visualizer and the audio-quality controls; the rest of this README
-describes it. The Next app covers browse, search, the catalogue pages, the
-player, favourites and recently played, and adds server rendering, per-page SEO,
-autoplay stations and the "Why this" signal breakdown, which nothing displayed
-before. Both now drive the recommendation engine from a local listening log.
-Consolidating on one of them is an open decision, not a finished migration.
+The Next app has now caught up on features and gone past in places. It covers
+browse, search, the catalogue pages, the player, favourites, recently played,
+playlists, generated mixes, stations, lyrics, crossfade and the visualizer, and
+adds server rendering, per-page SEO and the "Why this" signal breakdown that
+nothing displayed before. Both drive the recommendation engine from a local
+listening log. Consolidating on one of them is an open decision rather than a
+finished migration, but the case for the Next app is now much stronger than it was.
 
 Everything below applies to the API and the recommendation engine, which both
 frontends share. See `web/README.md` for the Next app.

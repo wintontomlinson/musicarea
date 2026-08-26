@@ -8,6 +8,21 @@ import { useHistory } from '@/stores/history';
 import type { Song } from '@/lib/types';
 import { pickStream, type ChosenStream } from '@/lib/utils';
 import { equalPowerGains } from '@/lib/crossfade';
+import { attachElement, resumeContext, supportsCors } from '@/lib/audioGraph';
+
+/**
+ * The HTML5 media element behind a Howl.
+ *
+ * Howler does not expose it, and the visualizer needs the element itself to route
+ * it into the audio graph. Reaching into `_sounds` is the only way; it is narrowed
+ * rather than asserted, so a change in Howler's internals turns the visualizer off
+ * instead of throwing.
+ */
+function mediaElementOf(howl: Howl): HTMLMediaElement | null {
+  const sounds = (howl as unknown as { _sounds?: Array<{ _node?: unknown }> })._sounds;
+  const node = sounds?.[0]?._node;
+  return node instanceof HTMLMediaElement ? node : null;
+}
 
 /**
  * The audio engine. Always mounted, renders nothing, exists for its effects.
@@ -215,6 +230,19 @@ export function AudioEngine() {
       if (loadTicketRef.current[slot] !== ticket) return null;
       if (!stream) return null;
 
+      // Decide about the visualizer before the element exists, because it cannot
+      // be decided afterwards: `crossOrigin` has to be set before a source is
+      // assigned, and getting it wrong either silences the track or stops it
+      // loading. See lib/audioGraph.ts.
+      let canVisualize = false;
+      if (usePlayer.getState().visualizer) {
+        canVisualize = await supportsCors(stream.url);
+        if (loadTicketRef.current[slot] !== ticket) return null;
+        // Report the verdict once, so the setting can explain itself instead of
+        // looking broken.
+        usePlayer.getState().setVisualizerUnavailable(!canVisualize);
+      }
+
       return await new Promise<Deck | null>((resolve) => {
         let settled = false;
         const howl = new Howl({
@@ -271,6 +299,9 @@ export function AudioEngine() {
             const deck = decksRef.current[slot];
             if (!deck || deck.retiring) return;
             usePlayer.getState().setPlaying(true);
+            // The audio context starts suspended until a gesture; starting
+            // playback is one.
+            resumeContext();
             // Recorded on play rather than load, so skipping through a queue does
             // not fill the recent list with tracks nobody heard.
             useLibrary.getState().recordPlay(song);
@@ -326,6 +357,20 @@ export function AudioEngine() {
           handedOver: false,
         };
         decksRef.current[slot] = deck;
+
+        // Wire up the analyser while the element is still sourceless. Howler owns
+        // the element, so this reaches past its public surface; it is guarded and
+        // failure here only costs the visualizer, never playback.
+        if (canVisualize) {
+          const element = mediaElementOf(howl);
+          if (element) {
+            element.crossOrigin = 'anonymous';
+            if (!attachElement(element)) {
+              usePlayer.getState().setVisualizerUnavailable(true);
+            }
+          }
+        }
+
         // Now that the deck is findable, start fetching. Playback waits for
         // `onload` on the preload path; on the active path Howler queues the play
         // and honours it once the source is ready.

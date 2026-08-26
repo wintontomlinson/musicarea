@@ -16,6 +16,7 @@ interface PersistedPrefs {
   autoplay: boolean;
   quality: StreamQuality;
   crossfade: number;
+  visualizer: boolean;
 }
 
 /** Bounds for the crossfade setting, in seconds. */
@@ -34,6 +35,9 @@ const DEFAULT_PREFS: PersistedPrefs = {
   // connections, not as a sensible default.
   quality: '320kbps',
   crossfade: 6,
+  // On by default, but it costs nothing until the full player is opened and it
+  // disables itself if the CDN will not allow the read.
+  visualizer: true,
 };
 
 /** Volume restored when unmuting from a slider that was dragged to zero. */
@@ -77,6 +81,8 @@ function loadPrefs(): PersistedPrefs {
         typeof parsed.crossfade === 'number' && Number.isFinite(parsed.crossfade)
           ? Math.max(0, Math.min(MAX_CROSSFADE, parsed.crossfade))
           : DEFAULT_PREFS.crossfade,
+      visualizer:
+        typeof parsed.visualizer === 'boolean' ? parsed.visualizer : DEFAULT_PREFS.visualizer,
     };
   } catch {
     return DEFAULT_PREFS;
@@ -101,6 +107,7 @@ function savePrefs(state: PersistedPrefs) {
     autoplay: state.autoplay,
     quality: state.quality,
     crossfade: state.crossfade,
+    visualizer: state.visualizer,
   };
   try {
     localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
@@ -146,6 +153,14 @@ export interface PlayerState {
    * buffer. Inaudible, but it means playback never stalls between tracks.
    */
   crossfade: number;
+  /** Draw the frequency visualizer in the full player. */
+  visualizer: boolean;
+  /**
+   * Set once the engine establishes that the audio CDN refuses cross-origin
+   * reads, which makes a real visualizer impossible. Not persisted: it is a fact
+   * about the network rather than a preference, and it can change.
+   */
+  visualizerUnavailable: boolean;
   /**
    * The rung actually playing, which can be lower than `quality` when a
    * particular track does not publish it. Reported by the engine on load so the
@@ -199,6 +214,8 @@ export interface PlayerState {
   toggleAutoplay: () => void;
   setQuality: (quality: StreamQuality) => void;
   setCrossfade: (seconds: number) => void;
+  toggleVisualizer: () => void;
+  setVisualizerUnavailable: (unavailable: boolean) => void;
   /** Engine to store: the rung this track is actually streaming at. */
   setActiveStream: (quality: string | null, steppedDown: boolean) => void;
   reorderQueue: (fromQueueIndex: number, toQueueIndex: number) => void;
@@ -231,6 +248,8 @@ export const usePlayer = create<PlayerState>((set, get) => ({
   autoplay: initialPrefs.autoplay,
   quality: initialPrefs.quality,
   crossfade: initialPrefs.crossfade,
+  visualizer: initialPrefs.visualizer,
+  visualizerUnavailable: false,
   activeQuality: null,
   activeSteppedDown: false,
   currentTime: 0,
@@ -398,6 +417,13 @@ export const usePlayer = create<PlayerState>((set, get) => ({
     set({ crossfade });
     savePrefs(get());
   },
+
+  toggleVisualizer: () => {
+    set({ visualizer: !get().visualizer });
+    savePrefs(get());
+  },
+
+  setVisualizerUnavailable: (visualizerUnavailable) => set({ visualizerUnavailable }),
 
   setActiveStream: (activeQuality, activeSteppedDown) => set({ activeQuality, activeSteppedDown }),
 

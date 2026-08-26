@@ -174,6 +174,32 @@ single-flight and a back-off on 429.
   effect-only helpers (`KeyboardShortcuts`, `MediaSession`) mount once in the
   main layout, so playback survives route changes.
 
+### Two decks
+
+The engine runs two Howl decks rather than one. A single sound cannot overlap
+itself, so every track change would be either a gap or a cut; with two, the
+outgoing track keeps sounding while the incoming one rises under it. The idle deck
+doubles as the buffer for whatever is next.
+
+Buffering ahead is what decides whether a crossfade sounds right. Fetching the
+incoming track when the fade begins works on a fast connection and fails on a slow
+one, leaving the incoming side silent through the first half of the blend. The next
+track is loaded about fifteen seconds early and the fade reuses that buffer instead
+of reassigning a source, which would discard it.
+
+That buffer is also why **crossfade off is still gapless**: the handover becomes a
+60ms blend into the already-loaded deck, inaudible but never stalling.
+
+The ramp is equal power (`sin`/`cos`), in `lib/crossfade.ts`. Two different
+recordings are uncorrelated, so they sum by power rather than amplitude; a
+straight-line pair is 3 dB down at the crossover, which is heard as a dip on every
+track change. On this curve the gains square to 1 throughout and both sit at 0.707
+where they meet.
+
+A retiring deck is barred from touching the store. It still fires `pause` and `end`
+on its way out, and letting those through would report playback as stopped, or
+advance the queue twice, while the incoming track is audible.
+
 **Position travels one way, intent the other.** `setProgress` is only ever the
 engine reporting where playback is. A seek is a separate action, `seekTo`, which
 bumps a `seekSeq` counter the engine watches. Sharing one channel for both meant
@@ -189,6 +215,31 @@ which failed; the ceiling turns that into one visible message.
 Keyboard: Space/k play-pause, Left/Right seek 5s (Shift = prev/next track),
 Up/Down volume, m mute, s shuffle, r repeat. Shortcuts are ignored entirely when
 nothing is queued, so Space still scrolls the page.
+
+### Audio quality
+
+320, 160 or 96 kbps, and no lossless option, because there is nothing to point one
+at: the catalogue publishes five rungs and every one is AAC in an MP4 container.
+
+What the setting does guarantee is that the badge reports the rung **in use**, not
+the one requested, and turns amber when a track forced a step down. Stepping is
+directional: down first, since a lower bitrate is a compromise the listener agreed
+to and a higher one costs them data they did not. Changing quality mid-track keeps
+your place, and the seek waits for the new source to report a duration first,
+because assigning a time to an element still in `HAVE_NOTHING` is silently dropped.
+
+### Visualizer
+
+Real frequency data, and the one feature that can break playback if done
+carelessly. A `MediaElementAudioSourceNode` routes an element's audio *through* the
+graph. On cross-origin media with no `crossOrigin` attribute the resource counts as
+tainted and the node emits **silence**; set `crossOrigin` and a host that does not
+answer with CORS headers fails the load outright instead. Neither is reversible
+once the element has a source.
+
+So `lib/audioGraph.ts` probes the origin once, before any element is pointed at a
+stream, and attaches the analyser only on a yes. On a no the bars are hidden and
+the setting says why. Nothing is faked and audio is never risked to draw a picture.
 
 ## Saved music
 
