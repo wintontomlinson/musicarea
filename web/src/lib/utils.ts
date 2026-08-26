@@ -104,6 +104,26 @@ export function pickStreamUrl(song: Song): string | null {
   return urls[urls.length - 1]?.url || null;
 }
 
+/**
+ * Coarse relative time for listening history. Deliberately low resolution:
+ * "3 hours ago" is more useful here than a precise timestamp, and it avoids
+ * implying a level of tracking the app does not do.
+ */
+export function relativeTime(timestamp: number, now = Date.now()): string {
+  const seconds = Math.max(0, Math.round((now - timestamp) / 1000));
+  if (seconds < 60) return 'Just now';
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes} ${minutes === 1 ? 'minute' : 'minutes'} ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} ${hours === 1 ? 'hour' : 'hours'} ago`;
+  const days = Math.round(hours / 24);
+  if (days < 7) return `${days} ${days === 1 ? 'day' : 'days'} ago`;
+  const weeks = Math.round(days / 7);
+  if (weeks < 5) return `${weeks} ${weeks === 1 ? 'week' : 'weeks'} ago`;
+  const months = Math.round(days / 30);
+  return `${months} ${months === 1 ? 'month' : 'months'} ago`;
+}
+
 /** Time-based greeting for the home hero. */
 export function greeting(date = new Date()): string {
   const h = date.getHours();

@@ -5,11 +5,10 @@ import { Icon } from '@/components/ui/Icon';
 import type { Song } from '@/lib/types';
 
 /**
- * Apple's tinted Play pill for a single track, used by the Listen Now featured
- * card and the song page. Reflects and toggles playback when the given song is
- * already the current track, otherwise starts it.
+ * Primary play action for a single track. Reflects and toggles playback when the
+ * given song is already current, otherwise starts it.
  */
-export function PlayPill({ song }: { song: Song }) {
+export function PlayPill({ song, className = '' }: { song: Song; className?: string }) {
   const currentId = usePlayer((s) => s.currentTrack()?.id);
   const isPlaying = usePlayer((s) => s.isPlaying);
   const toggle = usePlayer((s) => s.toggle);
@@ -22,7 +21,7 @@ export function PlayPill({ song }: { song: Song }) {
     <button
       type="button"
       onClick={() => (isCurrent ? toggle() : playNow(song))}
-      className="button-primary min-w-[7rem]"
+      className={`btn-primary min-w-[112px] ${className}`}
     >
       <Icon name={showPause ? 'pause' : 'play'} size={15} />
       {showPause ? 'Pause' : 'Play'}

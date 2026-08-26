@@ -96,6 +96,17 @@ export interface Mood {
   keyword?: string;
 }
 
+/**
+ * Lyrics as the catalogue publishes them: a single HTML-ish block with <br>
+ * separators, plus optional rights text. No timing information is provided, so
+ * synced scrolling is not possible from this source.
+ */
+export interface Lyrics {
+  lyrics: string;
+  copyright?: string | null;
+  snippet?: string | null;
+}
+
 export interface MoodSet {
   mood: Mood | null;
   items: Song[];

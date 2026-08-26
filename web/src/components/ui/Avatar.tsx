@@ -1,15 +1,13 @@
 import { AVATARS } from '@/lib/config';
 
 /**
- * Neutral avatar showing the profile's initial. Uses one of the preset grey
- * tints by id; falls back to the first preset (which also covers profiles
- * saved under an older preset id). Reused in onboarding, the sidebar and the
- * top bar.
+ * Profile initial on a preset tint. Falls back to the first preset, which also
+ * covers profiles saved under an avatar id from an earlier release.
  */
 export function Avatar({
   name,
   avatarId,
-  size = 40,
+  size = 32,
   className = '',
 }: {
   name: string;
@@ -21,11 +19,11 @@ export function Avatar({
   const initial = (name.trim()[0] || 'M').toUpperCase();
   return (
     <span
-      className={`grid shrink-0 place-items-center rounded-full font-bold text-white ${className}`}
+      className={`grid shrink-0 place-items-center rounded-full border border-white/10 font-semibold text-text ${className}`}
       style={{
         width: size,
         height: size,
-        fontSize: size * 0.42,
+        fontSize: Math.round(size * 0.4),
         backgroundColor: preset.tint,
       }}
       aria-hidden="true"

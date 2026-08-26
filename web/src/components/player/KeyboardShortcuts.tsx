@@ -2,78 +2,108 @@
 
 import { useEffect } from 'react';
 import { usePlayer } from '@/stores/player';
+import { useLibrary } from '@/stores/library';
+import { notify } from '@/stores/toast';
 
 /**
- * Global keyboard shortcuts for playback. Typing in an input or textarea is
- * never intercepted, and modifier combinations (Ctrl/Cmd/Alt) are ignored so
- * browser shortcuts keep working.
+ * Global playback shortcuts.
  *
- *   Space / k   play/pause
- *   ArrowRight  seek +5s   (Shift = next track)
- *   ArrowLeft   seek -5s   (Shift = previous track)
- *   ArrowUp     volume +5%
- *   ArrowDown   volume -5%
- *   m           mute
- *   s           shuffle
- *   r           repeat
+ * Typing is never intercepted: inputs, textareas and contenteditable regions are
+ * skipped, as are modifier combinations, so browser and operating system
+ * shortcuts keep working.
+ *
+ *   Space / K    play or pause
+ *   N            next track
+ *   P            previous track
+ *   F            like or unlike the current track
+ *   M            mute
+ *   S            shuffle
+ *   R            cycle repeat
+ *   Right / Left seek five seconds, or Shift for the next and previous track
+ *   Up / Down    volume
  */
 export function KeyboardShortcuts() {
   useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
-      const target = e.target as HTMLElement | null;
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+
+      const target = event.target as HTMLElement | null;
       if (
         target &&
         (target.tagName === 'INPUT' ||
           target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
           target.isContentEditable)
       ) {
         return;
       }
 
-      const s = usePlayer.getState();
-      if (!s.currentTrack() && e.key !== ' ') return;
+      const player = usePlayer.getState();
+      const track = player.currentTrack();
 
-      const key = e.key.toLowerCase();
-      switch (e.key) {
+      // With nothing loaded, only the play toggle is meaningful.
+      if (!track && event.key !== ' ' && event.key.toLowerCase() !== 'k') return;
+
+      switch (event.key) {
         case ' ':
-          e.preventDefault();
-          s.toggle();
-          break;
+          event.preventDefault();
+          player.toggle();
+          return;
         case 'ArrowRight':
-          e.preventDefault();
-          if (e.shiftKey) s.next(false);
-          else s.setProgress(Math.min(s.duration, s.currentTime + 5), s.duration);
-          break;
+          event.preventDefault();
+          if (event.shiftKey) player.next(false);
+          else player.setProgress(Math.min(player.duration, player.currentTime + 5), player.duration);
+          return;
         case 'ArrowLeft':
-          e.preventDefault();
-          if (e.shiftKey) s.prev();
-          else s.setProgress(Math.max(0, s.currentTime - 5), s.duration);
-          break;
+          event.preventDefault();
+          if (event.shiftKey) player.prev();
+          else player.setProgress(Math.max(0, player.currentTime - 5), player.duration);
+          return;
         case 'ArrowUp':
-          e.preventDefault();
-          s.setVolume(Math.min(1, s.volume + 0.05));
-          break;
+          event.preventDefault();
+          player.setVolume(Math.min(1, player.volume + 0.05));
+          return;
         case 'ArrowDown':
-          e.preventDefault();
-          s.setVolume(Math.max(0, s.volume - 0.05));
+          event.preventDefault();
+          player.setVolume(Math.max(0, player.volume - 0.05));
+          return;
+        default:
+          break;
+      }
+
+      switch (event.key.toLowerCase()) {
+        case 'k':
+          event.preventDefault();
+          player.toggle();
+          break;
+        case 'n':
+          player.next(false);
+          break;
+        case 'p':
+          player.prev();
+          break;
+        case 'f': {
+          if (!track) break;
+          const added = useLibrary.getState().toggleFavoriteSong(track);
+          notify(added ? 'Added to Liked Songs' : 'Removed from Liked Songs');
+          break;
+        }
+        case 'm':
+          player.toggleMute();
+          break;
+        case 's':
+          player.toggleShuffle();
+          break;
+        case 'r':
+          player.cycleRepeat();
           break;
         default:
-          if (key === 'k') {
-            e.preventDefault();
-            s.toggle();
-          } else if (key === 'm') {
-            s.toggleMute();
-          } else if (key === 's') {
-            s.toggleShuffle();
-          } else if (key === 'r') {
-            s.cycleRepeat();
-          }
+          break;
       }
     }
 
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
   return null;

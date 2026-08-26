@@ -2,14 +2,24 @@
 
 import { useState } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
+import type { Song } from '@/lib/types';
 import { usePlayer } from '@/stores/player';
-import { artistLine, pickImage } from '@/lib/utils';
+import { artistLine, entityHref, formatDuration, pickImage } from '@/lib/utils';
 import { Icon } from '@/components/ui/Icon';
+import { Drawer } from '@/components/ui/Drawer';
+import { Menu } from '@/components/ui/Menu';
+import { EmptyState } from '@/components/ui/EmptyState';
 
 /**
- * Slide-in queue panel. Lists the current track and what is coming up in play
- * order. Upcoming rows can be dragged to reorder (HTML5 DnD on pointer devices);
- * each maps back to its natural queue index so reordering survives shuffle.
+ * Queue drawer.
+ *
+ * Shows what is playing and what follows in play order. Upcoming rows can be
+ * dragged to reorder on a pointer device, and every row also exposes move up and
+ * move down in its menu so reordering is possible from the keyboard.
+ *
+ * Positions map back to the natural queue index, so reordering behaves correctly
+ * while shuffle is on.
  */
 export function QueuePanel() {
   const open = usePlayer((s) => s.queueOpen);
@@ -25,15 +35,12 @@ export function QueuePanel() {
   const [dragFrom, setDragFrom] = useState<number | null>(null);
   const [dragOver, setDragOver] = useState<number | null>(null);
 
-  if (!open) return null;
-
   const currentQueueIndex = order[orderPos];
   const current = queue[currentQueueIndex];
-  // Upcoming = order positions after the current one.
-  const upcoming = order.slice(orderPos + 1).map((qi, i) => ({
-    queueIndex: qi,
-    orderPos: orderPos + 1 + i,
-    song: queue[qi],
+  const upcoming = order.slice(orderPos + 1).map((queueIndex, offset) => ({
+    queueIndex,
+    position: orderPos + 1 + offset,
+    song: queue[queueIndex],
   }));
 
   function onDrop(targetQueueIndex: number) {
@@ -45,85 +52,87 @@ export function QueuePanel() {
   }
 
   return (
-    <>
-      {/* Scrim */}
-      <div
-        className="fixed inset-0 z-[55] bg-[#0d0b13]/75"
-        onClick={() => setQueueOpen(false)}
-        aria-hidden="true"
-      />
-      <aside
-        aria-label="Play queue"
-        className="fixed right-0 top-0 z-[56] flex h-full w-full max-w-sm flex-col border-l border-white/12 bg-[#17141f] shadow-[-20px_0_60px_-28px_rgba(0,0,0,.7)]"
-      >
-        <header className="flex items-center justify-between border-b border-subtle p-4">
-          <h2 className="text-h5 font-extrabold tracking-tight">Playing next</h2>
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={clearQueue}
-              className="rounded-md px-2.5 py-1.5 text-[13px] font-medium text-accent transition-colors hover:bg-white/[0.08]"
-            >
-              Clear
-            </button>
-            <button
-              type="button"
-              aria-label="Close queue"
-              onClick={() => setQueueOpen(false)}
-              className="grid h-8 w-8 place-items-center rounded-md text-text-secondary transition-colors hover:bg-white/[0.08] hover:text-white"
-            >
-              <Icon name="close" size={17} />
-            </button>
-          </div>
-        </header>
+    <Drawer
+      open={open}
+      onClose={() => setQueueOpen(false)}
+      title="Queue"
+      headerAction={
+        upcoming.length > 0 ? (
+          <button
+            type="button"
+            onClick={clearQueue}
+            className="rounded-xs px-2.5 py-1.5 text-meta font-semibold text-text-secondary transition-colors duration-fast hover:bg-white/5 hover:text-text"
+          >
+            Clear
+          </button>
+        ) : undefined
+      }
+    >
+      {!current ? (
+        <EmptyState
+          compact
+          icon="queue"
+          title="The queue is empty"
+          message="Play something and the rest of the queue will appear here."
+        />
+      ) : (
+        <div className="p-3">
+          <p className="t-micro px-2 pb-2">Now playing</p>
+          <QueueRow song={current} active />
 
-        <div className="flex-1 overflow-y-auto p-3">
-          {current && (
+          {upcoming.length > 0 && (
             <>
-              <p className="px-2 pb-2 text-[12px] font-semibold uppercase tracking-[0.06em] text-text-secondary">
-                Now playing
+              <p className="t-micro px-2 pb-2 pt-6">
+                Next up · {upcoming.length} {upcoming.length === 1 ? 'track' : 'tracks'}
               </p>
-              <QueueRow song={current} active onClick={() => undefined} />
+
+              {upcoming.map(({ song, queueIndex, position }, index) => (
+                <div
+                  key={`${song.id}-${queueIndex}`}
+                  draggable
+                  onDragStart={() => setDragFrom(queueIndex)}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    setDragOver(queueIndex);
+                  }}
+                  onDrop={() => onDrop(queueIndex)}
+                  onDragEnd={() => {
+                    setDragFrom(null);
+                    setDragOver(null);
+                  }}
+                  className={
+                    dragOver === queueIndex ? 'rounded-sm ring-1 ring-accent' : undefined
+                  }
+                >
+                  <QueueRow
+                    song={song}
+                    draggable
+                    onPlay={() => playAt(position)}
+                    onRemove={() => removeFromQueue(queueIndex)}
+                    onMoveUp={
+                      index > 0
+                        ? () => reorderQueue(queueIndex, upcoming[index - 1].queueIndex)
+                        : undefined
+                    }
+                    onMoveDown={
+                      index < upcoming.length - 1
+                        ? () => reorderQueue(queueIndex, upcoming[index + 1].queueIndex)
+                        : undefined
+                    }
+                  />
+                </div>
+              ))}
             </>
           )}
 
-          {upcoming.length > 0 && (
-            <p className="px-2 pb-2 pt-5 text-[12px] font-semibold uppercase tracking-[0.06em] text-text-secondary">
-              Next Up
+          {upcoming.length === 0 && (
+            <p className="px-2 pt-6 text-meta text-text-muted">
+              Nothing queued after this track.
             </p>
           )}
-
-          {upcoming.map(({ song, queueIndex, orderPos: pos }) => (
-            <div
-              key={`${song.id}-${queueIndex}`}
-              draggable
-              onDragStart={() => setDragFrom(queueIndex)}
-              onDragOver={(e) => {
-                e.preventDefault();
-                setDragOver(queueIndex);
-              }}
-              onDrop={() => onDrop(queueIndex)}
-              onDragEnd={() => {
-                setDragFrom(null);
-                setDragOver(null);
-              }}
-              className={dragOver === queueIndex ? 'rounded-md ring-1 ring-accent' : ''}
-            >
-              <QueueRow
-                song={song}
-                draggable
-                onClick={() => playAt(pos)}
-                onRemove={() => removeFromQueue(queueIndex)}
-              />
-            </div>
-          ))}
-
-          {!current && (
-            <p className="p-6 text-center text-[13px] text-text-secondary">The queue is empty.</p>
-          )}
         </div>
-      </aside>
-    </>
+      )}
+    </Drawer>
   );
 }
 
@@ -131,53 +140,83 @@ function QueueRow({
   song,
   active = false,
   draggable = false,
-  onClick,
+  onPlay,
   onRemove,
+  onMoveUp,
+  onMoveDown,
 }: {
-  song: import('@/lib/types').Song;
+  song: Song;
   active?: boolean;
   draggable?: boolean;
-  onClick: () => void;
+  onPlay?: () => void;
   onRemove?: () => void;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
 }) {
   const cover = pickImage(song.image, '150x150');
+
   return (
     <div
-      className={`group flex items-center gap-2.5 rounded-md p-2 transition-colors ${
-        active ? 'border border-white/18 bg-white/[0.08]' : 'border border-transparent hover:bg-white/[0.07]'
-      }`}
+      className={`row group flex items-center gap-2.5 p-2 ${active ? 'row-active' : 'row-idle'}`}
     >
       {draggable && (
         <span className="cursor-grab text-text-muted" aria-hidden="true">
-          <Icon name="drag" size={17} />
+          <Icon name="drag" size={16} />
         </span>
       )}
-      <button type="button" onClick={onClick} className="flex min-w-0 flex-1 items-center gap-3 text-left">
-        <span className="relative h-11 w-11 shrink-0 overflow-hidden rounded-xl border border-white/10">
-          <Image src={cover} alt="" fill sizes="44px" className="object-cover" />
-        </span>
-        <span className="min-w-0">
-          <span
-            className={`block truncate text-[14px] font-medium leading-tight ${
-              active ? 'text-accent' : ''
-            }`}
-          >
-            {song.name}
+
+      <button
+        type="button"
+        onClick={onPlay}
+        disabled={!onPlay}
+        aria-label={onPlay ? `Play ${song.name}` : undefined}
+        className="relative h-11 w-11 shrink-0 overflow-hidden rounded-sm bg-surface"
+      >
+        <Image src={cover} alt="" fill sizes="44px" className="object-cover" />
+        {onPlay && (
+          <span className="absolute inset-0 grid place-items-center bg-black/50 opacity-0 transition-opacity duration-fast group-hover:opacity-100">
+            <Icon name="play" size={14} />
           </span>
-          <span className="mt-0.5 block truncate text-[13px] leading-tight text-text-secondary">
-            {artistLine(song)}
-          </span>
-        </span>
+        )}
       </button>
-      {onRemove && (
-        <button
-          type="button"
-          aria-label={`Remove ${song.name} from queue`}
-          onClick={onRemove}
-          className="text-text-muted opacity-0 transition-opacity duration-150 hover:text-white group-hover:opacity-100"
+
+      <div className="min-w-0 flex-1">
+        <Link
+          href={entityHref('song', song.name, song.id)}
+          className={`block truncate text-meta font-medium transition-colors duration-fast hover:underline ${
+            active ? 'text-accent' : 'text-text'
+          }`}
         >
-          <Icon name="close" size={16} />
-        </button>
+          {song.name}
+        </Link>
+        <p className="mt-0.5 truncate text-micro text-text-secondary">{artistLine(song)}</p>
+      </div>
+
+      <span className="shrink-0 text-micro tabular-nums text-text-muted">
+        {formatDuration(song.duration)}
+      </span>
+
+      {(onRemove || onMoveUp || onMoveDown) && (
+        <Menu
+          label={`Queue options for ${song.name}`}
+          items={[
+            ...(onMoveUp ? [{ label: 'Move up', icon: 'chevronUp' as const, onSelect: onMoveUp }] : []),
+            ...(onMoveDown
+              ? [{ label: 'Move down', icon: 'collapse' as const, onSelect: onMoveDown }]
+              : []),
+            ...(onRemove
+              ? [
+                  {
+                    label: 'Remove from queue',
+                    icon: 'trash' as const,
+                    danger: true,
+                    separated: Boolean(onMoveUp || onMoveDown),
+                    onSelect: onRemove,
+                  },
+                ]
+              : []),
+          ]}
+        />
       )}
     </div>
   );

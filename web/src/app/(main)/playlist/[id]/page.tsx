@@ -7,87 +7,106 @@ import { SITE } from '@/lib/config';
 import { DetailHeader } from '@/components/sections/DetailHeader';
 import { TrackList } from '@/components/sections/TrackList';
 import { CollectionActions } from '@/components/player/CollectionActions';
+import { CollectionMenu } from '@/components/collections/CollectionMenu';
+import { CollectionFavoriteButton } from '@/components/library/FavoriteButton';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { JsonLd, breadcrumbLd } from '@/components/seo/JsonLd';
 
 export const revalidate = 600;
 
 async function getPlaylist(id: string): Promise<Playlist | null> {
   try {
-    const pl = await api.playlist(id, 100);
-    return pl?.id ? pl : null;
+    const playlist = await api.playlist(id, 100);
+    return playlist?.id ? playlist : null;
   } catch {
     return null;
   }
 }
 
 export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
-  const pl = await getPlaylist(params.id);
-  if (!pl) return { title: 'Playlist not found' };
-  const cover = pickImage(pl.image);
+  const playlist = await getPlaylist(params.id);
+  if (!playlist) return { title: 'Playlist not found' };
+
+  const cover = pickImage(playlist.image);
+  const count = playlist.songCount ?? playlist.songs?.length ?? 0;
   const description =
-    pl.description ||
-    `Listen to the playlist ${pl.name} on ${SITE.name}. ${pl.songCount ?? pl.songs?.length ?? ''} songs.`.trim();
+    playlist.description || `Listen to ${playlist.name} on ${SITE.name}. ${count} songs.`;
+
   return {
-    title: pl.name,
+    title: playlist.name,
     description,
-    alternates: { canonical: `/playlist/${pl.id}` },
+    alternates: { canonical: `/playlist/${playlist.id}` },
     openGraph: {
       type: 'music.playlist',
-      title: pl.name,
+      title: playlist.name,
       description,
-      images: [{ url: cover, width: 500, height: 500, alt: pl.name }],
+      images: [{ url: cover, width: 500, height: 500, alt: playlist.name }],
     },
-    twitter: { card: 'summary_large_image', title: pl.name, description, images: [cover] },
+    twitter: { card: 'summary_large_image', title: playlist.name, description, images: [cover] },
   };
 }
 
 export default async function PlaylistPage({ params }: { params: { id: string } }) {
-  const pl = await getPlaylist(params.id);
-  if (!pl) notFound();
+  const playlist = await getPlaylist(params.id);
+  if (!playlist) notFound();
 
-  const cover = pickImage(pl.image);
-  const songs = pl.songs ?? [];
-  const totalSecs = songs.reduce((sum, s) => sum + (s.duration || 0), 0);
+  const cover = pickImage(playlist.image);
+  const songs = playlist.songs ?? [];
+  const totalSeconds = songs.reduce((sum, song) => sum + (song.duration || 0), 0);
+  const href = `/playlist/${playlist.id}`;
 
   return (
-    <div className="app-page">
+    <div className="page page-stack">
       <JsonLd
         data={{
           '@context': 'https://schema.org',
           '@type': 'MusicPlaylist',
-          name: pl.name,
+          name: playlist.name,
           numTracks: songs.length,
           image: cover,
-          url: `${SITE.url}/playlist/${pl.id}`,
+          url: `${SITE.url}${href}`,
         }}
       />
       <JsonLd
         data={breadcrumbLd([
           { name: 'Home', path: '/' },
-          { name: pl.name, path: `/playlist/${pl.id}` },
+          { name: playlist.name, path: href },
         ])}
       />
 
       <DetailHeader
         cover={cover}
-        eyebrow={SITE.name}
-        title={pl.name}
-        description={pl.description}
+        kind="Playlist"
+        title={playlist.name}
+        description={playlist.description}
         meta={
-          <span>
-            Playlist
-            {songs.length ? ` · ${songs.length} songs` : ''}
-            {totalSecs ? ` · ${formatDuration(totalSecs)}` : ''}
-            {pl.followerCount ? ` · ${formatCount(pl.followerCount)} followers` : ''}
-          </span>
+          [
+            songs.length ? `${songs.length} ${songs.length === 1 ? 'song' : 'songs'}` : null,
+            totalSeconds ? formatDuration(totalSeconds) : null,
+            playlist.followerCount ? `${formatCount(playlist.followerCount)} followers` : null,
+          ]
+            .filter(Boolean)
+            .join(' · ') || null
         }
-        actions={<CollectionActions songs={songs} />}
+        actions={
+          <CollectionActions songs={songs}>
+            <CollectionFavoriteButton
+              card={{ id: playlist.id, name: playlist.name, type: 'playlist', image: playlist.image }}
+              label="playlist"
+            />
+            <CollectionMenu title={playlist.name} path={href} songs={songs} />
+          </CollectionActions>
+        }
       />
 
       {songs.length ? (
         <TrackList songs={songs} />
       ) : (
-        <p className="text-[13px] text-text-secondary">This playlist has no playable tracks.</p>
+        <EmptyState
+          compact
+          title="No playable tracks"
+          message="This playlist has no streamable songs in the catalogue right now."
+        />
       )}
     </div>
   );

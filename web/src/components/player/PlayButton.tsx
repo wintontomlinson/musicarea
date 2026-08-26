@@ -6,27 +6,18 @@ import type { Song } from '@/lib/types';
 
 interface PlayButtonProps {
   song: Song;
-  /** Optional list to play in context, with `song` as the start. */
+  /** Sibling songs to play in context, starting from this one. */
   list?: Song[];
   className?: string;
   size?: number;
-  variant?: 'overlay' | 'solid';
   label?: string;
 }
 
 /**
- * A play/pause control for a specific song. If that song is the current track
- * it reflects and toggles playback; otherwise it starts it (in the given list
- * context when provided, else as a single-track queue).
+ * Circular play control for a specific song. Reflects and toggles playback when
+ * that song is current, otherwise starts it in the supplied list context.
  */
-export function PlayButton({
-  song,
-  list,
-  className = '',
-  size = 18,
-  variant = 'overlay',
-  label,
-}: PlayButtonProps) {
+export function PlayButton({ song, list, className = '', size = 16, label }: PlayButtonProps) {
   const currentId = usePlayer((s) => s.currentTrack()?.id);
   const isPlaying = usePlayer((s) => s.isPlaying);
   const toggle = usePlayer((s) => s.toggle);
@@ -36,31 +27,26 @@ export function PlayButton({
   const isCurrent = currentId === song.id;
   const showPause = isCurrent && isPlaying;
 
-  function onClick(e: React.MouseEvent) {
-    e.preventDefault();
-    e.stopPropagation();
+  function onClick(event: React.MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
     if (isCurrent) {
       toggle();
       return;
     }
-    if (list && list.length) {
-      const start = Math.max(0, list.findIndex((s) => s.id === song.id));
-      playQueue(list, start);
+    if (list?.length) {
+      playQueue(list, Math.max(0, list.findIndex((s) => s.id === song.id)));
     } else {
       playNow(song);
     }
   }
-
-  // Both variants use the same white pill: it reads on artwork and on surfaces,
-  // and keeps the interface colourless.
-  const base = 'grid place-items-center rounded-full bg-white text-black shadow-lift';
 
   return (
     <button
       type="button"
       onClick={onClick}
       aria-label={label ?? (showPause ? `Pause ${song.name}` : `Play ${song.name}`)}
-      className={`${base} ${className}`}
+      className={`btn-play-light ${className}`}
     >
       <Icon name={showPause ? 'pause' : 'play'} size={size} />
     </button>

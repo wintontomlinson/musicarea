@@ -1,47 +1,70 @@
 import Image from 'next/image';
 
 /**
- * Apple Music's album/playlist header: large artwork on the left, then the
- * title, a red artist/eyebrow line, metadata, and the action pills beneath.
- * Centred on phones, left-aligned from small up, as Apple does.
+ * Header for an album, playlist or song page.
+ *
+ * Artwork on the left at a size that lets it be the subject, then a small kind
+ * label, the title, a byline, a metadata line and the actions. Centred on
+ * phones, left aligned from the small breakpoint up.
  */
 export function DetailHeader({
   cover,
-  eyebrow,
+  kind,
   title,
+  byline,
   meta,
-  circular = false,
   actions,
   description,
+  circular = false,
+  priority = true,
 }: {
   cover: string;
-  /** The red line under the title. Albums and songs pass a linked artist name. */
-  eyebrow: React.ReactNode;
+  /** Small label above the title: Album, Playlist, Song. */
+  kind?: string;
   title: string;
+  /** Artist or owner line, usually a link. */
+  byline?: React.ReactNode;
   meta?: React.ReactNode;
-  circular?: boolean;
   actions?: React.ReactNode;
-  description?: string;
+  description?: string | null;
+  circular?: boolean;
+  priority?: boolean;
 }) {
   return (
-    <header className="flex flex-col items-center gap-6 text-center sm:flex-row sm:items-start sm:text-left">
+    <header className="flex flex-col items-center gap-6 text-center sm:flex-row sm:items-end sm:gap-8 sm:text-left">
       <div
-        className={`relative aspect-square w-44 shrink-0 overflow-hidden border border-white/15 shadow-[0_22px_50px_-20px_rgba(255,59,191,.42)] sm:w-56 lg:w-64 ${
-          circular ? 'rounded-full' : 'rounded-xl2'
+        className={`relative aspect-square w-40 shrink-0 overflow-hidden border border-subtle bg-surface-raised shadow-art sm:w-52 lg:w-[232px] ${
+          circular ? 'rounded-full' : 'rounded-lg'
         }`}
       >
-        <Image src={cover} alt={title} fill priority sizes="256px" className="object-cover" />
+        <Image
+          src={cover}
+          alt={title}
+          fill
+          priority={priority}
+          sizes="(max-width: 640px) 160px, 232px"
+          className="object-cover"
+        />
       </div>
 
-      <div className="min-w-0 flex-1 sm:pt-2">
-        <h1 className="text-h3 font-bold tracking-tight sm:text-h2">{title}</h1>
-        <p className="mt-1 text-[15px] font-bold text-accent-soft sm:text-h5">{eyebrow}</p>
-        {meta && <div className="mt-2 text-[13px] uppercase tracking-wide text-text-secondary">{meta}</div>}
-        {actions && <div className="mt-5 flex justify-center gap-3 sm:justify-start">{actions}</div>}
+      <div className="min-w-0 flex-1 pb-1">
+        {kind && <p className="t-micro">{kind}</p>}
+
+        <h1 className="mt-2.5 text-title font-bold tracking-[-0.026em] sm:text-[40px] sm:leading-[1.04]">
+          {title}
+        </h1>
+
+        {byline && <p className="mt-3 text-[15px] font-medium text-text">{byline}</p>}
+        {meta && <p className="mt-1.5 text-meta text-text-secondary">{meta}</p>}
+
         {description && (
-          <p className="mt-4 line-clamp-3 text-[13px] leading-relaxed text-text-secondary">
+          <p className="mt-3.5 max-w-2xl text-meta leading-relaxed text-text-secondary line-clamp-2">
             {description}
           </p>
+        )}
+
+        {actions && (
+          <div className="mt-6 flex flex-wrap justify-center gap-2.5 sm:justify-start">{actions}</div>
         )}
       </div>
     </header>

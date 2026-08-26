@@ -4,11 +4,14 @@ import { usePlayer } from '@/stores/player';
 import { Icon } from '@/components/ui/Icon';
 
 /**
- * Transport controls in Apple Music's style: plain white glyphs rather than a
- * filled play circle, with shuffle and repeat turning red when engaged. `size`
- * switches between the compact toolbar set and the large full-player set.
+ * Transport controls.
+ *
+ * The play control is the single filled circle in the interface. Shuffle and
+ * repeat are quiet until engaged, then take the accent and expose their state
+ * through aria-pressed. `size` switches between the player bar and the
+ * full-screen layout.
  */
-export function TransportControls({ size = 'mini' }: { size?: 'mini' | 'full' }) {
+export function TransportControls({ size = 'bar' }: { size?: 'bar' | 'full' }) {
   const isPlaying = usePlayer((s) => s.isPlaying);
   const isLoading = usePlayer((s) => s.isLoading);
   const shuffle = usePlayer((s) => s.shuffle);
@@ -18,23 +21,21 @@ export function TransportControls({ size = 'mini' }: { size?: 'mini' | 'full' })
   const prev = usePlayer((s) => s.prev);
   const toggleShuffle = usePlayer((s) => s.toggleShuffle);
   const cycleRepeat = usePlayer((s) => s.cycleRepeat);
+  const hasTrack = usePlayer((s) => s.queue.length > 0);
 
   const big = size === 'full';
-  const modeSize = big ? 20 : 15;
-  const stepSize = big ? 30 : 20;
-  const playSize = big ? 40 : 24;
 
   const modeClass = (on: boolean) =>
-    `grid place-items-center rounded-md transition-colors ${
-      on ? 'text-accent' : 'text-text-secondary hover:text-white'
-    } ${big ? 'h-10 w-10' : 'h-7 w-7'}`;
+    `grid place-items-center rounded-sm transition-colors duration-fast ${
+      big ? 'h-11 w-11' : 'h-8 w-8'
+    } ${on ? 'text-accent' : 'text-text-secondary hover:text-text'}`;
 
-  const stepClass = `grid place-items-center rounded-md text-white transition-opacity hover:opacity-70 ${
-    big ? 'h-12 w-12' : 'h-8 w-8'
+  const stepClass = `grid place-items-center rounded-sm text-text transition-opacity duration-fast hover:opacity-70 disabled:opacity-30 ${
+    big ? 'h-12 w-12' : 'h-9 w-9'
   }`;
 
   return (
-    <div className={`flex items-center justify-center ${big ? 'gap-4' : 'gap-1'}`}>
+    <div className={`flex items-center justify-center ${big ? 'gap-3 sm:gap-5' : 'gap-1.5'}`}>
       <button
         type="button"
         aria-label="Shuffle"
@@ -42,45 +43,58 @@ export function TransportControls({ size = 'mini' }: { size?: 'mini' | 'full' })
         onClick={toggleShuffle}
         className={modeClass(shuffle)}
       >
-        <Icon name="shuffle" size={modeSize} />
+        <Icon name="shuffle" size={big ? 21 : 17} />
       </button>
 
-      <button type="button" aria-label="Previous" onClick={() => prev()} className={stepClass}>
-        <Icon name="prev" size={stepSize} />
+      <button
+        type="button"
+        aria-label="Previous track"
+        onClick={() => prev()}
+        disabled={!hasTrack}
+        className={stepClass}
+      >
+        <Icon name="prev" size={big ? 28 : 20} />
       </button>
 
       <button
         type="button"
         aria-label={isPlaying ? 'Pause' : 'Play'}
         onClick={toggle}
-        className={`grid place-items-center rounded-full bg-white text-black transition hover:bg-white/90 active:scale-95 ${
-          big ? 'h-16 w-16' : 'h-9 w-9'
-        }`}
+        disabled={!hasTrack}
+        className={`btn-play-light disabled:opacity-30 ${big ? 'h-16 w-16' : 'h-10 w-10'}`}
       >
         {isLoading ? (
           <span
-            className={`animate-spin rounded-full border-2 border-white/30 border-t-white ${
-              big ? 'h-7 w-7' : 'h-4 w-4'
+            className={`animate-spin rounded-full border-2 border-black/25 border-t-black ${
+              big ? 'h-6 w-6' : 'h-4 w-4'
             }`}
             aria-hidden="true"
           />
         ) : (
-          <Icon name={isPlaying ? 'pause' : 'play'} size={playSize} />
+          <Icon name={isPlaying ? 'pause' : 'play'} size={big ? 26 : 17} />
         )}
-      </button>
-
-      <button type="button" aria-label="Next" onClick={() => next(false)} className={stepClass}>
-        <Icon name="next" size={stepSize} />
       </button>
 
       <button
         type="button"
-        aria-label={`Repeat ${repeat}`}
+        aria-label="Next track"
+        onClick={() => next(false)}
+        disabled={!hasTrack}
+        className={stepClass}
+      >
+        <Icon name="next" size={big ? 28 : 20} />
+      </button>
+
+      <button
+        type="button"
+        aria-label={
+          repeat === 'off' ? 'Repeat off' : repeat === 'all' ? 'Repeat all' : 'Repeat one'
+        }
         aria-pressed={repeat !== 'off'}
         onClick={cycleRepeat}
         className={modeClass(repeat !== 'off')}
       >
-        <Icon name={repeat === 'one' ? 'repeatOne' : 'repeat'} size={modeSize} />
+        <Icon name={repeat === 'one' ? 'repeatOne' : 'repeat'} size={big ? 21 : 17} />
       </button>
     </div>
   );

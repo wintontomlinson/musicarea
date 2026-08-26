@@ -4,26 +4,44 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Icon, type IconName } from '@/components/ui/Icon';
 
-const ITEMS: Array<{ href: string; label: string; icon: IconName; match: (path: string) => boolean }> = [
-  { href: '/', label: 'Home', icon: 'home', match: (path) => path === '/' },
-  { href: '/explore', label: 'Explore', icon: 'compass', match: (path) => path.startsWith('/explore') },
-  { href: '/charts', label: 'Charts', icon: 'chart', match: (path) => path.startsWith('/charts') },
-  { href: '/library', label: 'Library', icon: 'library', match: (path) => path.startsWith('/library') },
-  { href: '/search', label: 'Search', icon: 'search', match: (path) => path.startsWith('/search') },
+const TABS: Array<{ href: string; label: string; icon: IconName; exact?: boolean }> = [
+  { href: '/', label: 'Home', icon: 'home', exact: true },
+  { href: '/search', label: 'Search', icon: 'search' },
+  { href: '/library', label: 'Library', icon: 'library' },
+  { href: '/settings', label: 'Profile', icon: 'user' },
 ];
 
+/**
+ * Mobile tab bar. Four destinations, comfortable touch targets, and safe-area
+ * padding so the row clears a home indicator. Hidden from the large breakpoint
+ * up, where the sidebar takes over.
+ */
 export function MobileNav() {
   const pathname = usePathname();
+
   return (
-    <nav aria-label="Tabs" className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-white/10 bg-[#111017] pb-[env(safe-area-inset-bottom)] lg:hidden">
-      {ITEMS.map((item) => {
-        const active = item.match(pathname);
-        return <Link key={item.href} href={item.href} aria-current={active ? 'page' : undefined} className={`relative flex min-h-[55px] flex-col items-center justify-center gap-1 text-[10px] font-bold transition ${active ? 'text-accent-soft' : 'text-text-muted'}`}>
-          {active && <span className="absolute top-0 h-0.5 w-8 rounded-b-full bg-accent" />}
-          <Icon name={item.icon} size={21} />
-          {item.label}
-        </Link>;
-      })}
+    <nav
+      aria-label="Tabs"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-subtle bg-bg-alt pb-[env(safe-area-inset-bottom)] lg:hidden"
+    >
+      <div className="grid grid-cols-4">
+        {TABS.map((tab) => {
+          const active = tab.exact ? pathname === tab.href : pathname.startsWith(tab.href);
+          return (
+            <Link
+              key={tab.href}
+              href={tab.href}
+              aria-current={active ? 'page' : undefined}
+              className={`flex h-tabbar flex-col items-center justify-center gap-1 text-micro font-medium transition-colors duration-fast ${
+                active ? 'text-text' : 'text-text-muted'
+              }`}
+            >
+              <Icon name={tab.icon} size={21} className={active ? 'text-accent' : undefined} />
+              {tab.label}
+            </Link>
+          );
+        })}
+      </div>
     </nav>
   );
 }

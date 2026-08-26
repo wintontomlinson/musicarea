@@ -2,62 +2,321 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ---------------------------------------------------------------------------
+   Tokens. Mirrored from tailwind.config.ts so raw CSS (scrollbars, ambient
+   artwork washes, native range inputs) can reference the same values.
+--------------------------------------------------------------------------- */
 :root {
-  --bg: #0d0b13;
-  --surface: #17141f;
-  --surface-raised: #211d2a;
-  --accent: #d950a5;
-  --line: rgba(255, 255, 255, 0.11);
+  --bg: #080808;
+  --bg-alt: #0d0d0d;
+  --surface: #151515;
+  --surface-raised: #1b1b1b;
+  --text: #f5f5f5;
+  --text-secondary: #a6a6a6;
+  --text-muted: #6e6e6e;
+  --accent: #ff2d55;
+  --accent-soft: #ff375f;
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.16);
+  --player-h: 76px;
+  --tabbar-h: 58px;
 }
 
 @layer base {
-  * { border-color: var(--line); }
-  html { color-scheme: dark; background: var(--bg); }
+  * {
+    border-color: var(--line);
+  }
+
+  html {
+    color-scheme: dark;
+    background: var(--bg);
+    -webkit-tap-highlight-color: transparent;
+  }
+
   body {
     min-width: 320px;
     background: var(--bg);
-    color: #fffaff;
+    color: var(--text);
     -webkit-font-smoothing: antialiased;
-    text-rendering: optimizeLegibility;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: 'cv11', 'ss01';
+    font-variant-numeric: tabular-nums;
   }
-  ::selection { background: rgba(217, 80, 165, 0.38); color: #fff; }
-  :focus-visible { outline: 2px solid #e477bf; outline-offset: 3px; border-radius: 7px; }
+
+  /* Headings inherit weight from the type scale tokens, not from browser defaults. */
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-weight: inherit;
+    letter-spacing: inherit;
+  }
+
+  ::selection {
+    background: rgba(255, 45, 85, 0.3);
+    color: #fff;
+  }
+
+  /* One visible focus treatment everywhere, keyboard only. */
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  /* Native range inputs (volume) styled to match the custom rails. */
+  input[type='range'] {
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+    cursor: pointer;
+  }
+  input[type='range']::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.16);
+  }
+  input[type='range']::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 12px;
+    width: 12px;
+    margin-top: -4px;
+    border-radius: 999px;
+    background: var(--text);
+  }
+  input[type='range']::-moz-range-track {
+    height: 4px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.16);
+  }
+  input[type='range']::-moz-range-thumb {
+    height: 12px;
+    width: 12px;
+    border: 0;
+    border-radius: 999px;
+    background: var(--text);
+  }
+
+  /* Remove the browser's search affordances so the field reads as ours. */
+  input[type='search']::-webkit-search-decoration,
+  input[type='search']::-webkit-search-cancel-button {
+    -webkit-appearance: none;
+  }
 }
 
 @layer components {
-  .app-page { @apply mx-auto flex w-full max-w-[1680px] flex-col gap-10 px-4 py-7 sm:px-8 sm:py-9 lg:px-10; }
-  .surface-card { @apply rounded-card border border-subtle bg-surface; }
-  .premium-panel { @apply rounded-xl2 border border-subtle bg-surface; }
-  .glass-panel {
-    background: rgba(19, 16, 27, 0.94);
-    border: 1px solid var(--line);
+  /* --- Layout ----------------------------------------------------------- */
+
+  /* Content column. Generous gutters, wide usable measure, room for the player. */
+  .page {
+    @apply mx-auto w-full max-w-[1560px] px-4 sm:px-7 lg:px-10;
   }
-  .section-title { @apply text-h4 font-bold tracking-tight text-white; }
-  .eyebrow, .section-kicker { @apply text-[12px] font-medium text-text-secondary; }
-  .button-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-[14px] font-bold text-white transition-colors hover:bg-accent-soft active:bg-accent;
+
+  .page-stack {
+    @apply flex flex-col gap-11 pb-10 pt-6 sm:gap-12 sm:pt-8;
   }
-  .button-secondary { @apply inline-flex items-center justify-center gap-2 rounded-lg border border-white/[0.14] bg-white/[0.06] px-4 py-2.5 text-[14px] font-semibold text-white transition-colors hover:bg-white/[0.11]; }
-  .segmented { @apply inline-flex gap-1 rounded-lg border border-white/10 bg-black/20 p-1; }
-  .segmented-item { @apply rounded-md px-3.5 py-1.5 text-[13px] font-semibold capitalize text-text-secondary transition-colors hover:text-white; }
-  .segmented-item-active { @apply bg-white/[0.12] text-white; }
-  .control-pill { @apply rounded-lg border border-white/10 bg-white/[0.06] px-3 py-1.5 text-[13px] font-medium text-text-secondary transition-colors hover:bg-white/[0.11] hover:text-white; }
-  .hairline { @apply border-t border-subtle; }
-  .disco-panel {
-    @apply relative overflow-hidden rounded-xl2 border border-white/[0.12] bg-surface;
+
+  /* --- Typography ------------------------------------------------------- */
+
+  .t-display {
+    @apply text-title sm:text-display;
   }
-  .neon-dot { @apply h-1.5 w-1.5 rounded-full bg-accent; }
+
+  .t-title {
+    @apply text-section sm:text-title;
+  }
+
+  .t-section {
+    @apply text-section;
+  }
+
+  .t-meta {
+    @apply text-meta text-text-secondary;
+  }
+
+  .t-micro {
+    @apply text-micro uppercase tracking-[0.09em] text-text-muted;
+  }
+
+  /* --- Surfaces --------------------------------------------------------- */
+
+  .surface {
+    @apply rounded-lg border border-subtle bg-surface;
+  }
+
+  .surface-raised {
+    @apply rounded-lg border border-subtle bg-surface-raised;
+  }
+
+  /* Floating layers: menus, toasts, dialogs. Opaque so text never fights artwork. */
+  .surface-pop {
+    @apply rounded-md border border-strong bg-[#141414] shadow-pop;
+  }
+
+  .hairline {
+    @apply border-t border-subtle;
+  }
+
+  /* --- Buttons ---------------------------------------------------------- */
+
+  .btn {
+    @apply inline-flex select-none items-center justify-center gap-2 rounded-sm text-body font-semibold transition duration-fast ease-out disabled:pointer-events-none disabled:opacity-40;
+  }
+
+  .btn-primary {
+    @apply btn bg-accent px-5 py-2.5 text-white hover:bg-accent-soft active:scale-[0.985];
+  }
+
+  .btn-secondary {
+    @apply btn border border-strong bg-white/5 px-5 py-2.5 text-text hover:bg-white/10 active:scale-[0.985];
+  }
+
+  .btn-ghost {
+    @apply btn px-3 py-2 text-text-secondary hover:bg-white/5 hover:text-text;
+  }
+
+  /* Square icon button. Sized for a 36px pointer target, 44px on touch. */
+  .btn-icon {
+    @apply grid h-9 w-9 shrink-0 place-items-center rounded-sm text-text-secondary transition duration-fast ease-out hover:bg-white/5 hover:text-text;
+  }
+
+  /* The one loud control in the product: circular, accent, plays music. */
+  .btn-play {
+    @apply grid shrink-0 place-items-center rounded-full bg-accent text-white transition duration-fast ease-out hover:bg-accent-soft active:scale-95;
+  }
+
+  /* Neutral circular play, used on light artwork and in the player bar. */
+  .btn-play-light {
+    @apply grid shrink-0 place-items-center rounded-full bg-text text-black transition duration-fast ease-out hover:scale-[1.04] active:scale-95;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-subtle bg-white/5 px-3.5 py-1.5 text-meta font-medium text-text-secondary transition duration-fast ease-out hover:border-strong hover:text-text;
+  }
+
+  .chip-active {
+    @apply border-transparent bg-text text-black hover:text-black;
+  }
+
+  /* Text link that reads as an action, used for See all. */
+  .link-quiet {
+    @apply inline-flex items-center gap-0.5 text-meta font-semibold text-text-secondary transition-colors duration-fast hover:text-text;
+  }
+
+  /* --- Inputs ----------------------------------------------------------- */
+
+  .field {
+    @apply w-full rounded-sm border border-subtle bg-white/5 text-body text-text outline-none transition duration-fast ease-out placeholder:text-text-muted hover:border-strong focus:border-strong focus:bg-white/[0.07];
+  }
+
+  /* --- Rows ------------------------------------------------------------- */
+
+  /* Track row. Hover is a wash, not a card, so long lists stay calm. */
+  .row {
+    @apply relative rounded-sm transition-colors duration-fast;
+  }
+
+  .row-idle {
+    @apply hover:bg-white/5;
+  }
+
+  .row-active {
+    @apply bg-white/[0.07];
+  }
+
+  /* --- Loading ---------------------------------------------------------- */
+
+  .skeleton {
+    @apply relative overflow-hidden rounded-sm bg-white/5;
+  }
+
+  .skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background-image: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.05),
+      transparent
+    );
+    animation: shimmer 1.4s infinite;
+  }
+
+  /* --- Utilities -------------------------------------------------------- */
+
+  /* Full-bleed row that still respects the page gutters at its ends. */
+  .bleed-row {
+    @apply -mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 sm:-mx-7 sm:px-7 lg:-mx-10 lg:px-10;
+  }
+
+  /* Two-line clamp for editorial titles. */
+  .clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
 }
 
-* { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.24) transparent; }
-*::-webkit-scrollbar { width: 8px; height: 8px; }
-*::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.24); border-radius: 99px; }
-*::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.4); }
-.no-scrollbar::-webkit-scrollbar { display: none; }
-.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+/* ---------------------------------------------------------------------------
+   Scrollbars. Thin and unobtrusive; hidden entirely on horizontal shelves.
+--------------------------------------------------------------------------- */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.16);
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: 999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.28);
+  background-clip: content-box;
+}
 
-@keyframes eqbar { 0%, 100% { transform: scaleY(0.35); } 50% { transform: scaleY(1); } }
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes eq {
+  0%,
+  100% {
+    transform: scaleY(0.3);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

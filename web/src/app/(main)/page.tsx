@@ -1,53 +1,83 @@
 import type { Metadata } from 'next';
 import { api } from '@/lib/api';
 import type { BrowseData, FeedData, Row, Song } from '@/lib/types';
-import { isSong, greeting } from '@/lib/utils';
+import { greeting, isSong } from '@/lib/utils';
 import { Hero } from '@/components/sections/Hero';
 import { Carousel } from '@/components/sections/Carousel';
 import { MoodGrid } from '@/components/sections/MoodGrid';
+import { QuickAccess } from '@/components/sections/QuickAccess';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { LanguagePreferenceLink } from '@/components/preferences/LanguagePreferenceLink';
 import { SITE } from '@/lib/config';
 import { preferredLanguages } from '@/lib/languages';
-import { LanguagePreferenceLink } from '@/components/preferences/LanguagePreferenceLink';
 
 export const metadata: Metadata = {
-  title: `${SITE.name} · Discover and stream music`,
+  // Absolute, so the layout template does not append the brand a second time.
+  title: { absolute: `${SITE.name} · Stream music, albums and playlists` },
   description: SITE.description,
   alternates: { canonical: '/' },
 };
+
+// Editorial shelves are cacheable. The cold-start feed is fetched per request
+// because it depends on the listener's language cookie.
 export const revalidate = 300;
 
 export default async function HomePage() {
   const languages = preferredLanguages();
-  const [browseRes, feedRes] = await Promise.allSettled([
+
+  // Either source can fail independently, so render whatever came back.
+  const [browseResult, feedResult] = await Promise.allSettled([
     api.browse(languages),
     api.feed({ history: [], languages, limit: 12 }),
   ]);
-  const browse: BrowseData | null = browseRes.status === 'fulfilled' ? browseRes.value : null;
-  const feed: FeedData | null = feedRes.status === 'fulfilled' ? feedRes.value : null;
+
+  const browse: BrowseData | null =
+    browseResult.status === 'fulfilled' ? browseResult.value : null;
+  const feed: FeedData | null = feedResult.status === 'fulfilled' ? feedResult.value : null;
 
   if (!browse && !feed) {
-    return <div className="px-4 sm:px-6"><EmptyState title="Could not reach the music service" message="The catalogue is momentarily unavailable. Check the API connection and refresh." ctaHref="/" ctaLabel="Try again" /></div>;
+    return (
+      <div className="page page-stack">
+        <EmptyState
+          icon="wifiOff"
+          title="Could not reach the music service"
+          message="The catalogue is unavailable right now. Refresh once the connection is back."
+          ctaHref="/"
+          ctaLabel="Reload"
+        />
+      </div>
+    );
   }
 
-  const hero = firstSong(feed?.rows) || firstSong(browse?.rows);
-  const rows: Row[] = [];
-  if (feed?.rows) rows.push(...feed.rows);
+  const featured = firstSong(feed?.rows) ?? firstSong(browse?.rows);
+
+  const shelves: Row[] = [];
+  if (feed?.rows) shelves.push(...feed.rows);
   if (browse?.rows) {
-    for (const row of browse.rows) rows.push(row.id === 'trending' ? { ...row, showAll: '/explore' } : row);
+    for (const row of browse.rows) {
+      shelves.push(row.id === 'trending' ? { ...row, showAll: '/explore' } : row);
+    }
   }
 
   return (
-    <div className="app-page">
-      <section>
-        <p className="text-[14px] text-text-secondary">{greeting()}</p>
-        <h1 className="mt-1 text-h2 font-extrabold tracking-[-0.04em] sm:text-h1">Listen now</h1>
-        <p className="mt-2 max-w-xl text-[14px] leading-relaxed text-text-secondary">New picks from the languages you selected. Start a song to build a listening queue.</p>
+    <div className="page page-stack">
+      <header>
+        <p className="t-micro">{greeting()}</p>
+        <h1 className="mt-2 t-display">Listen now</h1>
         <LanguagePreferenceLink />
-      </section>
-      {hero && <Hero song={hero} />}
-      {rows.map((row) => <Carousel key={`${row.id}-${row.title}`} row={row} />)}
-      {browse?.moods && <MoodGrid moods={browse.moods} heading="Browse by mood" />}
+      </header>
+
+      {featured && <Hero song={featured} />}
+
+      <QuickAccess />
+
+      {shelves.map((row) => (
+        <Carousel key={`${row.id}-${row.title}`} row={row} />
+      ))}
+
+      {browse?.moods && browse.moods.length > 0 && (
+        <MoodGrid moods={browse.moods} heading="Browse by mood" headingId="home-moods" />
+      )}
     </div>
   );
 }

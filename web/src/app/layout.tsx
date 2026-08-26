@@ -35,7 +35,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#000000',
+  themeColor: '#080808',
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
@@ -44,7 +44,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={inter.variable}>
-      <body className="min-h-screen bg-bg font-sans text-white antialiased">
+      <body className="min-h-screen bg-bg font-sans text-text antialiased">
         {/* WebSite structured data with a SearchAction, so search engines can
             surface a sitelinks search box for the app. */}
         <script

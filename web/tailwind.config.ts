@@ -1,5 +1,13 @@
 import type { Config } from 'tailwindcss';
 
+/**
+ * MusicArea design tokens.
+ *
+ * A near-black neutral scale carries the interface so album artwork provides
+ * the colour. The accent is deliberately narrow in scope: play, active state,
+ * progress and favourite. Radii are small, shadows are almost absent, and the
+ * type scale is editorial rather than oversized.
+ */
 const config: Config = {
   content: [
     './src/app/**/*.{ts,tsx}',
@@ -9,82 +17,96 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        bg: '#0D0B13',
+        bg: {
+          DEFAULT: '#080808',
+          alt: '#0D0D0D',
+        },
         surface: {
-          DEFAULT: '#17141F',
-          raised: '#211D2A',
+          DEFAULT: '#151515',
+          raised: '#1B1B1B',
         },
         accent: {
-          DEFAULT: '#D950A5',
-          soft: '#E477BF',
-        },
-        secondary: {
-          DEFAULT: '#B7B0C0',
+          DEFAULT: '#FF2D55',
+          soft: '#FF375F',
         },
         text: {
-          DEFAULT: '#FFFAFF',
-          secondary: '#B7B0C0',
-          muted: '#7C7488',
+          DEFAULT: '#F5F5F5',
+          secondary: '#A6A6A6',
+          muted: '#6E6E6E',
         },
       },
       borderColor: {
-        subtle: 'rgba(255,255,255,0.12)',
-      },
-      backgroundImage: {
-        brand: 'linear-gradient(135deg, #D950A5, #C14995)',
+        subtle: 'rgba(255,255,255,0.08)',
+        strong: 'rgba(255,255,255,0.16)',
       },
       fontFamily: {
-        sans: [
-          '-apple-system',
-          'BlinkMacSystemFont',
-          'SF Pro Display',
-          'SF Pro Text',
-          'var(--font-inter)',
-          'system-ui',
-          'sans-serif',
-        ],
+        sans: ['var(--font-inter)', 'Inter', 'system-ui', '-apple-system', 'sans-serif'],
       },
       fontSize: {
-        h1: ['46px', { lineHeight: '1.02', letterSpacing: '-0.045em' }],
-        h2: ['33px', { lineHeight: '1.08', letterSpacing: '-0.035em' }],
-        h3: ['25px', { lineHeight: '1.15', letterSpacing: '-0.025em' }],
-        h4: ['21px', { lineHeight: '1.25', letterSpacing: '-0.02em' }],
-        h5: ['17px', { lineHeight: '1.3', letterSpacing: '-0.012em' }],
-        h6: ['13px', { lineHeight: '1.4' }],
-      },
-      spacing: {
-        18: '72px',
-        22: '88px',
-        30: '120px',
+        // Editorial scale. Page titles stay restrained so hierarchy comes from
+        // weight and spacing rather than size alone.
+        display: ['40px', { lineHeight: '1.05', letterSpacing: '-0.03em', fontWeight: '700' }],
+        title: ['28px', { lineHeight: '1.12', letterSpacing: '-0.022em', fontWeight: '700' }],
+        section: ['19px', { lineHeight: '1.25', letterSpacing: '-0.014em', fontWeight: '600' }],
+        body: ['14px', { lineHeight: '1.45' }],
+        meta: ['13px', { lineHeight: '1.4' }],
+        micro: ['11px', { lineHeight: '1.35', letterSpacing: '0.01em' }],
       },
       borderRadius: {
-        card: '16px',
-        xl2: '24px',
+        xs: '4px',
+        sm: '6px',
+        DEFAULT: '8px',
+        md: '10px',
+        lg: '12px',
+        xl: '16px',
       },
       boxShadow: {
-        lift: '0 18px 42px -22px rgba(0,0,0,0.9)',
-        glow: '0 14px 36px -14px rgba(255,59,191,0.55)',
-        cyan: '0 14px 34px -15px rgba(77,231,255,0.55)',
+        // Used sparingly: artwork depth and floating surfaces only.
+        art: '0 8px 24px -12px rgba(0,0,0,0.8)',
+        pop: '0 16px 40px -16px rgba(0,0,0,0.85)',
+      },
+      spacing: {
+        sidebar: '240px',
+        player: '76px',
+        tabbar: '58px',
       },
       transitionTimingFunction: {
-        smooth: 'cubic-bezier(0.22, 1, 0.36, 1)',
+        out: 'cubic-bezier(0.2, 0.8, 0.3, 1)',
       },
-      backdropBlur: {
-        glass: '24px',
+      transitionDuration: {
+        fast: '140ms',
+        base: '200ms',
       },
       keyframes: {
-        'fade-up': {
-          '0%': { opacity: '0', transform: 'translateY(12px)' },
-          '100%': { opacity: '1', transform: 'translateY(0)' },
+        'fade-in': {
+          from: { opacity: '0' },
+          to: { opacity: '1' },
         },
-        float: {
-          '0%, 100%': { transform: 'translate3d(0, 0, 0)' },
-          '50%': { transform: 'translate3d(0, -10px, 0)' },
+        'rise': {
+          from: { opacity: '0', transform: 'translateY(8px)' },
+          to: { opacity: '1', transform: 'translateY(0)' },
+        },
+        'sheet-up': {
+          from: { transform: 'translateY(100%)' },
+          to: { transform: 'translateY(0)' },
+        },
+        'slide-left': {
+          from: { transform: 'translateX(100%)' },
+          to: { transform: 'translateX(0)' },
+        },
+        shimmer: {
+          '100%': { transform: 'translateX(100%)' },
+        },
+        eq: {
+          '0%, 100%': { transform: 'scaleY(0.3)' },
+          '50%': { transform: 'scaleY(1)' },
         },
       },
       animation: {
-        'fade-up': 'fade-up 420ms cubic-bezier(0.22,1,0.36,1) both',
-        float: 'float 5s ease-in-out infinite',
+        'fade-in': 'fade-in 200ms cubic-bezier(0.2,0.8,0.3,1) both',
+        rise: 'rise 260ms cubic-bezier(0.2,0.8,0.3,1) both',
+        'sheet-up': 'sheet-up 320ms cubic-bezier(0.2,0.8,0.3,1) both',
+        'slide-left': 'slide-left 260ms cubic-bezier(0.2,0.8,0.3,1) both',
       },
     },
   },

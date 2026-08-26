@@ -4,8 +4,8 @@ import { usePlayer } from '@/stores/player';
 import { Icon } from '@/components/ui/Icon';
 
 /**
- * Apple Music's volume slider: small speaker glyphs either side of a slim
- * track. Desktop only, shown in the toolbar beside the transport.
+ * Volume control: a mute toggle plus a slider. The glyph reflects the level so
+ * the state is readable without reading the slider position.
  */
 export function VolumeControl() {
   const volume = usePlayer((s) => s.volume);
@@ -13,7 +13,8 @@ export function VolumeControl() {
   const setVolume = usePlayer((s) => s.setVolume);
   const toggleMute = usePlayer((s) => s.toggleMute);
 
-  const shown = muted ? 0 : volume;
+  const level = muted ? 0 : volume;
+  const glyph = level === 0 ? 'volumeOff' : level < 0.5 ? 'volumeLow' : 'volume';
 
   return (
     <div className="flex items-center gap-1.5">
@@ -22,18 +23,18 @@ export function VolumeControl() {
         aria-label={muted ? 'Unmute' : 'Mute'}
         aria-pressed={muted}
         onClick={toggleMute}
-        className="text-text-secondary transition-colors hover:text-white"
+        className="btn-icon h-8 w-8"
       >
-        <Icon name={muted || volume === 0 ? 'volumeOff' : 'volume'} size={16} />
+        <Icon name={glyph} size={17} />
       </button>
       <input
         type="range"
         min={0}
         max={100}
-        value={Math.round(shown * 100)}
+        value={Math.round(level * 100)}
         aria-label="Volume"
-        onChange={(e) => setVolume(Number(e.target.value) / 100)}
-        className="h-1 w-20 cursor-pointer accent-white"
+        onChange={(event) => setVolume(Number(event.target.value) / 100)}
+        className="w-24"
       />
     </div>
   );

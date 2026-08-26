@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
-import { LibraryExperience } from '@/components/library/LibraryExperience';
+import { LibraryHub } from '@/components/library/LibraryHub';
 
-export const metadata: Metadata = { title: 'Your Space', robots: { index: false } };
+export const metadata: Metadata = { title: 'Your Library', robots: { index: false } };
 
 export default function LibraryPage() {
-  return <LibraryExperience />;
+  return <LibraryHub />;
 }

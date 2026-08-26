@@ -3,15 +3,31 @@
 import { SITE } from '@/lib/config';
 import { Icon } from '@/components/ui/Icon';
 
+/** Opening screen. One statement of what happens next, one action. */
 export function WelcomeStep({ onNext }: { onNext: () => void }) {
   return (
-    <div className="flex min-h-[100dvh] items-center justify-center bg-bg px-6 text-center">
-      <div className="w-full max-w-md rounded-xl2 border border-white/12 bg-surface p-7 sm:p-10">
-        <span className="mx-auto grid h-14 w-14 place-items-center rounded-xl bg-accent text-white"><Icon name="disc" size={27} /></span>
-        <h1 className="mt-7 text-h2 font-extrabold tracking-[-0.04em] sm:text-h1">Welcome to {SITE.name}</h1>
-        <p className="mx-auto mt-4 max-w-sm text-[15px] leading-relaxed text-text-secondary">First, tell us which languages you listen to. We will use them to choose the music shelves you see.</p>
-        <button type="button" onClick={onNext} className="button-primary mt-8 w-full py-3">Choose languages <Icon name="chevronRight" size={17} /></button>
-        <p className="mt-4 text-[11px] text-text-muted">You can edit preferences anytime. No account needed.</p>
+    <div className="flex min-h-[100dvh] items-center justify-center bg-bg px-6">
+      <div className="w-full max-w-md text-center">
+        <span className="mx-auto grid h-14 w-14 place-items-center rounded-lg bg-accent text-white">
+          <Icon name="disc" size={26} />
+        </span>
+
+        <h1 className="mt-8 text-title font-bold tracking-[-0.026em]">
+          Welcome to {SITE.name}
+        </h1>
+        <p className="mx-auto mt-3.5 max-w-sm text-body leading-relaxed text-text-secondary">
+          Tell us which languages you listen to, and we will use them to choose what appears first.
+          Two short steps.
+        </p>
+
+        <button type="button" onClick={onNext} className="btn-primary mt-8 w-full py-3">
+          Get started
+          <Icon name="chevronRight" size={15} />
+        </button>
+
+        <p className="mt-4 text-micro text-text-muted">
+          No account needed. Everything stays in this browser.
+        </p>
       </div>
     </div>
   );

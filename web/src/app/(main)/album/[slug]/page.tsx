@@ -8,6 +8,9 @@ import { SITE } from '@/lib/config';
 import { DetailHeader } from '@/components/sections/DetailHeader';
 import { TrackList } from '@/components/sections/TrackList';
 import { CollectionActions } from '@/components/player/CollectionActions';
+import { CollectionMenu } from '@/components/collections/CollectionMenu';
+import { CollectionFavoriteButton } from '@/components/library/FavoriteButton';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { JsonLd, breadcrumbLd } from '@/components/seo/JsonLd';
 
 export const revalidate = 600;
@@ -22,19 +25,21 @@ async function getAlbum(slug: string): Promise<Album | null> {
 }
 
 function albumArtist(album: Album): { name: string; id?: string } {
-  const a = album.artists?.primary?.[0] || album.artists?.all?.[0];
-  return { name: a?.name || 'Various Artists', id: a?.id };
+  const credit = album.artists?.primary?.[0] || album.artists?.all?.[0];
+  return { name: credit?.name || 'Various Artists', id: credit?.id };
 }
 
 export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
   const album = await getAlbum(params.slug);
   if (!album) return { title: 'Album not found' };
+
   const cover = pickImage(album.image);
   const artist = albumArtist(album).name;
   const title = `${album.name} by ${artist}`;
   const description = `Listen to the album ${album.name} by ${artist}${
     album.year ? ` (${album.year})` : ''
-  } on ${SITE.name}. ${album.songCount ?? album.songs?.length ?? ''} songs.`.trim();
+  } on ${SITE.name}.`;
+
   return {
     title,
     description,
@@ -56,7 +61,8 @@ export default async function AlbumPage({ params }: { params: { slug: string } }
   const cover = pickImage(album.image);
   const artist = albumArtist(album);
   const songs = album.songs ?? [];
-  const totalSecs = songs.reduce((sum, s) => sum + (s.duration || 0), 0);
+  const totalSeconds = songs.reduce((sum, song) => sum + (song.duration || 0), 0);
+  const href = entityHref('album', album.name, album.id);
 
   const albumLd = {
     '@context': 'https://schema.org',
@@ -66,32 +72,36 @@ export default async function AlbumPage({ params }: { params: { slug: string } }
     numTracks: songs.length,
     ...(album.year ? { datePublished: String(album.year) } : {}),
     image: cover,
-    url: `${SITE.url}${entityHref('album', album.name, album.id)}`,
-    track: songs.slice(0, 50).map((s, i) => ({
+    url: `${SITE.url}${href}`,
+    track: songs.slice(0, 50).map((song, index) => ({
       '@type': 'MusicRecording',
-      position: i + 1,
-      name: s.name,
-      url: `${SITE.url}${entityHref('song', s.name, s.id)}`,
+      position: index + 1,
+      name: song.name,
+      url: `${SITE.url}${entityHref('song', song.name, song.id)}`,
     })),
   };
 
   return (
-    <div className="app-page">
+    <div className="page page-stack">
       <JsonLd data={albumLd} />
       <JsonLd
         data={breadcrumbLd([
           { name: 'Home', path: '/' },
-          { name: album.name, path: entityHref('album', album.name, album.id) },
+          { name: album.name, path: href },
         ])}
       />
 
       <DetailHeader
         cover={cover}
+        kind="Album"
         title={album.name}
         description={album.description}
-        eyebrow={
+        byline={
           artist.id ? (
-            <Link href={entityHref('artist', artist.name, artist.id)} className="hover:underline">
+            <Link
+              href={entityHref('artist', artist.name, artist.id)}
+              className="transition-colors duration-fast hover:underline"
+            >
               {artist.name}
             </Link>
           ) : (
@@ -99,20 +109,33 @@ export default async function AlbumPage({ params }: { params: { slug: string } }
           )
         }
         meta={
-          <span>
-            Album
-            {album.year ? ` · ${album.year}` : ''}
-            {songs.length ? ` · ${songs.length} songs` : ''}
-            {totalSecs ? ` · ${formatDuration(totalSecs)}` : ''}
-          </span>
+          [
+            album.year ? String(album.year) : null,
+            songs.length ? `${songs.length} ${songs.length === 1 ? 'song' : 'songs'}` : null,
+            totalSeconds ? formatDuration(totalSeconds) : null,
+          ]
+            .filter(Boolean)
+            .join(' · ') || null
         }
-        actions={<CollectionActions songs={songs} />}
+        actions={
+          <CollectionActions songs={songs}>
+            <CollectionFavoriteButton
+              card={{ id: album.id, name: album.name, type: 'album', image: album.image }}
+              label="album"
+            />
+            <CollectionMenu title={album.name} path={href} songs={songs} />
+          </CollectionActions>
+        }
       />
 
       {songs.length ? (
         <TrackList songs={songs} showArt={false} showAlbum={false} />
       ) : (
-        <p className="text-[13px] text-text-secondary">This album has no playable tracks.</p>
+        <EmptyState
+          compact
+          title="No playable tracks"
+          message="This album has no streamable songs in the catalogue right now."
+        />
       )}
     </div>
   );

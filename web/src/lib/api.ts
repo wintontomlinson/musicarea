@@ -6,6 +6,7 @@ import type {
   ChartCard,
   FeedData,
   HistoryEntry,
+  Lyrics,
   MoodSet,
   Playlist,
   SearchAllData,
@@ -132,6 +133,19 @@ export const api = {
   playlist(id: string, limit = 100): Promise<Playlist> {
     return call<Playlist>(
       `/api/playlists?id=${encodeURIComponent(id)}&limit=${limit}`,
+      { revalidate: 600 },
+    );
+  },
+
+  /** Lyrics for a song. Throws with status 404 when the source has none. */
+  lyrics(id: string): Promise<Lyrics> {
+    return call<Lyrics>(`/api/songs/${encodeURIComponent(id)}/lyrics`, { revalidate: 86400 });
+  },
+
+  /** Catalogue-driven follow-on tracks for a song, used to extend the queue. */
+  suggestions(id: string, limit = 12): Promise<Song[]> {
+    return call<Song[]>(
+      `/api/songs/${encodeURIComponent(id)}/suggestions?limit=${limit}`,
       { revalidate: 600 },
     );
   },

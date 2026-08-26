@@ -10,14 +10,20 @@ interface PersistedPrefs {
   muted: boolean;
   shuffle: boolean;
   repeat: RepeatMode;
+  /** Keep playing with catalogue suggestions when the queue runs out. */
+  autoplay: boolean;
 }
 
 const PREFS_KEY = 'musicarea:prefs:v1';
+const QUEUE_KEY = 'musicarea:queue:v1';
+/** Cap on persisted tracks, so a long radio session cannot fill localStorage. */
+const QUEUE_PERSIST_LIMIT = 100;
 const DEFAULT_PREFS: PersistedPrefs = {
   volume: 0.85,
   muted: false,
   shuffle: false,
   repeat: 'off',
+  autoplay: true,
 };
 
 function loadPrefs(): PersistedPrefs {
@@ -37,6 +43,79 @@ function savePrefs(prefs: PersistedPrefs) {
   } catch {
     /* quota or unavailable */
   }
+}
+
+interface PersistedQueue {
+  queue: Song[];
+  order: number[];
+  orderPos: number;
+}
+
+function loadQueue(): PersistedQueue | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(QUEUE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<PersistedQueue>;
+    if (!Array.isArray(parsed.queue) || !parsed.queue.length) return null;
+
+    const queue = parsed.queue.filter((song) => song && typeof song.id === 'string');
+    if (!queue.length) return null;
+
+    // Rebuild the play order defensively: a stored order that does not match the
+    // stored queue would put the player into an unplayable state.
+    const order =
+      Array.isArray(parsed.order) &&
+      parsed.order.length === queue.length &&
+      parsed.order.every((index) => Number.isInteger(index) && index >= 0 && index < queue.length)
+        ? parsed.order
+        : queue.map((_, index) => index);
+
+    const orderPos =
+      typeof parsed.orderPos === 'number' && parsed.orderPos >= 0 && parsed.orderPos < order.length
+        ? parsed.orderPos
+        : 0;
+
+    return { queue, order, orderPos };
+  } catch {
+    return null;
+  }
+}
+
+function saveQueue(state: PersistedQueue) {
+  if (typeof window === 'undefined') return;
+  try {
+    if (!state.queue.length) {
+      localStorage.removeItem(QUEUE_KEY);
+      return;
+    }
+    // Keep the window around the current track rather than the first N entries,
+    // so what is coming up next survives the reload.
+    const start = Math.max(0, Math.min(state.orderPos, state.queue.length - 1));
+    const slice = state.queue.slice(0, QUEUE_PERSIST_LIMIT);
+    const withinLimit = state.order.filter((index) => index < slice.length);
+    localStorage.setItem(
+      QUEUE_KEY,
+      JSON.stringify({
+        queue: slice,
+        order: withinLimit.length ? withinLimit : slice.map((_, index) => index),
+        orderPos: Math.min(start, Math.max(0, withinLimit.length - 1)),
+      }),
+    );
+  } catch {
+    /* quota or private mode: playback still works, it just will not persist */
+  }
+}
+
+/** Persist the playback preferences from whatever the store currently holds. */
+function persistPrefs(state: PersistedPrefs) {
+  savePrefs({
+    volume: state.volume,
+    muted: state.muted,
+    shuffle: state.shuffle,
+    repeat: state.repeat,
+    autoplay: state.autoplay,
+  });
 }
 
 /** Fisher-Yates over indices, keeping a chosen index first. */
@@ -64,6 +143,7 @@ export interface PlayerState {
   muted: boolean;
   shuffle: boolean;
   repeat: RepeatMode;
+  autoplay: boolean;
   currentTime: number;
   duration: number;
 
@@ -71,6 +151,13 @@ export interface PlayerState {
   fullscreen: boolean;
   /** True when the queue panel is open. */
   queueOpen: boolean;
+  /** True when the lyrics panel is open. */
+  lyricsOpen: boolean;
+  /**
+   * Human-readable description of the last playback failure, or null. Set by the
+   * audio engine and surfaced in the player rather than the console.
+   */
+  error: string | null;
 
   // Selectors are derived in components; keep the state minimal here.
   currentTrack: () => Song | null;
@@ -88,6 +175,7 @@ export interface PlayerState {
   toggleMute: () => void;
   toggleShuffle: () => void;
   cycleRepeat: () => void;
+  toggleAutoplay: () => void;
   setProgress: (currentTime: number, duration: number) => void;
   reorderQueue: (fromQueueIndex: number, toQueueIndex: number) => void;
   addToQueue: (song: Song) => void;
@@ -96,6 +184,10 @@ export interface PlayerState {
   clearQueue: () => void;
   setFullscreen: (open: boolean) => void;
   setQueueOpen: (open: boolean) => void;
+  setLyricsOpen: (open: boolean) => void;
+  setError: (message: string | null) => void;
+  /** Re-hydrate the last session's queue, paused. Called once on mount. */
+  restoreQueue: () => void;
 }
 
 const initialPrefs = loadPrefs();
@@ -110,10 +202,13 @@ export const usePlayer = create<PlayerState>((set, get) => ({
   muted: initialPrefs.muted,
   shuffle: initialPrefs.shuffle,
   repeat: initialPrefs.repeat,
+  autoplay: initialPrefs.autoplay,
   currentTime: 0,
   duration: 0,
   fullscreen: false,
   queueOpen: false,
+  lyricsOpen: false,
+  error: null,
 
   currentTrack: () => {
     const { queue, order, orderPos } = get();
@@ -183,15 +278,13 @@ export const usePlayer = create<PlayerState>((set, get) => ({
     const volume = Math.max(0, Math.min(1, v));
     const muted = volume === 0 ? get().muted : false;
     set({ volume, muted });
-    const s = get();
-    savePrefs({ volume, muted: s.muted, shuffle: s.shuffle, repeat: s.repeat });
+    persistPrefs(get());
   },
 
   toggleMute: () => {
     const muted = !get().muted;
     set({ muted });
-    const s = get();
-    savePrefs({ volume: s.volume, muted, shuffle: s.shuffle, repeat: s.repeat });
+    persistPrefs(get());
   },
 
   toggleShuffle: () => {
@@ -210,16 +303,19 @@ export const usePlayer = create<PlayerState>((set, get) => ({
         set({ shuffle: false, order: newOrder, orderPos: currentQueueIndex });
       }
     }
-    const s = get();
-    savePrefs({ volume: s.volume, muted: s.muted, shuffle: nextShuffle, repeat: s.repeat });
+    persistPrefs(get());
   },
 
   cycleRepeat: () => {
     const modes: RepeatMode[] = ['off', 'all', 'one'];
     const repeat = modes[(modes.indexOf(get().repeat) + 1) % modes.length];
     set({ repeat });
-    const s = get();
-    savePrefs({ volume: s.volume, muted: s.muted, shuffle: s.shuffle, repeat });
+    persistPrefs(get());
+  },
+
+  toggleAutoplay: () => {
+    set({ autoplay: !get().autoplay });
+    persistPrefs(get());
   },
 
   setProgress: (currentTime, duration) => set({ currentTime, duration }),
@@ -313,6 +409,46 @@ export const usePlayer = create<PlayerState>((set, get) => ({
     set({ queue: [current], order: [0], orderPos: 0 });
   },
 
+  setError: (message) => set({ error: message }),
+
+  restoreQueue: () => {
+    // Never clobber an active session, for example a second tab that is playing.
+    if (get().queue.length) return;
+    const saved = loadQueue();
+    if (!saved) return;
+    set({
+      queue: saved.queue,
+      order: saved.order,
+      orderPos: saved.orderPos,
+      isPlaying: false,
+      currentTime: 0,
+      duration: 0,
+    });
+  },
+
   setFullscreen: (open) => set({ fullscreen: open }),
-  setQueueOpen: (open) => set({ queueOpen: open }),
+  // The queue and lyrics panels share the same edge of the screen, so opening
+  // one closes the other rather than stacking two drawers.
+  setQueueOpen: (open) => set(open ? { queueOpen: true, lyricsOpen: false } : { queueOpen: false }),
+  setLyricsOpen: (open) =>
+    set(open ? { lyricsOpen: true, queueOpen: false } : { lyricsOpen: false }),
 }));
+
+/**
+ * Persist the queue whenever its shape changes.
+ *
+ * Done with a single subscription rather than a write inside every action, so
+ * new queue operations cannot forget to persist. Progress ticks and volume
+ * changes are ignored because they do not affect what is queued.
+ */
+if (typeof window !== 'undefined') {
+  usePlayer.subscribe((state, previous) => {
+    if (
+      state.queue !== previous.queue ||
+      state.order !== previous.order ||
+      state.orderPos !== previous.orderPos
+    ) {
+      saveQueue({ queue: state.queue, order: state.order, orderPos: state.orderPos });
+    }
+  });
+}

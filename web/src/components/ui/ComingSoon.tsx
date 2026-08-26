@@ -1,11 +1,19 @@
 import { EmptyState } from '@/components/ui/EmptyState';
 
-export function ComingSoon({ page }: { page: string }) {
+/**
+ * Placeholder for a surface that is deliberately not built yet. Named honestly
+ * so it is never mistaken for a working feature.
+ */
+export function ComingSoon({ page, detail }: { page: string; detail?: string }) {
   return (
-    <div className="app-page">
+    <div className="page page-stack">
       <EmptyState
-        title={`${page} is on the way`}
-        message="This section arrives in a later build phase. The Home feed is live now."
+        icon="alert"
+        title={`${page} is not available yet`}
+        message={
+          detail ??
+          'This section is planned but not implemented. Nothing is hidden behind it right now.'
+        }
         ctaHref="/"
         ctaLabel="Back to Home"
       />

@@ -4,33 +4,38 @@ import { api } from '@/lib/api';
 import type { Mood } from '@/lib/types';
 import { SearchExperience } from '@/components/search/SearchExperience';
 import { preferredLanguages } from '@/lib/languages';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { SITE } from '@/lib/config';
 
 export const metadata: Metadata = {
   title: 'Search',
-  description: 'Search millions of songs, artists, albums and playlists on MusicArea.',
+  description: `Search songs, artists, albums and playlists on ${SITE.name}.`,
   alternates: { canonical: '/search' },
 };
 
 export const revalidate = 300;
 
-export default async function SearchPage({
-  searchParams,
-}: {
-  searchParams: { q?: string };
-}) {
-  // Moods power the before-typing state; fetched on the server and cached.
+export default async function SearchPage({ searchParams }: { searchParams: { q?: string } }) {
+  // Genre tiles fill the pre-query state. Fetched on the server and cached.
   let moods: Mood[] = [];
   try {
-    const browse = await api.browse(preferredLanguages());
-    moods = browse.moods ?? [];
+    moods = (await api.browse(preferredLanguages())).moods ?? [];
   } catch {
     moods = [];
   }
-  const initialQuery = (searchParams.q ?? '').trim();
 
   return (
-    <Suspense fallback={<div className="p-6 text-sm text-text-secondary">Loading search…</div>}>
-      <SearchExperience moods={moods} initialQuery={initialQuery} />
+    <Suspense fallback={<SearchFallback />}>
+      <SearchExperience moods={moods} initialQuery={(searchParams.q ?? '').trim()} />
     </Suspense>
+  );
+}
+
+function SearchFallback() {
+  return (
+    <div className="page page-stack">
+      <Skeleton className="h-9 w-40" />
+      <Skeleton className="-mt-6 h-12 w-full max-w-2xl rounded-sm" />
+    </div>
   );
 }
