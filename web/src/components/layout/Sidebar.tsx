@@ -8,6 +8,7 @@ import { Icon, type IconName } from '@/components/ui/Icon';
 import { AVATARS, SITE } from '@/lib/config';
 import { useUser } from '@/stores/user';
 import { useLibrary } from '@/stores/library';
+import { usePlaylists } from '@/stores/playlists';
 import { usePlayer } from '@/stores/player';
 import { Avatar } from '@/components/ui/Avatar';
 import { SidebarNowPlaying } from '@/components/layout/SidebarNowPlaying';
@@ -77,6 +78,7 @@ export function Sidebar() {
             <NavLink key={item.href} item={item} active={item.match(pathname)} />
           ))}
         </nav>
+        <PlaylistLinks pathname={pathname} />
         <JumpBackIn />
       </div>
 
@@ -97,12 +99,72 @@ function NavGroupLabel({ label }: { label: string }) {
 }
 
 /**
+ * The listener's own playlists.
+ *
+ * This is the sidebar slot Spotify gives to playlists, and now that local playlists exist it holds
+ * the real thing. Capped at a handful with a link through to the full library: a sidebar that
+ * grows without limit pushes the now-playing card and profile footer out of reach, which is the
+ * one thing this layout is arranged to prevent.
+ */
+function PlaylistLinks({ pathname }: { pathname: string }) {
+  const hydrate = usePlaylists((state) => state.hydrate);
+  const hydrated = usePlaylists((state) => state.hydrated);
+  const playlists = usePlaylists((state) => state.playlists);
+
+  useEffect(() => {
+    hydrate();
+  }, [hydrate]);
+
+  // Nothing before hydration: the server cannot read localStorage, so rendering here would
+  // guarantee a mismatch.
+  if (!hydrated || playlists.length === 0) return null;
+
+  return (
+    <div className="mt-5 border-t border-subtle pt-3">
+      <div className="mb-1 flex items-center justify-between">
+        <NavGroupLabel label="Playlists" />
+        {playlists.length > 6 && (
+          <Link href="/library" className="mb-1 px-3 text-[10px] font-bold text-accent-soft hover:text-white">
+            All
+          </Link>
+        )}
+      </div>
+      <ul className="flex flex-col">
+        {playlists.slice(0, 6).map((playlist) => {
+          const href = `/library/playlist/${playlist.id}`;
+          const active = pathname === href;
+          return (
+            <li key={playlist.id}>
+              <Link
+                href={href}
+                aria-current={active ? 'page' : undefined}
+                className={`flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition ${
+                  active ? 'bg-accent/[0.12] text-accent-soft' : 'hover:bg-white/[0.06]'
+                }`}
+              >
+                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-[6px] bg-white/[0.08] text-text-secondary">
+                  <Icon name="library" size={14} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[12.5px] font-semibold">{playlist.name}</span>
+                  <span className="block truncate text-[10.5px] text-text-muted">
+                    {playlist.songs.length} {playlist.songs.length === 1 ? 'song' : 'songs'}
+                  </span>
+                </span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+/**
  * Recently played tracks, as a compact list.
  *
- * This is the sidebar's stand-in for Spotify's playlist list. The app has no
- * user-created playlists yet, and listing the same three static library links twice
- * would be filler, so the slot shows real history instead: the fastest way back to
- * something you were listening to five minutes ago.
+ * The fastest way back to something you were listening to five minutes ago, and the reason this
+ * sits below playlists rather than above: playlists are deliberate, history is incidental.
  */
 function JumpBackIn() {
   const hydrate = useLibrary((state) => state.hydrate);

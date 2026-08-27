@@ -4,6 +4,7 @@ import { useState } from 'react';
 import type { Song } from '@/lib/types';
 import { Icon, type IconName } from '@/components/ui/Icon';
 import { LikeButton } from '@/components/library/LikeButton';
+import { AddToPlaylistButton } from '@/components/library/AddToPlaylistButton';
 import { QualityBadge } from '@/components/player/QualityBadge';
 
 /**
@@ -57,6 +58,8 @@ export function ActionRow({ song }: { song: Song }) {
           size={22}
           className="h-11 w-11 shrink-0 rounded-full transition hover:bg-white/10"
         />
+
+        <AddToPlaylistButton song={song} size={21} className="h-11 w-11 shrink-0" />
 
         <Action label="Share" icon="share" onClick={share} />
 
