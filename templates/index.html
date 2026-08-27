@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://c.saavncdn.com" crossorigin>
 <link rel="preconnect" href="https://aac.saavncdn.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
 </head>
 <body>
@@ -74,6 +74,17 @@
         </span>
       </a>
       <div id="playlistList" class="playlist-list"></div>
+    </div>
+
+    <!-- Friend activity. There is no social data layer behind this, so it is
+         labelled as a demo and only ever names tracks from the listener's own
+         real history rather than inventing catalogue entries. -->
+    <div class="sidebar__block friends" id="friendActivity" hidden>
+      <div class="sidebar__heading">
+        <span>Friend activity</span>
+        <span class="friends__tag" title="Sample data, not a real social feed">Demo</span>
+      </div>
+      <div class="friends__list" id="friendList"></div>
     </div>
 
     <div class="sidebar__foot">

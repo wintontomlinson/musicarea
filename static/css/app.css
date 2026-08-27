@@ -50,10 +50,48 @@
   --shadow-lg: 0 30px 80px rgba(0, 0, 0, .6);
   --ring: 0 0 0 2px rgba(179, 136, 255, .55);
 
+  /* Glass.
+     Every floating layer (chrome, drawers, menus, dialogs) is a blurred pane
+     rather than an opaque panel, so artwork colour from the ambient wash and the
+     content scrolling underneath both read through it. The tint is track-hue
+     aware at a very low alpha: enough for the glass to pick up the album's
+     colour, not enough to fight the content on top of it.
+
+     --glass-blur is deliberately one token. Blur is the most expensive part of
+     this effect, so having a single knob makes it easy to dial back. */
+  --glass-blur: 22px;
+  --glass-sat: 165%;
+  --glass-bg: hsl(var(--track-hue) 30% 8% / .62);
+  --glass-bg-strong: hsl(var(--track-hue) 28% 7% / .82);
+  --glass-line: hsl(var(--track-hue) 45% 78% / .12);
+  --glass-highlight: linear-gradient(160deg, rgba(255, 255, 255, .07), rgba(255, 255, 255, .012) 44%);
+  --glass-shadow: 0 18px 50px -18px rgba(0, 0, 0, .78);
+
   --ease: cubic-bezier(.22, .61, .36, 1);
   --fast: 140ms var(--ease);
-  --med: 260ms var(--ease);
+  /* The workhorse duration. Most component transitions read this token, so the
+     300ms house standard is set here rather than repeated per rule. */
+  --med: 300ms var(--ease);
   --slow: 520ms var(--ease);
+}
+
+/* Reusable glass pane, for surfaces added after the original design system.
+   The existing chrome keeps its own tuned blur values and simply adopts the
+   tokens above, so there is one place to retint or dial back the effect. */
+.glass {
+  background: var(--glass-bg);
+  background-image: var(--glass-highlight);
+  border: 1px solid var(--glass-line);
+  box-shadow: var(--glass-shadow);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  transition: background-color var(--med), border-color var(--med);
+}
+
+/* Blur is a per-frame compositing cost. Where the platform cannot afford it,
+   fall back to a near-solid tint rather than shipping a janky effect. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass { background: var(--glass-bg-strong); }
 }
 
 * { box-sizing: border-box; }
@@ -70,7 +108,11 @@ html, body {
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /* Inter first, ahead of the system stack. It is the face that actually gets
+     downloaded, so letting -apple-system win would mean paying for a webfont
+     that never renders on the largest slice of devices. */
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, 'Segoe UI', Roboto, sans-serif;
+  font-feature-settings: 'cv11' 1, 'ss01' 1;
   font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
@@ -152,10 +194,15 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
   padding: 18px 14px 14px;
   overflow: hidden;
   border-radius: var(--r-lg);
-  background: linear-gradient(180deg, rgba(18, 16, 28, .82), rgba(9, 9, 14, .88));
-  border: 1px solid var(--line);
-  backdrop-filter: blur(24px) saturate(140%);
-  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  /* Hue aware rather than a fixed grey, so the chrome picks up the colour of
+     whatever is playing instead of sitting outside the theme. */
+  background:
+    var(--glass-highlight),
+    linear-gradient(180deg, hsl(var(--track-hue) 26% 11% / .8), var(--glass-bg));
+  border: 1px solid var(--glass-line);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  transition: background-color var(--med), border-color var(--med);
 }
 
 .brand {
@@ -263,10 +310,88 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
 
 .sidebar__foot { flex: none; margin-top: auto; padding-top: 12px; }
 
+/* ── Friend activity (demo) ─────────────────────────────────────────────── */
+
+.friends { flex: none; }
+
+.friends__tag {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  padding: 2px 6px;
+}
+
+.friends__list { display: flex; flex-direction: column; gap: 2px; }
+
+.friend {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 8px;
+  border-radius: var(--r-sm);
+  transition: background var(--med);
+}
+
+.friend:hover { background: var(--surface-2); }
+
+.friend__avatar {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 800;
+  color: #fff;
+  background: linear-gradient(150deg, hsl(var(--hue) 72% 58%), hsl(calc(var(--hue) + 40) 70% 46%));
+  box-shadow: 0 2px 10px hsl(var(--hue) 70% 40% / .45);
+}
+
+.friend__meta { min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+.friend__meta strong { font-size: 12px; font-weight: 700; }
+.friend__meta small {
+  font-size: 11px;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A slow breathing dot, so the panel reads as live without animating text. */
+.friend__pulse {
+  flex: none;
+  margin-left: auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: hsl(140 72% 55%);
+  animation: friendPulse 2.6s var(--ease) infinite;
+}
+
+@keyframes friendPulse {
+  0%, 100% { opacity: .35; transform: scale(.85); }
+  50%      { opacity: 1;   transform: scale(1); }
+}
+
 /* Short viewports (laptops with the browser chrome open) cannot fit the taste
-   card as well as the shelves, so drop it rather than let it collide. */
+   card as well as the shelves, so drop it rather than let it collide. The
+   friend panel is the next thing to go, being the least essential. */
 @media (max-height: 660px) {
   .sidebar__foot { display: none; }
+}
+
+@media (max-height: 780px) {
+  .friends { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .friend__pulse { animation: none; opacity: .8; }
 }
 .taste-card {
   display: block;
@@ -1317,6 +1442,194 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
 }
 .library-hero__meta strong { color: var(--text); font-size: 16px; letter-spacing: -.3px; }
 
+/* ── Library toolbar: filter, sort, view ────────────────────────────────── */
+
+.lib-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin: 0 0 18px;
+}
+.lib-toolbar__right { display: flex; align-items: center; gap: 10px; }
+
+/* Pill group, also usable outside the library. */
+.segmented {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  background: var(--surface);
+}
+.segmented__item {
+  padding: 7px 15px;
+  border: 0;
+  border-radius: 99px;
+  background: none;
+  color: var(--text-dim);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: color var(--med), background var(--med);
+}
+.segmented__item:hover { color: var(--text); }
+.segmented__item.is-active {
+  color: #fff;
+  background: var(--brand);
+  box-shadow: 0 4px 16px hsl(var(--track-hue) 78% 50% / .4);
+}
+
+.lib-sort { display: flex; align-items: center; gap: 7px; }
+.lib-sort__label {
+  color: var(--text-faint);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.lib-sort select {
+  padding: 7px 11px;
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color var(--med), background var(--med);
+}
+.lib-sort select:hover { border-color: var(--line-strong); background: var(--surface-2); }
+
+.view-toggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  background: var(--surface);
+}
+.view-toggle__btn {
+  display: grid;
+  place-items: center;
+  width: 32px; height: 30px;
+  border: 0;
+  border-radius: 99px;
+  background: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: color var(--med), background var(--med);
+}
+.view-toggle__btn svg { width: 17px; height: 17px; }
+.view-toggle__btn:hover { color: var(--text); }
+.view-toggle__btn.is-active { color: #fff; background: var(--surface-3); }
+
+/* ── Library batch selection ────────────────────────────────────────────── */
+
+.lib-selectbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin: 0 0 18px;
+  padding: 11px 16px;
+  border: 1px solid hsl(var(--track-hue) 72% 66% / .3);
+  border-radius: var(--r-md);
+  background: var(--brand-soft);
+}
+.lib-selectbar strong { font-size: 13px; }
+.lib-selectbar__actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* The tick sits on the artwork. Hidden until hover so the grid stays calm, but
+   always visible once something is selected, otherwise there is no way to see
+   or undo a selection without hunting for it. */
+.card__check,
+.lib-row__check {
+  display: grid;
+  place-items: center;
+  width: 26px; height: 26px;
+  border: 1.5px solid rgba(255, 255, 255, .55);
+  border-radius: 50%;
+  background: rgba(8, 8, 12, .62);
+  color: transparent;
+  cursor: pointer;
+  transition: background var(--med), border-color var(--med), color var(--med), opacity var(--med);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+.card__check { position: absolute; top: 9px; left: 9px; z-index: 3; opacity: 0; }
+.card:hover .card__check,
+.card__check.is-on,
+.card__check:focus-visible { opacity: 1; }
+.card__check svg,
+.lib-row__check svg { width: 15px; height: 15px; }
+.card__check.is-on,
+.lib-row__check.is-on {
+  color: #fff;
+  border-color: transparent;
+  background: var(--brand);
+}
+.card.is-selected .card__art { box-shadow: var(--ring), var(--shadow-md); }
+
+/* ── Library list view ──────────────────────────────────────────────────── */
+
+.grid--pinned { margin-bottom: 22px; }
+
+.lib-list { display: flex; flex-direction: column; }
+
+.lib-row {
+  display: grid;
+  grid-template-columns: 26px 48px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 13px;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: background var(--med);
+}
+.lib-row:hover { background: var(--surface-2); }
+.lib-row.is-selected { background: var(--brand-soft); }
+.lib-row__spacer { width: 26px; }
+.lib-row__art {
+  position: relative;
+  width: 48px; height: 48px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+.lib-row__art--round { border-radius: 50%; }
+.lib-row__art img { width: 100%; height: 100%; object-fit: cover; }
+.lib-row__text { min-width: 0; display: flex; flex-direction: column; line-height: 1.3; }
+.lib-row__text strong {
+  font-size: 13.5px; font-weight: 650;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.lib-row__text small {
+  font-size: 11.5px; color: var(--text-faint);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.lib-row__kind {
+  color: var(--text-faint);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.lib-row__del { opacity: 0; transition: opacity var(--fast); }
+.lib-row:hover .lib-row__del,
+.lib-row:focus-within .lib-row__del { opacity: 1; }
+
+@media (max-width: 760px) {
+  .lib-toolbar { align-items: stretch; }
+  .lib-toolbar__right { justify-content: space-between; }
+  .lib-row { grid-template-columns: 26px 44px minmax(0, 1fr) auto; }
+  .lib-row__kind { display: none; }
+  .card__check, .lib-row__del { opacity: 1; }
+}
+
 /* ── Library tiles ──────────────────────────────────────────────────────── */
 
 .lib-art { position: relative; overflow: hidden; }
@@ -1646,11 +1959,11 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
   left: 8px; right: 8px; bottom: 8px;
   height: calc(var(--player-h) - 8px);
   border-radius: var(--r-lg);
-  background: rgba(13, 12, 19, .82);
+  background: var(--glass-highlight), var(--glass-bg-strong);
   border: 1px solid hsl(var(--track-hue) 72% 66% / .28);
   transition: border-color var(--med), box-shadow var(--med), background var(--med);
-  backdrop-filter: blur(30px) saturate(160%);
-  -webkit-backdrop-filter: blur(30px) saturate(160%);
+  backdrop-filter: blur(30px) saturate(var(--glass-sat));
+  -webkit-backdrop-filter: blur(30px) saturate(var(--glass-sat));
   box-shadow: var(--shadow-md);
   overflow: hidden;
 }
@@ -2022,10 +2335,10 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
   display: flex;
   flex-direction: column;
   border-radius: var(--r-lg);
-  background: rgba(13, 12, 19, .93);
-  border: 1px solid var(--line-strong);
-  backdrop-filter: blur(30px);
-  -webkit-backdrop-filter: blur(30px);
+  background: var(--glass-highlight), var(--glass-bg-strong);
+  border: 1px solid var(--glass-line);
+  backdrop-filter: blur(30px) saturate(var(--glass-sat));
+  -webkit-backdrop-filter: blur(30px) saturate(var(--glass-sat));
   box-shadow: var(--shadow-lg);
   animation: drawer-in 240ms var(--ease);
 }
@@ -2077,6 +2390,68 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
 }
 .qrow__drop { opacity: 0; transition: opacity var(--fast); }
 .qrow:hover .qrow__drop { opacity: 1; }
+
+/* ── Queue reordering ───────────────────────────────────────────────────── */
+
+.qrow__actions { display: flex; align-items: center; gap: 2px; flex: none; }
+
+/* Revealed on hover and whenever anything inside has keyboard focus, so the
+   reorder buttons are reachable without a pointer. */
+.qrow__actions .qrow__move {
+  opacity: 0;
+  width: 26px; height: 26px;
+  transition: opacity var(--fast), background var(--fast);
+}
+.qrow:hover .qrow__move,
+.qrow:focus-within .qrow__move,
+.qrow:focus-within .qrow__drop { opacity: 1; }
+.qrow__move svg { width: 16px; height: 16px; }
+
+.qrow__grip {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  margin-left: -4px;
+  color: var(--text-faint);
+  opacity: 0;
+  cursor: grab;
+  transition: opacity var(--fast), color var(--fast);
+}
+.qrow__grip svg { width: 16px; height: 16px; }
+.qrow--movable:hover .qrow__grip { opacity: 1; }
+.qrow--movable:hover .qrow__grip:hover { color: var(--text); }
+.qrow--movable:active .qrow__grip { cursor: grabbing; }
+
+.qrow.is-dragging {
+  opacity: .4;
+  background: var(--surface-3);
+}
+
+/* A 2px rule on the edge the row would land against, rather than shifting
+   siblings around: the list stays still while the indicator moves. */
+.qrow.is-drop-before,
+.qrow.is-drop-after { position: relative; }
+.qrow.is-drop-before::before,
+.qrow.is-drop-after::after {
+  content: '';
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 10px hsl(var(--track-hue) 86% 66% / .8);
+}
+.qrow.is-drop-before::before { top: -1px; }
+.qrow.is-drop-after::after { bottom: -1px; }
+
+/* Touch never fires HTML5 drag and drop, so the grip is dead weight there while
+   the arrow buttons must always be visible to be usable at all. */
+@media (hover: none) {
+  .qrow__grip { display: none; }
+  .qrow__actions .qrow__move { opacity: 1; }
+}
 
 /* ── Context menu ───────────────────────────────────────────────────────── */
 
