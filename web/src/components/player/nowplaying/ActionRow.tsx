@@ -6,6 +6,7 @@ import { Icon, type IconName } from '@/components/ui/Icon';
 import { LikeButton } from '@/components/library/LikeButton';
 import { AddToPlaylistButton } from '@/components/library/AddToPlaylistButton';
 import { QualityBadge } from '@/components/player/QualityBadge';
+import { ShareCard } from './ShareCard';
 
 /**
  * Secondary controls under the transport: favourite, share, video, quality.
@@ -61,7 +62,11 @@ export function ActionRow({ song }: { song: Song }) {
 
         <AddToPlaylistButton song={song} size={21} className="h-11 w-11 shrink-0" />
 
-        <Action label="Share" icon="share" onClick={share} />
+        {/* Two kinds of sharing, because they are genuinely different actions: a link for a chat, and
+            a rendered image for a story. Collapsing them into one control would mean guessing which
+            the listener wanted. */}
+        <Action label="Share a link" icon="share" onClick={share} />
+        <ShareCard song={song} />
 
         <Action
           label="Video unavailable for this track"

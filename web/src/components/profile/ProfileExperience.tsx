@@ -8,7 +8,7 @@ import { AVATARS, LANGUAGES } from '@/lib/config';
 import { useUser } from '@/stores/user';
 import { useLibrary } from '@/stores/library';
 import { usePlayer } from '@/stores/player';
-import { topArtists, topLanguages, uniqueArtistCount } from '@/lib/stats';
+import { listeningStreak, topArtists, topLanguages, uniqueArtistCount } from '@/lib/stats';
 import { entityHref, formatCount, pickImage } from '@/lib/utils';
 import { Avatar } from '@/components/ui/Avatar';
 import { Icon } from '@/components/ui/Icon';
@@ -32,6 +32,7 @@ export function ProfileExperience() {
   const languages = useUser((state) => state.languages);
   const liked = useLibrary((state) => state.liked);
   const recent = useLibrary((state) => state.recent);
+  const playedAt = useLibrary((state) => state.playedAt);
   const playQueue = usePlayer((state) => state.playQueue);
 
   useEffect(() => {
@@ -49,6 +50,7 @@ export function ProfileExperience() {
   const pool = [...recent, ...liked];
   const artists = topArtists(pool, 6);
   const langs = topLanguages(pool, 5);
+  const streak = listeningStreak(playedAt);
 
   return (
     <div className="app-page">
@@ -82,7 +84,21 @@ export function ProfileExperience() {
         <p className="text-[14px] text-text-secondary">Reading your history on this device…</p>
       ) : (
         <>
-          <section aria-label="Summary" className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <section aria-label="Summary" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <StatCard
+              icon="bolt"
+              value={streak.days ? `${streak.days}` : '0'}
+              label={streak.days === 1 ? 'Day streak' : 'Day streak'}
+              // The distinction matters: a streak that ended yesterday is still alive but needs a
+              // play today to continue, and saying so is more useful than a bare number.
+              detail={
+                streak.days === 0
+                  ? 'Play something to start'
+                  : streak.activeToday
+                    ? 'Counting today'
+                    : 'Play today to keep it'
+              }
+            />
             <StatCard
               icon="heart"
               value={formatCount(liked.length)}
@@ -256,7 +272,7 @@ function StatCard({
   label,
   detail,
 }: {
-  icon: 'heart' | 'clock' | 'user';
+  icon: 'heart' | 'clock' | 'user' | 'bolt';
   value: string;
   label: string;
   detail: string;

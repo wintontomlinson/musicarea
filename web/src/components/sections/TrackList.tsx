@@ -8,6 +8,7 @@ import { artistLine, entityHref, formatDuration, pickImage, primaryArtist } from
 import { Icon } from '@/components/ui/Icon';
 import { LikeButton } from '@/components/library/LikeButton';
 import { AddToPlaylistButton } from '@/components/library/AddToPlaylistButton';
+import { SwipeableRow } from '@/components/ui/SwipeableRow';
 
 /**
  * Apple Music's track table: plain rows separated by hairlines that start past
@@ -30,6 +31,7 @@ export function TrackList({
   const toggle = usePlayer((s) => s.toggle);
   const playQueue = usePlayer((s) => s.playQueue);
   const playNext = usePlayer((s) => s.playNext);
+  const addToQueue = usePlayer((s) => s.addToQueue);
 
   if (!songs.length) return null;
 
@@ -39,8 +41,17 @@ export function TrackList({
         const isCurrent = currentId === song.id;
         const artist = primaryArtist(song);
         return (
-          <div
+          /*
+            Swipe actions mirror the two hover controls, so touch and pointer reach the same things
+            by different means: left to queue it after the current track, right to add it to a
+            playlist. Nothing is swipe-only, which matters because the gesture is undiscoverable.
+          */
+          <SwipeableRow
             key={`${song.id}-${i}`}
+            left={{ label: 'Play next', icon: 'playNext', run: () => playNext(song) }}
+            right={{ label: 'Queue', icon: 'plus', run: () => addToQueue(song) }}
+          >
+          <div
             className={`group grid grid-cols-[22px_1fr_auto] items-center gap-3 rounded-xl border border-transparent px-2 py-2.5 transition-colors sm:grid-cols-[22px_1.6fr_1fr_auto] ${
               isCurrent ? 'row-active' : 'hover:bg-white/[0.06]'
             }`}
@@ -156,6 +167,7 @@ export function TrackList({
               </span>
             </span>
           </div>
+          </SwipeableRow>
         );
       })}
     </div>

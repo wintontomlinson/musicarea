@@ -14,6 +14,7 @@ import { RadioCard } from '@/components/home/RadioCard';
 import { QuickPicks } from '@/components/home/QuickPicks';
 import { RecentGrid } from '@/components/home/RecentGrid';
 import { SmartPlaylistCards } from '@/components/home/SmartPlaylistCards';
+import { SamplesStrip } from '@/components/home/SamplesStrip';
 
 interface HomeExperienceProps {
   /** Editorial rows from the server. Always shown, never personalised. */
@@ -171,6 +172,10 @@ export function HomeExperience({
       )}
 
       {hydrated && <RecentGrid songs={recent} />}
+
+      {/* Drawn from the editorial rows rather than the personalised ones, matching what the samples
+          feed itself uses, so the tiles are the tracks that will actually appear there. */}
+      <SamplesStrip songs={collectSongs(browseRows, 8)} />
 
       {hydrated && <SmartPlaylistCards history={history} />}
 

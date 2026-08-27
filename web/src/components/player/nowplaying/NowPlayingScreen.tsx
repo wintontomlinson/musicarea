@@ -8,6 +8,7 @@ import { Icon } from '@/components/ui/Icon';
 import { TransportControls } from '@/components/player/PlayerControls';
 import { SeekBar } from '@/components/player/SeekBar';
 import { ArtBackdrop, ArtStage } from './ArtStage';
+import { AmbientVisualizer } from './AmbientVisualizer';
 import { TrackMeta } from './TrackMeta';
 import { ActionRow } from './ActionRow';
 import { LyricsPane } from './LyricsPane';
@@ -124,6 +125,11 @@ export function NowPlayingScreen() {
             <ArtStage song={track} />
 
             <div className="flex w-full max-w-[min(78vw,26rem)] flex-col gap-5 lg:max-w-[30rem]">
+              {/* Sits between the artwork and the metadata, where it reads as light spilling from
+                  the cover. Ambient rather than audio-reactive: see the component for why a real
+                  analyser is not possible here. */}
+              <AmbientVisualizer className="-mt-2 h-12 opacity-80 lg:h-14" />
+
               <TrackMeta song={track} />
               <SeekBar showTimes size="full" />
               <TransportControls size="full" />

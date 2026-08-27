@@ -79,3 +79,71 @@ export function uniqueArtistCount(songs: Song[]): number {
   }
   return seen.size;
 }
+
+
+/**
+ * Consecutive days, ending today or yesterday, on which something was played.
+ *
+ * This became computable only once the library store began recording *when* each song was played.
+ * Before that there were no timestamps at all, which is why this deliberately did not exist: a
+ * streak invented from an undated list would have been decoration.
+ *
+ * Days are bucketed in **local** time, not UTC. A listener in Mumbai playing something at 1am
+ * expects that to count as that day, and UTC bucketing would file it under the previous one.
+ *
+ * A streak that ended yesterday still counts, and `activeToday` says which case it is. Resetting the
+ * moment midnight passes would tell someone their twelve-day run was over before they had a chance
+ * to play anything.
+ */
+export function listeningStreak(playedAt: Record<string, number>): {
+  days: number;
+  activeToday: boolean;
+} {
+  const stamps = Object.values(playedAt).filter((at) => typeof at === 'number' && Number.isFinite(at));
+  if (stamps.length === 0) return { days: 0, activeToday: false };
+
+  const days = new Set(stamps.map(dayKey));
+  const today = dayKey(Date.now());
+  const yesterday = dayKey(Date.now() - DAY_MS);
+
+  // Anchored to whichever of today or yesterday has a play. Anything older means the run is broken
+  // and there is no current streak to report.
+  let cursor: number;
+  if (days.has(today)) cursor = Date.now();
+  else if (days.has(yesterday)) cursor = Date.now() - DAY_MS;
+  else return { days: 0, activeToday: false };
+
+  let count = 0;
+  // Walks backwards a day at a time. Bounded by the set size, so a sparse history cannot loop
+  // indefinitely.
+  while (days.has(dayKey(cursor)) && count <= days.size) {
+    count += 1;
+    cursor -= DAY_MS;
+  }
+
+  return { days: count, activeToday: days.has(today) };
+}
+
+const DAY_MS = 86_400_000;
+
+/**
+ * A local-time day bucket.
+ *
+ * Built from the date parts rather than by dividing the timestamp, because dividing assumes days are
+ * a fixed length in the listener's timezone, which daylight-saving transitions break.
+ */
+function dayKey(at: number): number {
+  const date = new Date(at);
+  return date.getFullYear() * 10000 + (date.getMonth() + 1) * 100 + date.getDate();
+}
+
+/**
+ * Total duration of the given songs, in seconds.
+ *
+ * Named for what it measures. It is the combined length of the tracks in a list, which is *not* the
+ * same as time spent listening: a skipped track contributes its whole duration. The UI labels it
+ * accordingly rather than calling it minutes listened.
+ */
+export function totalDuration(songs: Song[]): number {
+  return songs.reduce((sum, song) => sum + (song.duration ?? 0), 0);
+}
