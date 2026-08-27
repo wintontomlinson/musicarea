@@ -3,7 +3,7 @@ import { Topbar } from '@/components/layout/Topbar';
 import { MobileNav } from '@/components/layout/MobileNav';
 import { AudioEngine } from '@/components/player/AudioEngine';
 import { PlayerBar } from '@/components/player/PlayerBar';
-import { FullPlayer } from '@/components/player/FullPlayer';
+import { NowPlayingScreen } from '@/components/player/nowplaying/NowPlayingScreen';
 import { QueuePanel } from '@/components/player/QueuePanel';
 import { KeyboardShortcuts } from '@/components/player/KeyboardShortcuts';
 import { MediaSession } from '@/components/player/MediaSession';
@@ -49,7 +49,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         {/* Player: engine + surfaces, always mounted. */}
         <AudioEngine />
         <PlayerBar />
-        <FullPlayer />
+        <NowPlayingScreen />
         <QueuePanel />
         <PlaybackAlert />
         <KeyboardShortcuts />

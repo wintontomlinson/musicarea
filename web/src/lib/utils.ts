@@ -142,3 +142,42 @@ export function greeting(date = new Date()): string {
   if (h < 17) return 'Good afternoon';
   return 'Good evening';
 }
+
+
+/**
+ * The API occasionally returns HTML entities in text fields.
+ *
+ * Lives here rather than in the search helpers, where it started, because the lyrics
+ * layer needs it too: the catalogue serves lyrics as an HTML fragment and entities are
+ * far more common in a verse than in a track title.
+ *
+ * Accepts anything. Results reaching the client through a route handler are typed but
+ * not re-validated there, and calling `.replace` on a null title used to throw and
+ * blank the whole search page.
+ */
+export function decodeEntities(text: string | null | undefined): string {
+  if (typeof text !== 'string') return '';
+  return (
+    text
+      .replace(/&amp;/g, '&')
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'")
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      // Numeric entities, decimal and hex. The original only handled `&#039;`
+      // literally, so every other numeric entity reached the screen as raw source.
+      .replace(/&#(\d{1,7});/g, (_, code: string) => safeCodePoint(Number(code)))
+      .replace(/&#[xX]([\da-fA-F]{1,6});/g, (_, code: string) => safeCodePoint(parseInt(code, 16)))
+  );
+}
+
+/** Guards `fromCodePoint`, which throws on values outside the Unicode range. */
+function safeCodePoint(code: number): string {
+  if (!Number.isFinite(code) || code < 0 || code > 0x10ffff) return '';
+  try {
+    return String.fromCodePoint(code);
+  } catch {
+    return '';
+  }
+}

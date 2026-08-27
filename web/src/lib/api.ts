@@ -196,6 +196,19 @@ export const api = {
       { revalidate: 300 },
     );
   },
+
+  /**
+   * Untimed lyrics from the catalogue, as an HTML fragment.
+   *
+   * Cached for a long window because lyrics for a released track do not change. Note the
+   * endpoint ignores the `hasLyrics` and `lyricsId` fields on the song and tries anyway,
+   * because both are unreliable upstream: roughly a fifth of tracks reporting
+   * `hasLyrics: false` do in fact have lyrics. Callers should not pre-filter on them
+   * either.
+   */
+  lyrics(songId: string): Promise<{ lyrics: string; copyright?: string | null; snippet?: string | null }> {
+    return call(`/api/songs/${encodeURIComponent(songId)}/lyrics`, { revalidate: 86400 });
+  },
 };
 
 /**
