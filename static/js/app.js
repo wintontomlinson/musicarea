@@ -334,6 +334,11 @@
         visualizer: true,
         equalizer: 'flat',
         sleepTimer: 0,     // minutes, 0 is off. Never persisted as active.
+        // Library presentation. Persisted so the shape of the shelf a listener
+        // arranged is still there on the next visit.
+        libView: 'grid',   // 'grid' | 'list'
+        libFilter: 'all',  // 'all' | 'playlists' | 'albums' | 'artists'
+        libSort: 'recent', // 'recent' | 'az' | 'played'
       },
       SAVED_PREFS,
     ),
@@ -1562,6 +1567,30 @@
       renderQueue();
     },
 
+    /**
+     * Move an upcoming track to another upcoming slot.
+     *
+     * Only `order` changes: `queue` holds the songs and `order` is the play
+     * sequence over them, so reordering never touches song indices and therefore
+     * cannot invalidate `pos` or a mid-crossfade handoff. The track that is
+     * playing is fixed, and nothing may be dropped above it, because moving the
+     * current position would mean cutting off playback to satisfy a drag.
+     */
+    moveInQueue(fromOrderPos, toOrderPos) {
+      const lastPos = this.order.length - 1;
+      const from = clamp(fromOrderPos, 0, lastPos);
+      const to = clamp(toOrderPos, this.pos + 1, lastPos);
+      if (from === to || from <= this.pos) return;
+      const [moved] = this.order.splice(from, 1);
+      this.order.splice(to, 0, moved);
+      renderQueue();
+      // The idle deck may hold a buffer for what *used* to be next. preloadNext
+      // compares `readyFor` against the song now in that slot, so calling it
+      // re-points the deck when the drag changed which track comes next, and is a
+      // no-op when it did not.
+      this.preloadNext();
+    },
+
     clearUpcoming() {
       this.order = this.order.slice(0, this.pos + 1);
       renderQueue();
@@ -1894,30 +1923,58 @@
   /* Queue drawer                                                           */
   /* ====================================================================== */
 
+  /**
+   * One queue row, shared by the drawer and the now playing Queue tab. Both used
+   * to build their own markup, which is why only one of them could be reordered.
+   *
+   * Rows above and including the playing track are not draggable: moving across
+   * the current position would mean interrupting playback to satisfy a drag. The
+   * arrow buttons exist alongside the drag handle so reordering is reachable by
+   * keyboard and on touch, where HTML5 drag and drop does not fire.
+   */
+  function queueRowHtml(song, orderPos) {
+    if (!song) return '';
+    const current = orderPos === Player.pos;
+    const movable = !current && orderPos > Player.pos;
+    return `
+      <div class="qrow ${current ? 'is-current' : ''} ${movable ? 'qrow--movable' : ''}"
+           data-queue-pos="${orderPos}" data-song="${esc(song.id)}"
+           ${movable ? 'draggable="true"' : ''}>
+        ${movable ? `<span class="qrow__grip" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 5h2v2H9zm4 0h2v2h-2zM9 11h2v2H9zm4 0h2v2h-2zM9 17h2v2H9zm4 0h2v2h-2z"/></svg></span>` : ''}
+        <img loading="lazy" decoding="async" src="${esc(art(song, 150))}" alt="">
+        <div class="qrow__text">
+          <strong>${esc(song.name)}</strong>
+          <small>${esc(artistLine(song))}</small>
+        </div>
+        ${current ? '<span class="eq"><i></i><i></i><i></i><i></i></span>' : `
+          <span class="qrow__actions">
+            ${movable ? `
+              <button class="icon-btn qrow__move" data-queue-move="${orderPos}" data-queue-dir="-1"
+                      aria-label="Move ${esc(song.name)} earlier">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 7.6 18 13.6 16.6 15 12 10.4 7.4 15 6 13.6z"/></svg>
+              </button>
+              <button class="icon-btn qrow__move" data-queue-move="${orderPos}" data-queue-dir="1"
+                      aria-label="Move ${esc(song.name)} later">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16.4 6 10.4 7.4 9 12 13.6 16.6 9 18 10.4z"/></svg>
+              </button>` : ''}
+            <button class="icon-btn qrow__drop" data-queue-remove="${orderPos}" aria-label="Remove ${esc(song.name)} from queue">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.4 6 6 7.4 10.6 12 6 16.6 7.4 18 12 13.4 16.6 18 18 16.6 13.4 12 18 7.4 16.6 6 12 10.6z"/></svg>
+            </button>
+          </span>`}
+      </div>`;
+  }
+
   function renderQueue() {
     const body = $('#queueBody');
     if (!body) return;
+    body.dataset.queueList = '1';
     if (!Player.queue.length) {
       body.innerHTML = '<div class="empty" style="padding:40px 16px"><p>Your queue is empty. Play something and the algorithm keeps it topped up.</p></div>';
       return;
     }
-    const rows = (start, end) => Player.order.slice(start, end).map((queueIndex, offset) => {
-      const song = Player.queue[queueIndex];
-      const orderPos = start + offset;
-      const current = orderPos === Player.pos;
-      return `
-        <div class="qrow ${current ? 'is-current' : ''}" data-queue-pos="${orderPos}" data-song="${esc(song.id)}">
-          <img loading="lazy" decoding="async" src="${esc(art(song, 150))}" alt="">
-          <div class="qrow__text">
-            <strong>${esc(song.name)}</strong>
-            <small>${esc(artistLine(song))}</small>
-          </div>
-          ${current ? '<span class="eq"><i></i><i></i><i></i><i></i></span>'
-            : `<button class="icon-btn qrow__drop" data-queue-remove="${orderPos}" aria-label="Remove from queue">
-                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.4 6 6 7.4 10.6 12 6 16.6 7.4 18 12 13.4 16.6 18 18 16.6 13.4 12 18 7.4 16.6 6 12 10.6z"/></svg>
-               </button>`}
-        </div>`;
-    }).join('');
+    const rows = (start, end) => Player.order.slice(start, end)
+      .map((queueIndex, offset) => queueRowHtml(Player.queue[queueIndex], start + offset))
+      .join('');
 
     body.innerHTML = `
       <div class="drawer__group">Now playing</div>
@@ -2168,21 +2225,19 @@
         panel.innerHTML = '<p class="panel__note">Nothing queued yet.</p>';
         return;
       }
-      panel.innerHTML = Player.order.map((queueIndex, orderPos) => {
-        const item = Player.queue[queueIndex];
-        return `
-          <div class="qrow ${orderPos === Player.pos ? 'is-current' : ''}" data-queue-pos="${orderPos}" data-song="${esc(item.id)}">
-            <img loading="lazy" decoding="async" src="${esc(art(item, 150))}" alt="">
-            <div class="qrow__text">
-              <strong>${esc(item.name)}</strong>
-              <small>${esc(artistLine(item))}</small>
-            </div>
-          </div>`;
-      }).join('');
+      // Shares queueRowHtml with the drawer, so the Queue tab gets the same
+      // drag handles, reorder buttons and remove control for free.
+      panel.dataset.queueList = '1';
+      panel.innerHTML = Player.order
+        .map((queueIndex, orderPos) => queueRowHtml(Player.queue[queueIndex], orderPos))
+        .join('');
       return;
     }
 
-    // Lyrics
+    // Lyrics. The panel is shared with the Queue tab, so drop the marker that
+    // makes it a drop target before rendering anything else into it.
+    delete panel.dataset.queueList;
+
     if (!song) {
       panel.innerHTML = '<p class="panel__note">Play something first.</p>';
       return;
@@ -2918,49 +2973,8 @@
           </div>
           <button class="btn btn--primary" id="libNewPlaylist">New playlist</button>
         </section>
-        <section class="section">
-          <div class="section__head">
-            <div><h2>Collections</h2><p>Everything you have chosen to keep close</p></div>
-          </div>
-          <div class="grid">
-            <article class="card" data-goto="#/liked">
-              <div class="card__art lib-art lib-art--liked">
-                ${collage(Store.liked.map((s) => s.image)) || `
-                  <svg viewBox="0 0 24 24" class="lib-art__glyph" aria-hidden="true"><path d="M12 20.7 4.6 13.6a4.9 4.9 0 0 1 7-6.9l.4.4.4-.4a4.9 4.9 0 0 1 7 6.9z"/></svg>`}
-                <span class="lib-art__tint"></span>
-                <span class="lib-art__badge">${ICON_HEART}</span>
-                ${Store.liked.length ? `<button class="card__play" data-play-liked="1" aria-label="Play liked songs">${ICON_PLAY}</button>` : ''}
-              </div>
-              <div class="card__title">Liked songs</div>
-              <div class="card__sub">${plural(Store.liked.length, 'song')}</div>
-            </article>
-            <article class="card" data-goto="#/recent">
-              <div class="card__art lib-art lib-art--recent">
-                ${collage(Store.recent.map((s) => s.image)) || `
-                  <svg viewBox="0 0 24 24" class="lib-art__glyph" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9h-2a7 7 0 1 1-7-7v4l5-4-5-4z"/></svg>`}
-                <span class="lib-art__tint"></span>
-                <span class="lib-art__badge">${ICON_CLOCK}</span>
-                ${Store.recent.length ? `<button class="card__play" data-play-recent="1" aria-label="Play recently played">${ICON_PLAY}</button>` : ''}
-              </div>
-              <div class="card__title">Recently played</div>
-              <div class="card__sub">${plural(Store.recent.length, 'song')}</div>
-            </article>
-            ${lists.map((list) => `
-              <article class="card" data-goto="#/list/${esc(list.id)}">
-                <div class="card__art lib-art lib-art--custom">
-                  ${collage(list.songs.map((s) => s.image)) || `
-                    <svg viewBox="0 0 24 24" class="lib-art__glyph" aria-hidden="true"><path d="M4 6h11v2H4zm0 4h11v2H4zm0 4h7v2H4zm13-6 4 3-4 3z"/></svg>`}
-                  <span class="lib-art__tint"></span>
-                  <span class="card__tools">
-                    <button class="icon-btn" data-rename-list="${esc(list.id)}" aria-label="Rename ${esc(list.name)}" title="Rename">${ICON_EDIT}</button>
-                    <button class="icon-btn icon-btn--danger" data-delete-list="${esc(list.id)}" aria-label="Delete ${esc(list.name)}" title="Delete">${ICON_REMOVE}</button>
-                  </span>
-                </div>
-                <div class="card__title">${esc(list.name)}</div>
-                <div class="card__sub">${plural(list.songs.length, 'song')}</div>
-              </article>`).join('')}
-          </div>
-        </section>
+        ${libraryToolbar()}
+        <section class="section" id="libraryResults">${libraryBody()}</section>
         <div id="mixesRow"></div>`);
     },
 
@@ -3628,6 +3642,9 @@
   function renderSidebarCounts() {
     $('#likedCount').textContent = plural(Store.liked.length, 'song');
     $('#recentCount').textContent = plural(Store.recent.length, 'song');
+    // Piggybacks on the one function that already runs on every liked/recent
+    // mutation and at boot, rather than adding a second set of call sites.
+    renderFriendActivity();
   }
 
   function renderPlaylistList() {
@@ -3641,6 +3658,376 @@
           <strong>${esc(list.name)}</strong>
           <small>${plural(list.songs.length, 'song')}</small>
         </span>
+      </a>`).join('');
+  }
+
+  /* ====================================================================== */
+  /* Library shaping                                                        */
+  /* ====================================================================== */
+
+  /* There is no "save album" or "follow artist" feature, so those tabs are
+     derived from music the listener has actually liked or played rather than
+     left empty or filled with suggestions. Everything here is real: the ids,
+     names and artwork all come from songs already in local storage. */
+
+  /** Play weight per entity, used by the "Most played" sort. */
+  function playCounts() {
+    const albums = new Map();
+    const artists = new Map();
+    const songs = new Map();
+    for (const entry of Store.history) {
+      if (entry.event !== 'play' && entry.event !== 'complete' && entry.event !== 'repeat') continue;
+      songs.set(entry.id, (songs.get(entry.id) || 0) + 1);
+      if (entry.album?.id) albums.set(entry.album.id, (albums.get(entry.album.id) || 0) + 1);
+      for (const a of entry.artists || []) {
+        if (a.id) artists.set(a.id, (artists.get(a.id) || 0) + 1);
+      }
+    }
+    return { albums, artists, songs };
+  }
+
+  /** Newest first, so "Recently added" has something honest to sort on. */
+  function librarySongPool() {
+    const seen = new Set();
+    const pool = [];
+    for (const song of [...Store.liked, ...Store.recent]) {
+      if (!song?.id || seen.has(song.id)) continue;
+      seen.add(song.id);
+      pool.push(song);
+    }
+    return pool;
+  }
+
+  function libraryAlbums() {
+    const byId = new Map();
+    librarySongPool().forEach((song, order) => {
+      const id = song.album?.id;
+      if (!id || byId.has(id)) return;
+      byId.set(id, {
+        kind: 'album',
+        id,
+        name: song.album.name || 'Unknown album',
+        sub: artistLine(song),
+        image: song.image,
+        href: `#/album/${id}`,
+        order,
+      });
+    });
+    return Array.from(byId.values());
+  }
+
+  function libraryArtists() {
+    const byId = new Map();
+    librarySongPool().forEach((song, order) => {
+      for (const artist of song.artists || []) {
+        if (!artist.id || byId.has(artist.id)) continue;
+        byId.set(artist.id, {
+          kind: 'artist',
+          id: artist.id,
+          name: artist.name,
+          sub: 'Artist',
+          image: song.image,
+          round: true,
+          href: `#/artist/${artist.id}`,
+          order,
+        });
+      }
+    });
+    return Array.from(byId.values());
+  }
+
+  function libraryPlaylists() {
+    return Store.playlists.map((list, order) => ({
+      kind: 'playlist',
+      id: list.id,
+      name: list.name,
+      sub: plural(list.songs.length, 'song'),
+      covers: list.songs.map((s) => s.image),
+      href: `#/list/${list.id}`,
+      selectable: true,
+      createdAt: list.createdAt || 0,
+      songIds: list.songs.map((s) => s.id),
+      order,
+    }));
+  }
+
+  function sortLibrary(items, sort) {
+    const counts = playCounts();
+    const weight = (item) => {
+      if (item.kind === 'album') return counts.albums.get(item.id) || 0;
+      if (item.kind === 'artist') return counts.artists.get(item.id) || 0;
+      return (item.songIds || []).reduce((sum, id) => sum + (counts.songs.get(id) || 0), 0);
+    };
+    const copy = items.slice();
+    if (sort === 'az') return copy.sort((a, b) => a.name.localeCompare(b.name));
+    if (sort === 'played') return copy.sort((a, b) => weight(b) - weight(a) || a.order - b.order);
+    // Recently added. Playlists carry a real timestamp; derived entities fall
+    // back to their position in the liked/recent pool, which is already newest
+    // first, so the two orderings agree in direction.
+    return copy.sort((a, b) => {
+      if (a.createdAt && b.createdAt) return b.createdAt - a.createdAt;
+      return a.order - b.order;
+    });
+  }
+
+  const LIB_FILTERS = [
+    ['all', 'All'],
+    ['playlists', 'Playlists'],
+    ['albums', 'Albums'],
+    ['artists', 'Artists'],
+  ];
+  const LIB_SORTS = [
+    ['recent', 'Recently added'],
+    ['az', 'A to Z'],
+    ['played', 'Most played'],
+  ];
+
+  /** Ids of the playlists currently ticked. Cleared whenever the view rebuilds. */
+  let librarySelection = new Set();
+
+  function libraryToolbar() {
+    const { libFilter, libSort, libView } = Store.prefs;
+    return `
+      <div class="lib-toolbar">
+        <div class="segmented" role="tablist" aria-label="Filter your library">
+          ${LIB_FILTERS.map(([id, label]) => `
+            <button class="segmented__item ${libFilter === id ? 'is-active' : ''}"
+                    role="tab" aria-selected="${libFilter === id}" data-lib-filter="${id}">${label}</button>`).join('')}
+        </div>
+        <div class="lib-toolbar__right">
+          <label class="lib-sort">
+            <span class="lib-sort__label">Sort</span>
+            <select id="libSort" aria-label="Sort your library">
+              ${LIB_SORTS.map(([id, label]) =>
+                `<option value="${id}" ${libSort === id ? 'selected' : ''}>${label}</option>`).join('')}
+            </select>
+          </label>
+          <div class="view-toggle" role="group" aria-label="View as">
+            <button class="view-toggle__btn ${libView === 'grid' ? 'is-active' : ''}"
+                    data-lib-view="grid" aria-pressed="${libView === 'grid'}" title="Grid view" aria-label="Grid view">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4zm9 0h7v7h-7zM4 13h7v7H4zm9 0h7v7h-7z"/></svg>
+            </button>
+            <button class="view-toggle__btn ${libView === 'list' ? 'is-active' : ''}"
+                    data-lib-view="list" aria-pressed="${libView === 'list'}" title="List view" aria-label="List view">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v2H4zm0 6h16v2H4zm0 6h16v2H4z"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="lib-selectbar" id="libSelectBar" hidden>
+        <strong id="libSelectCount">0 selected</strong>
+        <div class="lib-selectbar__actions">
+          <button class="btn btn--outline" id="libSelectAll">Select all</button>
+          <button class="btn btn--danger" id="libDeleteSelected">Delete</button>
+          <button class="text-btn" id="libClearSelection">Cancel</button>
+        </div>
+      </div>`;
+  }
+
+  /** The two pinned shelves. Not derived, not sortable, always first. */
+  function libraryPinned() {
+    return `
+      <article class="card" data-goto="#/liked">
+        <div class="card__art lib-art lib-art--liked">
+          ${collage(Store.liked.map((s) => s.image)) || `
+            <svg viewBox="0 0 24 24" class="lib-art__glyph" aria-hidden="true"><path d="M12 20.7 4.6 13.6a4.9 4.9 0 0 1 7-6.9l.4.4.4-.4a4.9 4.9 0 0 1 7 6.9z"/></svg>`}
+          <span class="lib-art__tint"></span>
+          <span class="lib-art__badge">${ICON_HEART}</span>
+          ${Store.liked.length ? `<button class="card__play" data-play-liked="1" aria-label="Play liked songs">${ICON_PLAY}</button>` : ''}
+        </div>
+        <div class="card__title">Liked songs</div>
+        <div class="card__sub">${plural(Store.liked.length, 'song')}</div>
+      </article>
+      <article class="card" data-goto="#/recent">
+        <div class="card__art lib-art lib-art--recent">
+          ${collage(Store.recent.map((s) => s.image)) || `
+            <svg viewBox="0 0 24 24" class="lib-art__glyph" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9h-2a7 7 0 1 1-7-7v4l5-4-5-4z"/></svg>`}
+          <span class="lib-art__tint"></span>
+          <span class="lib-art__badge">${ICON_CLOCK}</span>
+          ${Store.recent.length ? `<button class="card__play" data-play-recent="1" aria-label="Play recently played">${ICON_PLAY}</button>` : ''}
+        </div>
+        <div class="card__title">Recently played</div>
+        <div class="card__sub">${plural(Store.recent.length, 'song')}</div>
+      </article>`;
+  }
+
+  function libraryItemArt(item) {
+    if (item.kind === 'playlist') {
+      return `${collage(item.covers) || `
+        <svg viewBox="0 0 24 24" class="lib-art__glyph" aria-hidden="true"><path d="M4 6h11v2H4zm0 4h11v2H4zm0 4h7v2H4zm13-6 4 3-4 3z"/></svg>`}
+        <span class="lib-art__tint"></span>`;
+    }
+    return `<img loading="lazy" decoding="async" src="${esc(art(item, 300))}" alt="">`;
+  }
+
+  function libraryCard(item) {
+    const selected = librarySelection.has(item.id);
+    return `
+      <article class="card ${item.round ? 'card--round' : ''} ${selected ? 'is-selected' : ''}"
+               data-lib-item="${esc(item.id)}" data-goto="${esc(item.href)}">
+        <div class="card__art lib-art ${item.kind === 'playlist' ? 'lib-art--custom' : ''}">
+          ${libraryItemArt(item)}
+          ${item.selectable ? `
+            <button class="card__check ${selected ? 'is-on' : ''}" data-lib-select="${esc(item.id)}"
+                    role="checkbox" aria-checked="${selected}" aria-label="Select ${esc(item.name)}">${ICON_CHECK}</button>
+            <span class="card__tools">
+              <button class="icon-btn" data-rename-list="${esc(item.id)}" aria-label="Rename ${esc(item.name)}" title="Rename">${ICON_EDIT}</button>
+              <button class="icon-btn icon-btn--danger" data-delete-list="${esc(item.id)}" aria-label="Delete ${esc(item.name)}" title="Delete">${ICON_REMOVE}</button>
+            </span>` : ''}
+        </div>
+        <div class="card__title">${esc(item.name)}</div>
+        <div class="card__sub">${esc(item.sub)}</div>
+      </article>`;
+  }
+
+  function libraryRow(item) {
+    const selected = librarySelection.has(item.id);
+    return `
+      <div class="lib-row ${selected ? 'is-selected' : ''}" data-lib-item="${esc(item.id)}" data-goto="${esc(item.href)}">
+        ${item.selectable ? `
+          <button class="lib-row__check ${selected ? 'is-on' : ''}" data-lib-select="${esc(item.id)}"
+                  role="checkbox" aria-checked="${selected}" aria-label="Select ${esc(item.name)}">${ICON_CHECK}</button>`
+          : '<span class="lib-row__spacer"></span>'}
+        <span class="lib-row__art ${item.round ? 'lib-row__art--round' : ''}">${libraryItemArt(item)}</span>
+        <span class="lib-row__text">
+          <strong>${esc(item.name)}</strong>
+          <small>${esc(item.sub)}</small>
+        </span>
+        <span class="lib-row__kind">${esc(cap(item.kind))}</span>
+        ${item.selectable ? `
+          <button class="icon-btn icon-btn--danger lib-row__del" data-delete-list="${esc(item.id)}"
+                  aria-label="Delete ${esc(item.name)}" title="Delete">${ICON_REMOVE}</button>` : ''}
+      </div>`;
+  }
+
+  /** The filtered, sorted body. Rebuilt on its own so toolbar clicks do not
+   *  reload the whole route and lose scroll position. */
+  function libraryBody() {
+    const { libFilter, libSort, libView } = Store.prefs;
+
+    let items = [];
+    if (libFilter === 'all') {
+      items = [...libraryPlaylists(), ...libraryAlbums(), ...libraryArtists()];
+    } else if (libFilter === 'playlists') items = libraryPlaylists();
+    else if (libFilter === 'albums') items = libraryAlbums();
+    else items = libraryArtists();
+
+    items = sortLibrary(items, libSort);
+
+    const heading = {
+      all: ['Collections', 'Your playlists, plus the albums and artists behind what you play'],
+      playlists: ['Playlists', 'Lists you have built on this device'],
+      albums: ['Albums', 'Drawn from the songs you have liked and played'],
+      artists: ['Artists', 'Drawn from the songs you have liked and played'],
+    }[libFilter];
+
+    const showPinned = libFilter === 'all' || libFilter === 'playlists';
+
+    if (!items.length && !showPinned) {
+      return `
+        <div class="section__head"><div><h2>${heading[0]}</h2><p>${heading[1]}</p></div></div>
+        ${emptyState(`No ${libFilter} yet`,
+          'Like a few songs or play something, and this fills in from what you actually listen to.',
+          '<a class="btn btn--primary" href="#/home">Find music</a>')}`;
+    }
+
+    const body = libView === 'list' && !showPinned
+      ? `<div class="lib-list">${items.map(libraryRow).join('')}</div>`
+      : libView === 'list'
+        ? `<div class="grid grid--pinned">${libraryPinned()}</div>
+           <div class="lib-list">${items.map(libraryRow).join('')}</div>`
+        : `<div class="grid">${showPinned ? libraryPinned() : ''}${items.map(libraryCard).join('')}</div>`;
+
+    return `
+      <div class="section__head"><div><h2>${heading[0]}</h2><p>${heading[1]}</p></div></div>
+      ${body}`;
+  }
+
+  /** Repaint just the results and the selection bar. */
+  function refreshLibraryBody() {
+    const host = $('#libraryResults');
+    if (!host) return;
+    host.innerHTML = libraryBody();
+    syncLibraryToolbar();
+    syncLibrarySelection();
+  }
+
+  function syncLibraryToolbar() {
+    $$('[data-lib-filter]').forEach((btn) => {
+      const active = btn.dataset.libFilter === Store.prefs.libFilter;
+      btn.classList.toggle('is-active', active);
+      btn.setAttribute('aria-selected', String(active));
+    });
+    $$('[data-lib-view]').forEach((btn) => {
+      const active = btn.dataset.libView === Store.prefs.libView;
+      btn.classList.toggle('is-active', active);
+      btn.setAttribute('aria-pressed', String(active));
+    });
+    const sort = $('#libSort');
+    if (sort) sort.value = Store.prefs.libSort;
+  }
+
+  function syncLibrarySelection() {
+    const bar = $('#libSelectBar');
+    if (!bar) return;
+    // A selected playlist can be deleted from under the selection, so drop ids
+    // that no longer exist rather than trying to delete them later.
+    librarySelection = new Set(
+      Array.from(librarySelection).filter((id) => Store.playlist(id)),
+    );
+    const count = librarySelection.size;
+    bar.hidden = count === 0;
+    const label = $('#libSelectCount');
+    if (label) label.textContent = `${count} selected`;
+  }
+
+  /* ====================================================================== */
+  /* Friend activity (demo)                                                 */
+  /* ====================================================================== */
+
+  /* There is no social backend, and inventing songs would put fake catalogue
+     entries in front of the listener. So the panel pairs fictional, clearly
+     labelled people with tracks the listener has genuinely played, and stays
+     hidden until there is real history to draw on. */
+  const DEMO_FRIENDS = [
+    { name: 'Aarav', hue: 12 },
+    { name: 'Priya', hue: 200 },
+    { name: 'Kabir', hue: 268 },
+    { name: 'Meera', hue: 320 },
+    { name: 'Rohan', hue: 96 },
+  ];
+
+  /** Stable per-session pairing, so the panel does not reshuffle on every route. */
+  let friendPairs = null;
+
+  function renderFriendActivity() {
+    const host = $('#friendList');
+    const block = $('#friendActivity');
+    if (!host || !block) return;
+
+    const pool = Store.recent.slice(0, 12);
+    if (pool.length < 2) {
+      block.hidden = true;
+      friendPairs = null;
+      return;
+    }
+
+    if (!friendPairs || friendPairs.some((pair) => !pool.some((s) => s.id === pair.song.id))) {
+      friendPairs = DEMO_FRIENDS
+        .slice(0, Math.min(DEMO_FRIENDS.length, pool.length))
+        .map((friend, i) => ({ friend, song: pool[i % pool.length] }));
+    }
+
+    block.hidden = false;
+    host.innerHTML = friendPairs.map(({ friend, song }) => `
+      <a class="friend" href="#/album/${esc(song.album?.id || '')}"
+         title="${esc(friend.name)} is listening to ${esc(song.name)}">
+        <span class="friend__avatar" style="--hue:${friend.hue}">${esc(friend.name.slice(0, 1))}</span>
+        <span class="friend__meta">
+          <strong>${esc(friend.name)}</strong>
+          <small>${esc(song.name)}</small>
+        </span>
+        <span class="friend__pulse" aria-hidden="true"></span>
       </a>`).join('');
   }
 
@@ -4084,6 +4471,67 @@
       const artistRadioBtn = target.closest('[data-artist-radio]');
       if (artistRadioBtn) { startArtistRadio(artistRadioBtn.dataset.artistRadio); return; }
 
+      /* --- library toolbar and batch selection ---------------------------
+         Deliberately ahead of the [data-goto] handler below. The tick sits
+         inside the tile, which is itself a navigation target, so a later check
+         would never be reached: the click would open the playlist instead of
+         selecting it. */
+
+      const libFilterBtn = target.closest('[data-lib-filter]');
+      if (libFilterBtn) {
+        Store.prefs.libFilter = libFilterBtn.dataset.libFilter;
+        Store.savePrefs();
+        librarySelection.clear();
+        refreshLibraryBody();
+        return;
+      }
+
+      const libViewBtn = target.closest('[data-lib-view]');
+      if (libViewBtn) {
+        Store.prefs.libView = libViewBtn.dataset.libView;
+        Store.savePrefs();
+        refreshLibraryBody();
+        return;
+      }
+
+      const libSelectBtn = target.closest('[data-lib-select]');
+      if (libSelectBtn) {
+        event.preventDefault();
+        event.stopPropagation();
+        const id = libSelectBtn.dataset.libSelect;
+        if (librarySelection.has(id)) librarySelection.delete(id);
+        else librarySelection.add(id);
+        refreshLibraryBody();
+        return;
+      }
+
+      if (target.closest('#libSelectAll')) {
+        libraryPlaylists().forEach((item) => librarySelection.add(item.id));
+        refreshLibraryBody();
+        return;
+      }
+
+      if (target.closest('#libClearSelection')) {
+        librarySelection.clear();
+        refreshLibraryBody();
+        return;
+      }
+
+      if (target.closest('#libDeleteSelected')) {
+        const ids = Array.from(librarySelection);
+        if (!ids.length) return;
+        const ok = await askConfirm(
+          `Delete ${plural(ids.length, 'playlist')}?`,
+          'The playlists go, the songs stay in the catalogue.',
+        );
+        if (!ok) return;
+        ids.forEach((id) => Store.deletePlaylist(id));
+        librarySelection.clear();
+        refreshLibraryBody();
+        toast(`Deleted ${plural(ids.length, 'playlist')}`);
+        return;
+      }
+
       const goto = target.closest('[data-goto]');
       if (goto) { location.hash = goto.dataset.goto; return; }
 
@@ -4110,9 +4558,16 @@
       const queueRow = target.closest('[data-queue-pos]');
       if (queueRow) {
         const removeBtn = target.closest('[data-queue-remove]');
+        const moveBtn = target.closest('[data-queue-move]');
         if (removeBtn) {
           event.stopPropagation();
           Player.removeFromQueue(Number(removeBtn.dataset.queueRemove));
+        } else if (moveBtn) {
+          // The keyboard and touch path to reordering. Drag and drop covers the
+          // pointer case but never fires on touch.
+          event.stopPropagation();
+          const from = Number(moveBtn.dataset.queueMove);
+          Player.moveInQueue(from, from + Number(moveBtn.dataset.queueDir));
         } else {
           Player.load(Number(queueRow.dataset.queuePos));
         }
@@ -4361,6 +4816,16 @@
       if (label) label.textContent = `${Store.prefs.crossfade} seconds`;
     });
 
+    // The library sort is a <select>, which fires change rather than input.
+    // Delegated because the toolbar is replaced on every library repaint.
+    document.addEventListener('change', (event) => {
+      const sort = event.target.closest?.('#libSort');
+      if (!sort) return;
+      Store.prefs.libSort = sort.value;
+      Store.savePrefs();
+      refreshLibraryBody();
+    });
+
     /* --- scrubbers (bar and overlay) ---------------------------------- */
     $$('.js-scrub').forEach((scrubber) => {
       const ratioFromEvent = (event) => {
@@ -4577,6 +5042,77 @@
           break;
         default: break;
       }
+    });
+
+    /* --- queue drag to reorder ----------------------------------------- */
+
+    /* Delegated on document so both queue surfaces (the drawer and the now
+       playing Queue tab) are covered, including the markup each rerender
+       replaces. Only rows inside a [data-queue-list] container take part, which
+       keeps track rows elsewhere in the app out of it.
+
+       The dragged position is held in a closure rather than read back from
+       dataTransfer: Firefox refuses to expose getData during dragover, so a
+       dataTransfer-only implementation cannot compute a live drop indicator. */
+    let dragFromPos = -1;
+
+    const queueListOf = (node) => node?.closest?.('[data-queue-list]') || null;
+
+    const clearDropMarks = () => {
+      $$('.qrow.is-drop-before, .qrow.is-drop-after')
+        .forEach((row) => row.classList.remove('is-drop-before', 'is-drop-after'));
+    };
+
+    document.addEventListener('dragstart', (event) => {
+      const row = event.target.closest?.('.qrow--movable');
+      if (!row || !queueListOf(row)) return;
+      dragFromPos = Number(row.dataset.queuePos);
+      row.classList.add('is-dragging');
+      // Some browsers cancel the drag unless dataTransfer carries something.
+      try {
+        event.dataTransfer.setData('text/plain', String(dragFromPos));
+        event.dataTransfer.effectAllowed = 'move';
+      } catch { /* older engines */ }
+    });
+
+    document.addEventListener('dragover', (event) => {
+      if (dragFromPos < 0) return;
+      const row = event.target.closest?.('.qrow');
+      if (!row || !queueListOf(row)) return;
+      const pos = Number(row.dataset.queuePos);
+      // Nothing may be dropped onto or above the playing track.
+      if (!Number.isFinite(pos) || pos <= Player.pos) return;
+      event.preventDefault();
+      try { event.dataTransfer.dropEffect = 'move'; } catch { /* older engines */ }
+      const box = row.getBoundingClientRect();
+      const after = event.clientY > box.top + box.height / 2;
+      clearDropMarks();
+      row.classList.add(after ? 'is-drop-after' : 'is-drop-before');
+    });
+
+    document.addEventListener('drop', (event) => {
+      if (dragFromPos < 0) return;
+      const row = event.target.closest?.('.qrow');
+      if (!row || !queueListOf(row)) return;
+      event.preventDefault();
+      const target = Number(row.dataset.queuePos);
+      if (Number.isFinite(target) && target > Player.pos) {
+        const box = row.getBoundingClientRect();
+        const after = event.clientY > box.top + box.height / 2;
+        // Removing the dragged row first shifts every later index down by one,
+        // so dropping below the original position needs no extra offset.
+        let to = after ? target + 1 : target;
+        if (to > dragFromPos) to -= 1;
+        Player.moveInQueue(dragFromPos, to);
+      }
+      dragFromPos = -1;
+      clearDropMarks();
+    });
+
+    document.addEventListener('dragend', () => {
+      dragFromPos = -1;
+      $$('.qrow.is-dragging').forEach((row) => row.classList.remove('is-dragging'));
+      clearDropMarks();
     });
 
     window.addEventListener('hashchange', route);
