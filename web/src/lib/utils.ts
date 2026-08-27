@@ -106,20 +106,33 @@ export function isSong(item: Song | CollectionCard): item is Song {
   return item.type === 'song';
 }
 
+const STREAM_PREFERENCE = ['320kbps', '160kbps', '96kbps', '48kbps', '12kbps'];
+
+/**
+ * Pick the best stream a song offers, as the whole entry rather than just its URL.
+ *
+ * The quality label is returned alongside the URL because the UI reports the
+ * bitrate it is actually playing. Selecting the stream in one place and describing
+ * it in another would eventually disagree, and a badge claiming 320kbps over a
+ * 96kbps stream is worse than no badge.
+ */
+export function pickStream(song: Song): QualityUrl | null {
+  const urls = song.downloadUrl;
+  if (!urls || urls.length === 0) return null;
+  for (const quality of STREAM_PREFERENCE) {
+    const found = urls.find((entry) => entry.quality === quality);
+    if (found?.url) return found;
+  }
+  // Fallback: the last entry, which the API orders highest-last.
+  return urls[urls.length - 1]?.url ? urls[urls.length - 1] : null;
+}
+
 /**
  * Pick the best stream URL from a song's downloadUrl array. Prefers the highest
  * quality the source offers (320kbps AAC), stepping down when it is missing.
  */
 export function pickStreamUrl(song: Song): string | null {
-  const urls = song.downloadUrl;
-  if (!urls || urls.length === 0) return null;
-  const order = ['320kbps', '160kbps', '96kbps', '48kbps', '12kbps'];
-  for (const q of order) {
-    const found = urls.find((u) => u.quality === q);
-    if (found?.url) return found.url;
-  }
-  // Fallback: the last entry, which the API orders highest-last.
-  return urls[urls.length - 1]?.url || null;
+  return pickStream(song)?.url ?? null;
 }
 
 /** Time-based greeting for the home hero. */

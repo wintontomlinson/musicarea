@@ -16,6 +16,13 @@ import { usePlayer } from '@/stores/player';
  *   m           mute
  *   s           shuffle
  *   r           repeat
+ *   f           full-screen player
+ *   q           queue panel
+ *   l           lyrics (opens the full-screen player on the lyrics pane)
+ *
+ * Escape is deliberately absent. The open surfaces handle it themselves through
+ * `Sheet`, which tracks a stack of them so one press closes exactly one layer; a
+ * global handler here would close all of them at once.
  */
 export function KeyboardShortcuts() {
   useEffect(() => {
@@ -78,6 +85,23 @@ export function KeyboardShortcuts() {
           } else if (key === 'r') {
             e.preventDefault();
             s.cycleRepeat();
+          } else if (key === 'f') {
+            e.preventDefault();
+            s.setFullscreen(!s.fullscreen);
+          } else if (key === 'q') {
+            e.preventDefault();
+            s.setQueueOpen(!s.queueOpen);
+          } else if (key === 'l') {
+            e.preventDefault();
+            // Opens the player onto the lyrics rather than just flipping a pane,
+            // because lyrics are only rendered inside the full-screen player. Pressing
+            // it again closes the player, so the key round-trips.
+            if (s.fullscreen && s.lyricsOpen) {
+              s.setFullscreen(false);
+            } else {
+              s.setLyricsOpen(true);
+              s.setFullscreen(true);
+            }
           }
       }
     }
