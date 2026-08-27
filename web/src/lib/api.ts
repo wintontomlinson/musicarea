@@ -6,8 +6,10 @@ import type {
   ChartCard,
   FeedData,
   HistoryEntry,
+  MixesData,
   MoodSet,
   Playlist,
+  RadioStation,
   SearchAllData,
   SearchResult,
   Song,
@@ -147,6 +149,52 @@ export const api = {
   /** Editorial chart playlists (each opens to a ranked song list). */
   charts(): Promise<{ items: ChartCard[] }> {
     return call<{ items: ChartCard[] }>('/api/charts', { revalidate: 600 });
+  },
+
+  /**
+   * An endless station seeded from one track.
+   *
+   * Cached briefly despite being algorithmic. The station is a pure function of the
+   * seed id, so two listeners starting from the same track get the same station, and
+   * a short window absorbs the double-tap without making the result feel stale.
+   */
+  radio(songId: string, limit = 40): Promise<RadioStation> {
+    return call<RadioStation>(
+      `/api/radio/${encodeURIComponent(songId)}?limit=${limit}`,
+      { revalidate: 300 },
+    );
+  },
+
+  artistRadio(artistId: string, limit = 40): Promise<RadioStation> {
+    return call<RadioStation>(
+      `/api/artists/${encodeURIComponent(artistId)}/radio?limit=${limit}`,
+      { revalidate: 300 },
+    );
+  },
+
+  /**
+   * Personalised mixes built from the listener's history.
+   *
+   * Never cached, like `feed`, because the input is client state. Be aware this is
+   * the slowest endpoint in the API: each mix runs its own recall pass, and a cold
+   * response can take several seconds. Callers should fetch it lazily rather than
+   * making a page wait on it.
+   */
+  mixes(payload: { history: HistoryEntry[]; perMix?: number }): Promise<MixesData> {
+    return call<MixesData>('/api/mixes', { body: payload });
+  },
+
+  /** "More like this" for an arbitrary selection of up to ten songs. */
+  similar(payload: { ids: string[]; limit?: number }): Promise<{ items: Song[] }> {
+    return call<{ items: Song[] }>('/api/similar', { body: payload });
+  },
+
+  /** Catalogue-native autoplay suggestions for a track. */
+  suggestions(songId: string, limit = 10): Promise<Song[]> {
+    return call<Song[]>(
+      `/api/songs/${encodeURIComponent(songId)}/suggestions?limit=${limit}`,
+      { revalidate: 300 },
+    );
   },
 };
 
