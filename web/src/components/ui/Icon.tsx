@@ -37,6 +37,27 @@ const paths = {
   disc: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20m0 2a8 8 0 1 1 0 16 8 8 0 0 1 0-16m0 3.5A4.5 4.5 0 1 0 12 16.5 4.5 4.5 0 0 0 12 7.5m0 2A2.5 2.5 0 1 1 9.5 12 2.5 2.5 0 0 1 12 9.5m0 1.5a1 1 0 1 0 0 2 1 1 0 0 0 0-2',
   sparkle: 'm12 2 1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8zm7 14 .8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8zM5 15l.7 2.3L8 18l-2.3.7L5 21l-.7-2.3L2 18l2.3-.7z',
   check: 'm9.4 16.6-4.2-4.2 1.4-1.4 2.8 2.8 7.8-7.8 1.4 1.4z',
+  /* Added for the redesign. */
+  expand: 'M16.6 15.4 12 10.8l-4.6 4.6L6 14l6-6 6 6z',
+  mic: 'M12 3a3 3 0 0 1 3 3v5a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3m7 8a7 7 0 0 1-6 6.93V21h-2v-3.07A7 7 0 0 1 5 11h2a5 5 0 0 0 10 0z',
+  // Screen with the three broadcast arcs, for device handoff and cast targets.
+  cast: 'M3 4h18a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-7v-2h6V6H4v1H3zm0 5a10 10 0 0 1 10 10h-2a8 8 0 0 0-8-8zm0 4a6 6 0 0 1 6 6H7a4 4 0 0 0-4-4zm0 4a2 2 0 0 1 2 2H3z',
+  video: 'M4 5h11a2 2 0 0 1 2 2v1.9l5-2.9v12l-5-2.9V17a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2m5.5 3.3v7.4L15 12z',
+  videoOff: 'M2.1 3.5 3.5 2.1l18.4 18.4-1.4 1.4-2.9-2.9H4a2 2 0 0 1-2-2V7a2 2 0 0 1 .8-1.6zM7.5 5H15a2 2 0 0 1 2 2v1.9l5-2.9v12l-2-1.2V7.9l-3 1.7V12z',
+  lyrics: 'M4 4h16a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H9.5L5 20.5V17H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1m3 4v2h10V8zm0 4v2h7v-2z',
+  // Broadcast tower, for stations and the DJ card.
+  radio: 'M12 9.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5M7.8 6.2 9.2 7.6a5 5 0 0 0 0 6.8l-1.4 1.4a7 7 0 0 1 0-9.6m8.4 0a7 7 0 0 1 0 9.6l-1.4-1.4a5 5 0 0 0 0-6.8zM4.9 3.3l1.4 1.4a9 9 0 0 0 0 12.6l-1.4 1.4a11 11 0 0 1 0-15.4m14.2 0a11 11 0 0 1 0 15.4l-1.4-1.4a9 9 0 0 0 0-12.6z',
+  share: 'M14 3h7v7h-2V6.4l-8.3 8.3-1.4-1.4L17.6 5H14zM5 6h5v2H6v10h10v-4h2v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1',
+  // Portrait card with a play glyph, for the vertical samples feed.
+  samples: 'M8 2h8a3 3 0 0 1 3 3v14a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V5a3 3 0 0 1 3-3m2.5 6.2v7.6L16 12z',
+  user: 'M12 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8m0 10c4.4 0 8 2.2 8 5v1H4v-1c0-2.8 3.6-5 8-5',
+  dots: 'M6 10a2 2 0 1 1 0 4 2 2 0 0 1 0-4m6 0a2 2 0 1 1 0 4 2 2 0 0 1 0-4m6 0a2 2 0 1 1 0 4 2 2 0 0 1 0-4',
+  download: 'M11 3h2v9.2l3.3-3.3 1.4 1.4L12 16.4 6.3 10.3l1.4-1.4L11 12.2zM5 18h14v2H5z',
+  // Queue glyph with the arrow at the top rather than the bottom, so "play next"
+  // and "add to queue" are distinguishable at 16px.
+  playNext: 'M4 6h10v2H4zm0 4h10v2H4zm0 4h7v2H4zm12-9 5 4-5 4z',
+  moon: 'M13 3a9 9 0 1 0 8 13A7 7 0 0 1 13 3',
+  bolt: 'M13 2 5 13h5l-1 9 9-12h-5l1-8z',
 } as const satisfies Record<string, string>;
 
 export type IconName = keyof typeof paths;

@@ -78,6 +78,62 @@ export const DEFAULT_PALETTE: Palette = {
 };
 
 /* -------------------------------------------------------------------------- */
+/* Palette modes                                                              */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * How the neutral family (backgrounds, surfaces, body text) is produced.
+ *
+ * `tinted` is the original behaviour: every neutral is generated from the accent
+ * hue at a fixed lightness, so a blue record gives a deep navy page. It is what
+ * makes the site read as one colour rather than a collage.
+ *
+ * `neutral` pins the neutrals to a true OLED greyscale and lets only the accent
+ * family move with the artwork. Blacker, more restrained, and it saves power on
+ * OLED panels because `#0a0a0a` drives the subpixels far closer to off than a
+ * tinted near-black does.
+ */
+export type NeutralMode = 'tinted' | 'neutral';
+
+/**
+ * Where the accent comes from.
+ *
+ * `adaptive` samples the artwork. `brand` holds the hand-made pink palette.
+ * `green` and `red` pin the accent to a fixed brand colour, for listeners who
+ * find a colour that moves per track distracting.
+ */
+export type AccentMode = 'adaptive' | 'brand' | 'green' | 'red';
+
+/** Fixed accent choices. Reproduced exactly, not normalised: the whole point of
+ *  choosing one is that it does not drift. */
+export const FIXED_ACCENTS: Record<'green' | 'red', Rgb> = {
+  green: { r: 29, g: 185, b: 84 }, // #1DB954
+  red: { r: 252, g: 60, b: 68 }, // #FC3C44
+};
+
+/**
+ * The greyscale shell used by `neutral` mode.
+ *
+ * Text is pure white here rather than the accent-tinted near-white the tinted
+ * shell uses, because a colour cast on white over a truly neutral background
+ * reads as a mistake rather than as warmth.
+ */
+const NEUTRAL_SHELL = {
+  bg: { r: 10, g: 10, b: 10 }, // #0a0a0a
+  surface: { r: 17, g: 17, b: 17 }, // #111111
+  surfaceRaised: { r: 26, g: 26, b: 26 }, // #1a1a1a
+  scrim: { r: 5, g: 5, b: 5 },
+  text: { r: 255, g: 255, b: 255 },
+  textSecondary: { r: 160, g: 160, b: 160 }, // #a0a0a0
+  textMuted: { r: 110, g: 110, b: 110 },
+} as const;
+
+export interface PaletteOptions {
+  /** Defaults to `tinted`, which is the behaviour every existing caller had. */
+  neutralMode?: NeutralMode;
+}
+
+/* -------------------------------------------------------------------------- */
 /* Tuning                                                                     */
 /* -------------------------------------------------------------------------- */
 
@@ -270,11 +326,40 @@ function hueDelta(a: number, b: number): number {
  * secondary through a computed midpoint. Only the lightness of each token is
  * fixed; the hues come from the artwork.
  */
-export function buildPalette(primary: Hsl, secondary: Hsl | null): Palette {
-  const accent = withLuminanceIn(
-    { h: primary.h, s: clamp(primary.s * 1.22, 0.68, 1), l: clamp(primary.l, 0.52, 0.66) },
-    ACCENT_LUMINANCE,
-  );
+export function buildPalette(
+  primary: Hsl,
+  secondary: Hsl | null,
+  options: PaletteOptions = {},
+): Palette {
+  return build(primary, secondary, options, false);
+}
+
+/**
+ * Build a palette around an exact accent colour.
+ *
+ * Used by the fixed accent modes. Unlike `buildPalette` this does not push the
+ * seed through the saturation boost or the luminance band, because a listener who
+ * picked Spotify green expects `#1DB954` and not a normalised approximation of
+ * it. Everything derived from the accent (the gradient, the ink, the neutrals
+ * under `tinted`) is still computed the usual way, so the rest of the palette
+ * stays internally consistent.
+ */
+export function paletteFromAccent(accent: Rgb, options: PaletteOptions = {}): Palette {
+  return build(rgbToHsl(accent), null, options, true);
+}
+
+function build(
+  primary: Hsl,
+  secondary: Hsl | null,
+  options: PaletteOptions,
+  exactAccent: boolean,
+): Palette {
+  const accent = exactAccent
+    ? primary
+    : withLuminanceIn(
+        { h: primary.h, s: clamp(primary.s * 1.22, 0.68, 1), l: clamp(primary.l, 0.52, 0.66) },
+        ACCENT_LUMINANCE,
+      );
 
   // Take the direction the artwork suggests, but not its magnitude.
   const suggested = secondary ? hueDelta(primary.h, secondary.h) : FALLBACK_ALT_ROTATION;
@@ -318,6 +403,21 @@ export function buildPalette(primary: Hsl, secondary: Hsl | null): Palette {
   const neutral = (saturationScale: number, min: number, max: number, l: number): Rgb =>
     hslToRgb({ h: accent.h, s: clamp(accent.s * saturationScale, min, max), l });
 
+  const shell =
+    options.neutralMode === 'neutral'
+      ? NEUTRAL_SHELL
+      : {
+          bg: neutral(0.52, 0.3, 0.58, 0.049),
+          surface: neutral(0.41, 0.24, 0.46, 0.106),
+          surfaceRaised: neutral(0.41, 0.24, 0.46, 0.161),
+          scrim: neutral(0.62, 0.34, 0.68, 0.041),
+          // Body text is a near-white carrying a trace of the accent, the way
+          // #fffaff carried a trace of the pink.
+          text: hslToRgb({ h: accent.h, s: 1, l: 0.99 }),
+          textSecondary: neutral(0.29, 0.18, 0.34, 0.751),
+          textMuted: neutral(0.16, 0.1, 0.2, 0.508),
+        };
+
   return {
     accent: accentRgb,
     accentSoft: hslToRgb(
@@ -329,16 +429,39 @@ export function buildPalette(primary: Hsl, secondary: Hsl | null): Palette {
     accentMid: hslToRgb(mid),
     accentAlt: hslToRgb(accentAlt),
     onAccent,
-    bg: neutral(0.52, 0.3, 0.58, 0.049),
-    surface: neutral(0.41, 0.24, 0.46, 0.106),
-    surfaceRaised: neutral(0.41, 0.24, 0.46, 0.161),
-    scrim: neutral(0.62, 0.34, 0.68, 0.041),
-    // Body text is a near-white carrying a trace of the accent, the way #fffaff
-    // carried a trace of the pink.
-    text: hslToRgb({ h: accent.h, s: 1, l: 0.99 }),
-    textSecondary: neutral(0.29, 0.18, 0.34, 0.751),
-    textMuted: neutral(0.16, 0.1, 0.2, 0.508),
+    ...shell,
   };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Mode resolution                                                            */
+/* -------------------------------------------------------------------------- */
+
+/** The brand palette rendered into a given shell. */
+export function defaultPalette(neutralMode: NeutralMode = 'tinted'): Palette {
+  if (neutralMode === 'tinted') return DEFAULT_PALETTE;
+  return { ...DEFAULT_PALETTE, ...NEUTRAL_SHELL };
+}
+
+// Fixed palettes are pure functions of two enums, so there are at most four of
+// them for the life of the tab.
+const fixedCache = new Map<string, Palette>();
+
+/**
+ * Resolve a non-adaptive accent mode to a palette. Returns null for `adaptive`,
+ * which has to go through artwork sampling instead.
+ */
+export function paletteForMode(mode: AccentMode, neutralMode: NeutralMode): Palette | null {
+  if (mode === 'adaptive') return null;
+  const key = `${mode}|${neutralMode}`;
+  const cached = fixedCache.get(key);
+  if (cached) return cached;
+  const palette =
+    mode === 'brand'
+      ? defaultPalette(neutralMode)
+      : paletteFromAccent(FIXED_ACCENTS[mode], { neutralMode });
+  fixedCache.set(key, palette);
+  return palette;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -483,41 +606,54 @@ export function sampleUrl(cover: string): string | null {
 /* Public API                                                                 */
 /* -------------------------------------------------------------------------- */
 
-/** Extraction is pure for a given URL, so results are kept for the session. */
-const cache = new Map<string, Palette>();
-const pending = new Map<string, Promise<Palette>>();
+/** `null` means the sleeve had no usable hue, which is a real answer. */
+type Seeds = [Hsl, Hsl | null] | null;
+
+/**
+ * The *seeds* are cached, not the finished palette.
+ *
+ * Sampling is the expensive half and it depends only on the image; turning seeds
+ * into a palette is arithmetic and depends on the neutral mode. Caching at this
+ * boundary means toggling between the tinted and neutral shells repaints
+ * instantly from memory instead of re-fetching and re-reading every cover.
+ */
+const seedCache = new Map<string, Seeds>();
+const pending = new Map<string, Promise<Seeds>>();
 
 /**
  * Resolve the palette for a cover URL, falling back to the brand palette for
  * anything that cannot be sampled. Never rejects: a theme is a decoration, and
  * failing to compute one must not surface as an error to the listener.
  */
-export function extractPalette(cover: string): Promise<Palette> {
-  const url = sampleUrl(cover);
-  if (!url) return Promise.resolve(DEFAULT_PALETTE);
+export function extractPalette(cover: string, options: PaletteOptions = {}): Promise<Palette> {
+  const neutralMode = options.neutralMode ?? 'tinted';
+  const paint = (seeds: Seeds): Palette =>
+    seeds ? buildPalette(seeds[0], seeds[1], { neutralMode }) : defaultPalette(neutralMode);
 
-  const cached = cache.get(url);
-  if (cached) return Promise.resolve(cached);
+  const url = sampleUrl(cover);
+  if (!url) return Promise.resolve(defaultPalette(neutralMode));
+
+  if (seedCache.has(url)) return Promise.resolve(paint(seedCache.get(url) ?? null));
 
   const inFlight = pending.get(url);
-  if (inFlight) return inFlight;
+  if (inFlight) return inFlight.then(paint);
 
   const job = readPixels(url)
     .then((pixels) => {
-      const seeds = pixels && seedsFromPixels(pixels);
-      // A greyscale sleeve is a real, final answer, so it is worth caching. A
-      // failed request is not: caching the fallback would pin that album to the
-      // brand palette for the rest of the session, so a single dropped request
-      // on a train would never heal.
-      const palette = seeds ? buildPalette(seeds[0], seeds[1]) : DEFAULT_PALETTE;
-      cache.set(url, palette);
-      return palette;
+      const seeds = (pixels && seedsFromPixels(pixels)) || null;
+      // A greyscale sleeve, and a canvas that came back tainted, are both final
+      // answers worth caching. A *failed* request is not: it throws, so it skips
+      // this line entirely. Caching the fallback there would pin that album to
+      // the brand palette for the rest of the session, so a single dropped
+      // request on a train would never heal.
+      seedCache.set(url, seeds);
+      return seeds;
     })
-    .catch(() => DEFAULT_PALETTE)
+    .catch((): Seeds => null)
     .finally(() => pending.delete(url));
 
   pending.set(url, job);
-  return job;
+  return job.then(paint);
 }
 
 function channels({ r, g, b }: Rgb): string {

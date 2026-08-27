@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { usePlayer } from '@/stores/player';
 import { useTheme } from '@/stores/theme';
 import { pickImage } from '@/lib/utils';
-import { DEFAULT_PALETTE, applyPalette, extractPalette } from '@/lib/color';
+import { applyPalette, defaultPalette, extractPalette, paletteForMode } from '@/lib/color';
 
 /**
  * Holding down "next" walks the queue a track at a time, and sampling every one
@@ -24,10 +24,12 @@ const SETTLE_MS = 220;
  */
 export function DynamicTheme() {
   const hydrate = useTheme((state) => state.hydrate);
-  const adaptive = useTheme((state) => state.adaptive);
+  const accentMode = useTheme((state) => state.accentMode);
+  const neutralMode = useTheme((state) => state.neutralMode);
   const pageCover = useTheme((state) => state.pageCover);
   const trackCover = useTheme((state) => state.trackCover);
   const setTrackCover = useTheme((state) => state.setTrackCover);
+  const setPalette = useTheme((state) => state.setPalette);
   // The images array, not the track object: its identity only changes when the
   // track does, so queue edits and progress ticks do not re-run the sampling.
   const trackImages = usePlayer((state) => state.currentTrack()?.image);
@@ -44,16 +46,33 @@ export function DynamicTheme() {
   const cover = pageCover ?? trackCover;
 
   useEffect(() => {
-    if (!adaptive || !cover) {
-      applyPalette(DEFAULT_PALETTE);
+    // Paint the document and publish the same palette to the store, so canvas and
+    // SVG consumers read exactly what is on screen rather than a second guess at
+    // it. Kept in one helper because these two must never disagree.
+    const paint = (palette: ReturnType<typeof defaultPalette>) => {
+      applyPalette(palette);
+      setPalette(palette);
+    };
+
+    // A pinned accent needs no artwork and no sampling, so it resolves
+    // synchronously and skips the settle delay entirely.
+    const pinned = paletteForMode(accentMode, neutralMode);
+    if (pinned) {
+      paint(pinned);
       return;
     }
+
+    if (!cover) {
+      paint(defaultPalette(neutralMode));
+      return;
+    }
+
     let active = true;
     const settle = window.setTimeout(() => {
-      extractPalette(cover).then((palette) => {
+      extractPalette(cover, { neutralMode }).then((palette) => {
         // A fast skip between tracks can resolve out of order. Only the newest
         // request is allowed to paint.
-        if (active) applyPalette(palette);
+        if (active) paint(palette);
       });
     }, SETTLE_MS);
     return () => {
@@ -64,7 +83,7 @@ export function DynamicTheme() {
     // meta tag through the root `viewport` export and re-asserts it across
     // navigations; without this the browser chrome would drift back to the
     // default while the page itself stayed tinted.
-  }, [adaptive, cover, pathname]);
+  }, [accentMode, neutralMode, cover, pathname, setPalette]);
 
   return null;
 }
