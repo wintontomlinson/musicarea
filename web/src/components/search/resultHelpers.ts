@@ -1,5 +1,9 @@
 import type { SearchResult } from '@/lib/types';
-import { entityHref, pickImage } from '@/lib/utils';
+import { decodeEntities, entityHref, pickImage } from '@/lib/utils';
+
+// Re-exported so existing call sites keep working now that the implementation has
+// moved to `lib/utils`, where the lyrics layer can reach it too.
+export { decodeEntities };
 
 /** The detail-page href for a search result, by its type. */
 export function resultHref(r: SearchResult): string {
@@ -27,19 +31,4 @@ export function resultSubtitle(r: SearchResult): string {
   return by ? `${label} · ${decodeEntities(by)}` : label;
 }
 
-/**
- * The API occasionally returns HTML entities in text fields.
- *
- * Accepts anything: results reaching the client through the `/api/search` route
- * handler are typed but not re-validated there, and calling `.replace` on a null
- * title used to throw and blank the whole page.
- */
-export function decodeEntities(text: string | null | undefined): string {
-  if (typeof text !== 'string') return '';
-  return text
-    .replace(/&amp;/g, '&')
-    .replace(/&quot;/g, '"')
-    .replace(/&#039;/g, "'")
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>');
-}
+

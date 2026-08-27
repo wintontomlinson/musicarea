@@ -106,20 +106,33 @@ export function isSong(item: Song | CollectionCard): item is Song {
   return item.type === 'song';
 }
 
+const STREAM_PREFERENCE = ['320kbps', '160kbps', '96kbps', '48kbps', '12kbps'];
+
+/**
+ * Pick the best stream a song offers, as the whole entry rather than just its URL.
+ *
+ * The quality label is returned alongside the URL because the UI reports the
+ * bitrate it is actually playing. Selecting the stream in one place and describing
+ * it in another would eventually disagree, and a badge claiming 320kbps over a
+ * 96kbps stream is worse than no badge.
+ */
+export function pickStream(song: Song): QualityUrl | null {
+  const urls = song.downloadUrl;
+  if (!urls || urls.length === 0) return null;
+  for (const quality of STREAM_PREFERENCE) {
+    const found = urls.find((entry) => entry.quality === quality);
+    if (found?.url) return found;
+  }
+  // Fallback: the last entry, which the API orders highest-last.
+  return urls[urls.length - 1]?.url ? urls[urls.length - 1] : null;
+}
+
 /**
  * Pick the best stream URL from a song's downloadUrl array. Prefers the highest
  * quality the source offers (320kbps AAC), stepping down when it is missing.
  */
 export function pickStreamUrl(song: Song): string | null {
-  const urls = song.downloadUrl;
-  if (!urls || urls.length === 0) return null;
-  const order = ['320kbps', '160kbps', '96kbps', '48kbps', '12kbps'];
-  for (const q of order) {
-    const found = urls.find((u) => u.quality === q);
-    if (found?.url) return found.url;
-  }
-  // Fallback: the last entry, which the API orders highest-last.
-  return urls[urls.length - 1]?.url || null;
+  return pickStream(song)?.url ?? null;
 }
 
 /** Time-based greeting for the home hero. */
@@ -128,4 +141,43 @@ export function greeting(date = new Date()): string {
   if (h < 12) return 'Good morning';
   if (h < 17) return 'Good afternoon';
   return 'Good evening';
+}
+
+
+/**
+ * The API occasionally returns HTML entities in text fields.
+ *
+ * Lives here rather than in the search helpers, where it started, because the lyrics
+ * layer needs it too: the catalogue serves lyrics as an HTML fragment and entities are
+ * far more common in a verse than in a track title.
+ *
+ * Accepts anything. Results reaching the client through a route handler are typed but
+ * not re-validated there, and calling `.replace` on a null title used to throw and
+ * blank the whole search page.
+ */
+export function decodeEntities(text: string | null | undefined): string {
+  if (typeof text !== 'string') return '';
+  return (
+    text
+      .replace(/&amp;/g, '&')
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'")
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      // Numeric entities, decimal and hex. The original only handled `&#039;`
+      // literally, so every other numeric entity reached the screen as raw source.
+      .replace(/&#(\d{1,7});/g, (_, code: string) => safeCodePoint(Number(code)))
+      .replace(/&#[xX]([\da-fA-F]{1,6});/g, (_, code: string) => safeCodePoint(parseInt(code, 16)))
+  );
+}
+
+/** Guards `fromCodePoint`, which throws on values outside the Unicode range. */
+function safeCodePoint(code: number): string {
+  if (!Number.isFinite(code) || code < 0 || code > 0x10ffff) return '';
+  try {
+    return String.fromCodePoint(code);
+  } catch {
+    return '';
+  }
 }

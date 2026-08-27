@@ -224,3 +224,53 @@ export interface HistoryEntry {
   playCount?: number;
   artists?: Array<{ id: string; name: string }>;
 }
+
+
+/**
+ * An endless station seeded from one track or artist.
+ *
+ * `seed` is the track the station was built around, and is null when the seed id
+ * could not be resolved. `items` carries `recommendation` on every entry, because
+ * the station is scored rather than editorial.
+ */
+export interface RadioStation {
+  seed: Song | null;
+  items: Song[];
+  meta?: {
+    candidates?: number;
+    returned?: number;
+    seedName?: string | null;
+    error?: string;
+  };
+}
+
+/**
+ * A ready-made playlist generated from the listener's own profile.
+ *
+ * Not a `CollectionCard`: a mix exists only for the request that produced it, has no
+ * id in the catalogue and therefore no page of its own, and arrives with its tracks
+ * already attached. Treating it as an album or playlist would imply a URL that does
+ * not exist.
+ */
+export interface MixCard {
+  id: string;
+  name: string;
+  subtitle?: string;
+  /** One line on why this mix was built, written by the recommender. */
+  note?: string;
+  type: 'mix';
+  songCount: number;
+  image?: QualityUrl[] | null;
+  /** Up to four track covers, for a collage. */
+  covers?: Array<QualityUrl[] | null | undefined>;
+  items: Song[];
+}
+
+export interface MixesData {
+  mixes: MixCard[];
+  meta?: {
+    /** True when there is not enough listening history to build anything. */
+    coldStart?: boolean;
+    reason?: string;
+  };
+}

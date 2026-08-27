@@ -7,6 +7,8 @@ import { usePlayer } from '@/stores/player';
 import { artistLine, entityHref, formatDuration, pickImage, primaryArtist } from '@/lib/utils';
 import { Icon } from '@/components/ui/Icon';
 import { LikeButton } from '@/components/library/LikeButton';
+import { AddToPlaylistButton } from '@/components/library/AddToPlaylistButton';
+import { SwipeableRow } from '@/components/ui/SwipeableRow';
 
 /**
  * Apple Music's track table: plain rows separated by hairlines that start past
@@ -28,6 +30,7 @@ export function TrackList({
   const isPlaying = usePlayer((s) => s.isPlaying);
   const toggle = usePlayer((s) => s.toggle);
   const playQueue = usePlayer((s) => s.playQueue);
+  const playNext = usePlayer((s) => s.playNext);
   const addToQueue = usePlayer((s) => s.addToQueue);
 
   if (!songs.length) return null;
@@ -38,8 +41,17 @@ export function TrackList({
         const isCurrent = currentId === song.id;
         const artist = primaryArtist(song);
         return (
-          <div
+          /*
+            Swipe actions mirror the two hover controls, so touch and pointer reach the same things
+            by different means: left to queue it after the current track, right to add it to a
+            playlist. Nothing is swipe-only, which matters because the gesture is undiscoverable.
+          */
+          <SwipeableRow
             key={`${song.id}-${i}`}
+            left={{ label: 'Play next', icon: 'playNext', run: () => playNext(song) }}
+            right={{ label: 'Queue', icon: 'plus', run: () => addToQueue(song) }}
+          >
+          <div
             className={`group grid grid-cols-[22px_1fr_auto] items-center gap-3 rounded-xl border border-transparent px-2 py-2.5 transition-colors sm:grid-cols-[22px_1.6fr_1fr_auto] ${
               isCurrent ? 'row-active' : 'hover:bg-white/[0.06]'
             }`}
@@ -133,19 +145,29 @@ export function TrackList({
                 size={15}
                 className="h-7 w-7 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-focus-within:opacity-100 sm:group-hover:opacity-100 sm:aria-pressed:opacity-100"
               />
+              {/* Queue and playlist are separate actions because they mean different things: the
+                  queue is this listening session, a playlist is kept. Collapsing them into one
+                  control would force a choice between the two. */}
               <button
                 type="button"
-                aria-label={`Add ${song.name} to the queue`}
-                onClick={() => addToQueue(song)}
+                aria-label={`Play ${song.name} next`}
+                title="Play next"
+                onClick={() => playNext(song)}
                 className="grid h-7 w-7 place-items-center rounded-md text-text-muted transition-colors hover:text-white sm:opacity-0 sm:transition-opacity sm:group-focus-within:opacity-100 sm:group-hover:opacity-100"
               >
-                <Icon name="plus" size={15} />
+                <Icon name="playNext" size={15} />
               </button>
+              <AddToPlaylistButton
+                song={song}
+                size={15}
+                className="h-7 w-7 text-text-muted sm:opacity-0 sm:transition-opacity sm:group-focus-within:opacity-100 sm:group-hover:opacity-100"
+              />
               <span className="ml-1 text-[13px] tabular-nums text-text-secondary">
                 {formatDuration(song.duration)}
               </span>
             </span>
           </div>
+          </SwipeableRow>
         );
       })}
     </div>

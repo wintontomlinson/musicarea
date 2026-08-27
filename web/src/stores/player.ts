@@ -87,6 +87,21 @@ export interface PlayerState {
   fullscreen: boolean;
   /** True when the queue panel is open. */
   queueOpen: boolean;
+  /**
+   * True when the lyrics pane is showing inside the full-screen player. Kept in
+   * the store rather than as local state in the player so a keyboard shortcut can
+   * open the player straight onto the lyrics.
+   */
+  lyricsOpen: boolean;
+  /**
+   * True when the listener has asked for video rather than audio-only.
+   *
+   * The catalogue behind this app is audio-only, so nothing currently satisfies
+   * this flag; the affordance exists and reports honestly that no video is
+   * available. It lives here so that wiring in a video source later is a change to
+   * one component rather than to the player's state shape.
+   */
+  videoMode: boolean;
 
   // Selectors are derived in components; keep the state minimal here.
   currentTrack: () => Song | null;
@@ -111,10 +126,14 @@ export interface PlayerState {
   setPlaybackError: (message: string | null) => void;
   reorderQueue: (fromQueueIndex: number, toQueueIndex: number) => void;
   addToQueue: (song: Song) => void;
+  /** Insert directly after the current track, so it plays next. */
+  playNext: (song: Song) => void;
   removeFromQueue: (queueIndex: number) => void;
   clearQueue: () => void;
   setFullscreen: (open: boolean) => void;
   setQueueOpen: (open: boolean) => void;
+  setLyricsOpen: (open: boolean) => void;
+  toggleVideoMode: () => void;
 }
 
 const initialPrefs = loadPrefs();
@@ -135,6 +154,8 @@ export const usePlayer = create<PlayerState>((set, get) => ({
   playbackError: null,
   fullscreen: false,
   queueOpen: false,
+  lyricsOpen: false,
+  videoMode: false,
 
   currentTrack: () => {
     const { queue, order, orderPos } = get();
@@ -331,6 +352,36 @@ export const usePlayer = create<PlayerState>((set, get) => ({
     set({ queue: nextQueue, order: [...order, nextQueue.length - 1] });
   },
 
+  /**
+   * Insert a track so it plays immediately after the current one.
+   *
+   * Both arrays have to move together, and this is the one queue operation where
+   * getting that wrong is easy to miss. Inserting into `queue` shifts the position
+   * of every track after the insertion point, so every value in `order` that
+   * pointed at or past that position is now pointing one track too low. The map
+   * below repairs those references, and only then is the new index spliced into
+   * `order` just after the playing track.
+   *
+   * Done in that sequence it is correct under shuffle as well as in natural order:
+   * `order` is rewritten by reference rather than by position, so a shuffled
+   * playback order keeps pointing at the same songs it did before.
+   */
+  playNext: (song) => {
+    const { queue, order, orderPos } = get();
+    // Nothing is playing, so "next" and "now" are the same thing.
+    if (queue.length === 0 || order.length === 0) {
+      get().playQueue([song], 0);
+      return;
+    }
+    const insertAt = order[orderPos] + 1;
+    const nextQueue = [...queue.slice(0, insertAt), song, ...queue.slice(insertAt)];
+    const shifted = order.map((queueIndex) => (queueIndex >= insertAt ? queueIndex + 1 : queueIndex));
+    set({
+      queue: nextQueue,
+      order: [...shifted.slice(0, orderPos + 1), insertAt, ...shifted.slice(orderPos + 1)],
+    });
+  },
+
   removeFromQueue: (queueIndex) => {
     const { queue, order, orderPos } = get();
     if (queueIndex < 0 || queueIndex >= queue.length) return;
@@ -366,4 +417,6 @@ export const usePlayer = create<PlayerState>((set, get) => ({
 
   setFullscreen: (open) => set({ fullscreen: open }),
   setQueueOpen: (open) => set({ queueOpen: open }),
+  setLyricsOpen: (open) => set({ lyricsOpen: open }),
+  toggleVideoMode: () => set({ videoMode: !get().videoMode }),
 }));

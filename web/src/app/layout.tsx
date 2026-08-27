@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google';
 import './globals.css';
 import { SITE } from '@/lib/config';
 import { JsonLd } from '@/components/seo/JsonLd';
+import { MotionProvider } from '@/components/motion/MotionProvider';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -65,7 +66,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             },
           }}
         />
-        {children}
+        {/* A client component wrapping server-rendered children. `children` is
+            passed through as an already-rendered tree, so everything below stays a
+            server component; only the provider itself ships to the browser. */}
+        <MotionProvider>{children}</MotionProvider>
       </body>
     </html>
   );

@@ -117,8 +117,31 @@
     background: rgb(var(--surface-rgb) / 0.78);
     border: 1px solid var(--line);
     box-shadow: 0 12px 40px -26px rgba(0, 0, 0, 0.9);
-    backdrop-filter: saturate(155%) blur(24px);
-    -webkit-backdrop-filter: saturate(155%) blur(24px);
+    backdrop-filter: saturate(155%) blur(20px);
+    -webkit-backdrop-filter: saturate(155%) blur(20px);
+  }
+  /**
+   * Frosted glass for surfaces that sit over artwork rather than over the page:
+   * the Now Playing controls, the queue panel, the lyrics scrim.
+   *
+   * Two things differ from `.glass-panel`. The tint is the scrim rather than the
+   * surface, because artwork underneath is bright and a lighter tint stops
+   * holding the text up. And the fallback matters here: where `backdrop-filter`
+   * is unsupported the panel would otherwise be a thin wash over a photograph
+   * with unreadable text on it, so the `@supports` block below raises the opacity
+   * to near-opaque instead. Blur is a nice-to-have, legibility is not.
+   */
+  .glass-overlay {
+    background: rgb(var(--scrim-rgb) / 0.92);
+    border: 1px solid rgb(255 255 255 / 0.09);
+    box-shadow: 0 24px 70px -30px rgba(0, 0, 0, 0.95);
+  }
+  @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .glass-overlay {
+      background: rgb(var(--scrim-rgb) / 0.58);
+      backdrop-filter: saturate(180%) blur(32px);
+      -webkit-backdrop-filter: saturate(180%) blur(32px);
+    }
   }
   /* Translucent app chrome: sidebar, toolbar, tab bar. Sits on the darkest tone
      so content scrolling underneath stays legible through the blur. Callers that
@@ -156,6 +179,34 @@
   .neon-dot { @apply h-2 w-2 rounded-full bg-accent shadow-glow; }
   /* `accent-color` has no Tailwind escape hatch that reads a variable. */
   .range-accent { accent-color: rgb(var(--accent-rgb)); }
+
+  /**
+   * Filter chips (moods on Home, trending on Search).
+   *
+   * `whitespace-nowrap` and `shrink-0` are load-bearing, not defensive: these live
+   * in a horizontal scroller, and without them flex would compress the row to fit
+   * and wrap every label instead of letting it overflow and scroll.
+   */
+  .chip {
+    @apply inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-pill border border-white/[0.12] bg-white/[0.06] px-4 py-2 text-[13px] font-semibold text-text-secondary transition duration-200 hover:border-white/25 hover:bg-white/[0.11] hover:text-white;
+  }
+  .chip-active {
+    @apply border-transparent bg-brand text-on-accent shadow-glow hover:text-on-accent;
+  }
+  /* Loading placeholder. The sweep is a child element rather than a background
+     animation so it can be clipped by `overflow-hidden` on the parent. */
+  .skeleton { @apply relative overflow-hidden rounded-card bg-white/[0.06]; }
+  .skeleton::after {
+    content: '';
+    @apply absolute inset-0 -translate-x-full animate-shimmer;
+    background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.07), transparent);
+  }
+  /* Hides a scrollbar while keeping the gradient hint that content continues.
+     Applied to the mood and Quick Picks rows. */
+  .edge-fade-r {
+    mask-image: linear-gradient(to right, #000 calc(100% - 3rem), transparent 100%);
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 3rem), transparent 100%);
+  }
 }
 
 * { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.24) transparent; }

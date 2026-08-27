@@ -47,6 +47,12 @@ MOODS = [
     {"id": "indie",    "name": "Indie",      "query": "indie india",         "keyword": "indie",        "hue": 158, "image": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=1200&q=85"},
     {"id": "sufi",     "name": "Sufi",       "query": "sufi qawwali",        "keyword": "sufi",         "hue": 292, "image": "https://images.unsplash.com/photo-1548013146-72479768bada?auto=format&fit=crop&w=1200&q=85"},
     {"id": "focus",    "name": "Focus",      "query": "instrumental focus",  "keyword": "instrumental", "hue": 210, "image": "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?auto=format&fit=crop&w=1200&q=85"},
+    # Added for the redesigned home screen, whose mood chips are the primary way
+    # into the catalogue. "Energetic" and "Sleep" were the two the chip row asked
+    # for that had no equivalent here: Party is a specific occasion rather than a
+    # general lift, and nothing covered winding down at all.
+    {"id": "energetic", "name": "Energetic", "query": "high energy hits",    "keyword": "energetic",    "hue": 14,  "image": "https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?auto=format&fit=crop&w=1200&q=85"},
+    {"id": "sleep",     "name": "Sleep",     "query": "soothing sleep calm", "keyword": "sleep",        "hue": 240, "image": "https://images.unsplash.com/photo-1495197359483-d092478c170a?auto=format&fit=crop&w=1200&q=85"},
 ]
 
 MOOD_BY_ID = {m["id"]: m for m in MOODS}
