@@ -10,6 +10,7 @@ import { MediaSession } from '@/components/player/MediaSession';
 import { PlaybackAlert } from '@/components/player/PlaybackAlert';
 import { OnboardingGate } from '@/components/onboarding/OnboardingGate';
 import { DynamicTheme } from '@/components/theme/DynamicTheme';
+import { PageTransition } from '@/components/motion/PageTransition';
 
 /**
  * Shared chrome for the primary app views, arranged the way Apple Music does:
@@ -28,7 +29,9 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         <Sidebar />
         <div className="flex min-w-0 flex-1 flex-col">
           <Topbar />
-          <main className="flex-1 pb-40 lg:pb-10">{children}</main>
+          <main className="flex-1 pb-40 lg:pb-10">
+            <PageTransition>{children}</PageTransition>
+          </main>
         </div>
         <MobileNav />
 
