@@ -489,3 +489,82 @@ loading and error states explicit so failures degrade visibly rather than render
 
 My defaults if you would rather I just proceed: A, disabled-affordance, cut, local playlists, tinted
 default, renamed, and yes to the small `catalog.py` mood addition.
+
+
+---
+
+# As built
+
+The plan above was followed. This section records where the implementation diverged from it, and
+why, so the two do not have to be reconciled by reading the diff.
+
+## Delivered
+
+| Step | Scope |
+| --- | --- |
+| a | Palette modes, motion layer, UI primitives (`Sheet`, `Tabs`, `Chip`, `Marquee`, `GlassPanel`, `Skeleton`) |
+| b | Sidebar, mobile nav, page transitions, profile page |
+| c | Unified `PlayerBar`, `QualityBadge`, restyled seek bar and transport, `playNext` |
+| d | Home rebuilt as a server shell plus client experience, personalised feed, three route handlers |
+| e | Immersive Now Playing, lyrics subsystem, interpolated playback clock |
+| f | Search with voice, trending suggestions, recent history |
+| g | Library with four real tabs, local playlists |
+| h | Samples feed, swipe actions, share cards, ambient visualiser, listening streak |
+
+## Divergences from the plan
+
+**The mobile tab bar has no Samples tab.** It is Home, Search, Explore, Library, You. Adding a sixth
+tab would have made every target too narrow, and dropping Explore would have stranded the browse
+shelves and charts behind a link on Home. Samples is reached from its strip on Home, which is where
+the brief put its entry point anyway.
+
+**`NowPlayingTabs` and `RelatedPane` were not built as separate components.** The tab strip is the
+shared `ui/Tabs` primitive, and the panes are `LyricsPane` and `UpNextPane`. A Related pane was
+dropped for now: `/api/similar` is wired into `lib/api.ts` and ready, but the pane would have been a
+third tab competing for the same space, and the station card on Home already covers
+more-like-this.
+
+**`QueuePanel` was kept rather than retired.** `UpNextPane` is the in-player queue, and the older
+overlay panel still serves the player bar's queue button and the `q` shortcut when the full screen
+player is closed. The Now Playing action row deliberately has no queue button, so the two never
+stack.
+
+**The library store gained timestamps in step d, not step h.** They were needed earlier than
+expected: the recommender decays history by age and weights an undated entry down to 0.35, so the
+personalised feed was materially worse without them. That also made the listening streak computable,
+which the plan had listed as not possible.
+
+**Three pieces of existing data were surfaced that the plan did not mention.**
+`Song.recommendation.reason`, `Mood.hue` and `MixCard.covers` were all already returned by the API
+and rendered nowhere. They became the reason pills, the mood chip tints and the mix collages.
+
+## Cut, and why
+
+- **Downloads tab.** Needs a service worker and cache storage. Replaced by local playlists.
+- **Collaborative playlists, cross-device handoff.** No accounts, no server, no second user.
+- **Working video mode.** No video source exists. The affordance is present and disabled, and says
+  why when pressed.
+- **FFT visualiser.** Blocked by `html5: true` and the absence of CORS headers on the audio CDN.
+  Shipped as an explicitly ambient, clock-driven visual instead.
+
+## Verification
+
+105 assertions across five suites, run against compiled output during development:
+
+| Suite | Assertions | Covers |
+| --- | --- | --- |
+| `playNext` | 11 | Natural and shuffled orders, repeated inserts, queue invariants |
+| `buildHistory` | 15 | Ordering against the API's 400-entry cap, event weights, timestamps |
+| Lyrics parser | 37 | Fraction scaling, refrain cues, bracketed asides, binary search cross-check |
+| Playlists store | 27 | Append order, dedupe, caps, field stripping, missing-playlist no-ops |
+| Stats and streak | 15 | Local-time day buckets, month boundaries, malformed timestamps |
+
+`npx tsc --noEmit`, `npx eslint src` and `npm run build` are clean.
+
+## Not verifiable in this environment
+
+The sandbox cannot reach the Flask API or LRCLIB, so every data path degrades to its error state
+here. What that means for review: the loading, empty and failure states have been exercised, and the
+success paths have not. Worth checking against the deployed backend are the personalised feed and
+mixes, the station card, lyrics (both the synced and untimed paths), trending chips, and the samples
+feed's deferred seek.
