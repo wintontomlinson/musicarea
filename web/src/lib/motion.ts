@@ -35,12 +35,6 @@ export const DURATION = {
 
 const ease = { ease: EASE_SMOOTH } as const;
 
-export const fadeIn: Variants = {
-  hidden: { opacity: 0 },
-  show: { opacity: 1, transition: { duration: DURATION.base, ...ease } },
-  exit: { opacity: 0, transition: { duration: DURATION.fast, ...ease } },
-};
-
 /**
  * The workhorse for content arriving on a page.
  *
@@ -52,12 +46,6 @@ export const fadeUp: Variants = {
   hidden: { opacity: 0, y: 12 },
   show: { opacity: 1, y: 0, transition: { duration: DURATION.base, ...ease } },
   exit: { opacity: 0, y: -8, transition: { duration: DURATION.fast, ...ease } },
-};
-
-export const scaleIn: Variants = {
-  hidden: { opacity: 0, scale: 0.96 },
-  show: { opacity: 1, scale: 1, transition: SPRING_SNAP },
-  exit: { opacity: 0, scale: 0.97, transition: { duration: DURATION.fast, ...ease } },
 };
 
 /** Full-screen player on mobile: rises from the bottom like a sheet. */

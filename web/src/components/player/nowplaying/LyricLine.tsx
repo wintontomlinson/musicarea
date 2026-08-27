@@ -4,15 +4,13 @@ import { m } from 'motion/react';
 import { EASE_SMOOTH } from '@/lib/motion';
 import { Icon } from '@/components/ui/Icon';
 
-/**
- * How far from the active line this one sits. Drives the whole visual treatment.
- * 0 is the line being sung, negative is already past, positive is upcoming.
- */
-export type LineDistance = number;
-
 interface LyricLineProps {
   text: string;
-  distance: LineDistance;
+  /**
+   * How far from the active line this one sits, and the input the whole visual treatment is
+   * derived from. 0 is the line being sung, negative is already past, positive is upcoming.
+   */
+  distance: number;
   /** Untimed lyrics render as a flat reading view with no active line at all. */
   flat: boolean;
   onSeek?: () => void;

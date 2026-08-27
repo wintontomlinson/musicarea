@@ -49,10 +49,6 @@ const config: Config = {
       backgroundImage: {
         brand:
           'linear-gradient(110deg, rgb(var(--accent-rgb)) 0%, rgb(var(--accent-mid-rgb)) 48%, rgb(var(--accent-alt-rgb)) 100%)',
-        'brand-soft':
-          'linear-gradient(110deg, rgb(var(--accent-rgb) / 0.20), rgb(var(--accent-mid-rgb) / 0.18), rgb(var(--accent-alt-rgb) / 0.16))',
-        disco:
-          'radial-gradient(circle at 12% 8%, rgb(var(--accent-rgb) / 0.25), transparent 29%), radial-gradient(circle at 87% 13%, rgb(var(--accent-alt-rgb) / 0.20), transparent 28%), linear-gradient(130deg, rgb(var(--surface-raised-rgb)) 0%, rgb(var(--bg-rgb)) 50%, rgb(var(--scrim-rgb)) 100%)',
       },
       fontFamily: {
         // Inter first. It used to sit behind -apple-system and SF Pro, which
@@ -83,9 +79,8 @@ const config: Config = {
         ],
       },
       fontSize: {
-        // Display sizes for the immersive player, where the track title is the
+        // Display size for the immersive player, where the track title is the
         // hero and needs to outrank every page heading.
-        d1: ['64px', { lineHeight: '1.0', letterSpacing: '-0.05em' }],
         d2: ['52px', { lineHeight: '1.02', letterSpacing: '-0.045em' }],
         h1: ['46px', { lineHeight: '1.02', letterSpacing: '-0.045em' }],
         h2: ['33px', { lineHeight: '1.08', letterSpacing: '-0.035em' }],
@@ -126,11 +121,10 @@ const config: Config = {
         smooth: 'var(--ease-smooth)',
       },
       backdropBlur: {
-        // 20px, matching the glassmorphism spec. `glass-lg` is for the full-screen
-        // player scrim, where the content behind is artwork rather than text and
-        // can take a heavier blur.
+        // 20px, matching the glassmorphism spec. The heavier blur for panels over
+        // artwork is applied by the `.glass-overlay` class, which needs an
+        // `@supports` fallback a utility cannot express.
         glass: '20px',
-        'glass-lg': '32px',
       },
       keyframes: {
         // Marquee is expressed as a percentage translate so one keyframe works for

@@ -14,11 +14,8 @@ import { SeekBar } from './SeekBar';
 import { VolumeControl } from './VolumeControl';
 import { QualityBadge } from './QualityBadge';
 
-/**
- * Height of the desktop bar, in pixels. Exported so the app shell can reserve
- * exactly this much space beneath the page content.
- */
-export const PLAYER_BAR_HEIGHT = 72;
+/** Height of the desktop bar, in pixels. */
+const PLAYER_BAR_HEIGHT = 72;
 
 /**
  * The persistent player.

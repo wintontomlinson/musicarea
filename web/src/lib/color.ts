@@ -105,8 +105,8 @@ export type NeutralMode = 'tinted' | 'neutral';
 export type AccentMode = 'adaptive' | 'brand' | 'green' | 'red';
 
 /** Fixed accent choices. Reproduced exactly, not normalised: the whole point of
- *  choosing one is that it does not drift. */
-export const FIXED_ACCENTS: Record<'green' | 'red', Rgb> = {
+ *  choosing one is that it does not drift. Resolved through `paletteForMode`. */
+const FIXED_ACCENTS: Record<'green' | 'red', Rgb> = {
   green: { r: 29, g: 185, b: 84 }, // #1DB954
   red: { r: 252, g: 60, b: 68 }, // #FC3C44
 };
@@ -279,12 +279,6 @@ export function relativeLuminance({ r, g, b }: Rgb): number {
   return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
 }
 
-export function contrastRatio(a: Rgb, b: Rgb): number {
-  const la = relativeLuminance(a);
-  const lb = relativeLuminance(b);
-  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
-}
-
 /**
  * Move an HSL colour along its lightness axis until its luminance falls inside
  * `[min, max]`, leaving hue and saturation alone. Luminance rises monotonically
@@ -344,7 +338,7 @@ export function buildPalette(
  * under `tinted`) is still computed the usual way, so the rest of the palette
  * stays internally consistent.
  */
-export function paletteFromAccent(accent: Rgb, options: PaletteOptions = {}): Palette {
+function paletteFromAccent(accent: Rgb, options: PaletteOptions = {}): Palette {
   return build(rgbToHsl(accent), null, options, true);
 }
 

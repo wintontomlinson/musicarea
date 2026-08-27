@@ -40,9 +40,8 @@ const paths = {
   /* Added for the redesign. */
   expand: 'M16.6 15.4 12 10.8l-4.6 4.6L6 14l6-6 6 6z',
   mic: 'M12 3a3 3 0 0 1 3 3v5a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3m7 8a7 7 0 0 1-6 6.93V21h-2v-3.07A7 7 0 0 1 5 11h2a5 5 0 0 0 10 0z',
-  // Screen with the three broadcast arcs, for device handoff and cast targets.
-  cast: 'M3 4h18a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-7v-2h6V6H4v1H3zm0 5a10 10 0 0 1 10 10h-2a8 8 0 0 0-8-8zm0 4a6 6 0 0 1 6 6H7a4 4 0 0 0-4-4zm0 4a2 2 0 0 1 2 2H3z',
-  video: 'M4 5h11a2 2 0 0 1 2 2v1.9l5-2.9v12l-5-2.9V17a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2m5.5 3.3v7.4L15 12z',
+  // Only the struck-through form is needed: the catalogue is audio only, so the video control
+  // exists purely to report that it is unavailable.
   videoOff: 'M2.1 3.5 3.5 2.1l18.4 18.4-1.4 1.4-2.9-2.9H4a2 2 0 0 1-2-2V7a2 2 0 0 1 .8-1.6zM7.5 5H15a2 2 0 0 1 2 2v1.9l5-2.9v12l-2-1.2V7.9l-3 1.7V12z',
   lyrics: 'M4 4h16a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H9.5L5 20.5V17H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1m3 4v2h10V8zm0 4v2h7v-2z',
   // Broadcast tower, for stations and the DJ card.
@@ -51,12 +50,9 @@ const paths = {
   // Portrait card with a play glyph, for the vertical samples feed.
   samples: 'M8 2h8a3 3 0 0 1 3 3v14a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V5a3 3 0 0 1 3-3m2.5 6.2v7.6L16 12z',
   user: 'M12 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8m0 10c4.4 0 8 2.2 8 5v1H4v-1c0-2.8 3.6-5 8-5',
-  dots: 'M6 10a2 2 0 1 1 0 4 2 2 0 0 1 0-4m6 0a2 2 0 1 1 0 4 2 2 0 0 1 0-4m6 0a2 2 0 1 1 0 4 2 2 0 0 1 0-4',
-  download: 'M11 3h2v9.2l3.3-3.3 1.4 1.4L12 16.4 6.3 10.3l1.4-1.4L11 12.2zM5 18h14v2H5z',
   // Queue glyph with the arrow at the top rather than the bottom, so "play next"
   // and "add to queue" are distinguishable at 16px.
   playNext: 'M4 6h10v2H4zm0 4h10v2H4zm0 4h7v2H4zm12-9 5 4-5 4z',
-  moon: 'M13 3a9 9 0 1 0 8 13A7 7 0 0 1 13 3',
   bolt: 'M13 2 5 13h5l-1 9 9-12h-5l1-8z',
 } as const satisfies Record<string, string>;
 

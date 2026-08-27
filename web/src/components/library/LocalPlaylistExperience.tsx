@@ -5,6 +5,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { usePlaylists } from '@/stores/playlists';
+import { totalDuration } from '@/lib/stats';
 import { formatDuration, pickImage } from '@/lib/utils';
 import { Icon } from '@/components/ui/Icon';
 import { TrackList } from '@/components/sections/TrackList';
@@ -69,7 +70,7 @@ export function LocalPlaylistExperience({ id }: { id: string }) {
   }
 
   const covers = playlist.songs.slice(0, 4).map((song) => pickImage(song.image, '150x150'));
-  const totalSeconds = playlist.songs.reduce((sum, song) => sum + (song.duration ?? 0), 0);
+  const totalSeconds = totalDuration(playlist.songs);
 
   function saveName() {
     rename(playlist!.id, draftName);
